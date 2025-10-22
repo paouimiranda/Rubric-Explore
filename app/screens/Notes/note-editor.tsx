@@ -59,13 +59,18 @@ export default function NoteEditor({
     );
   }
 
-  const { noteId: routeNoteId, notebookId } = useLocalSearchParams();
+  const { noteId: routeNoteId, notebookId, isSharedAccess: routeIsSharedAccess, sharedPermission: routeSharedPermission } = useLocalSearchParams();
+  const effectiveIsSharedAccess = isSharedAccess || routeIsSharedAccess === 'true';
+  const effectiveSharedPermission = sharedPermission || (routeSharedPermission as 'view' | 'edit');
+
+
   const [note, setNote] = useState<Note | null>(null);
   const effectiveNote = isSharedAccess ? sharedNote : note;
   const isTyping = useRef(false);
+  const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   
   const [properties, setProperties] = useState<NotebookProperty[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(true); 
   const [saving, setSaving] = useState(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [visible, setVisible] = useState(false);
@@ -74,7 +79,7 @@ export default function NoteEditor({
   const [propertiesModalVisible, setPropertiesModalVisible] = useState(false);
   const [showCollaborators, setShowCollaborators] = useState(false);
   const [metadataModalVisible, setMetadataModalVisible] = useState(false);
-  
+    
   // Rich text editor ref
   const richEditorRef = useRef<RichTextEditorRef>(null);
   
@@ -100,22 +105,38 @@ export default function NoteEditor({
   // Sync Yjs content to rich text editor
   const syncTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastSyncedContent = useRef('');
+  const isSyncingRef = useRef(false);
 
   useEffect(() => {
+    // Prevent syncing during active typing
+    if (isTyping.current) {
+      console.log('⏭️ Skipping sync - user is typing');
+      return;
+    }
+
     // Only sync if content actually changed from remote
-    if (content !== lastSyncedContent.current && richEditorRef.current && !isApplyingYjsUpdate.current) {
+    if (content !== lastSyncedContent.current && richEditorRef.current && !isApplyingYjsUpdate.current && !isSyncingRef.current) {
+      console.log('🔄 Content changed from Yjs, scheduling sync...');
+      
       // Clear any pending sync
       if (syncTimeoutRef.current) {
         clearTimeout(syncTimeoutRef.current);
       }
       
-      // Debounce the sync to avoid rapid updates during typing
+      // Debounce the sync to batch rapid updates
       syncTimeoutRef.current = setTimeout(() => {
-        if (richEditorRef.current) {
+        if (richEditorRef.current && !isTyping.current) {
+          console.log('📥 Syncing content from Yjs to editor');
+          isSyncingRef.current = true;
           richEditorRef.current.setContentHtml(content);
           lastSyncedContent.current = content;
+          
+          // Reset sync flag
+          setTimeout(() => {
+            isSyncingRef.current = false;
+          }, 100);
         }
-      }, 150); // Small delay to batch updates
+      }, 300); // Increased debounce for better batching
     }
     
     return () => {
@@ -129,7 +150,7 @@ export default function NoteEditor({
 
   // Enhanced text change handlers that work with granular updates
   const handleTitleChange = useCallback((newTitle: string, event?: NativeSyntheticEvent<any>) => {
-    if (isSharedAccess && sharedPermission === "view") return;
+    if (effectiveIsSharedAccess && effectiveSharedPermission === "view") return;
     if (isApplyingYjsUpdate.current) return;
     
     const selectionStart = event?.nativeEvent?.selection?.start;
@@ -137,24 +158,41 @@ export default function NoteEditor({
     
     // Use the granular change handler
     collaborative.handleTitleChange(newTitle, selectionStart, selectionEnd);
-  }, [collaborative, isSharedAccess, sharedPermission]);
+  }, [collaborative, effectiveIsSharedAccess, effectiveSharedPermission]);
 
   const handleContentChange = useCallback((newContent: string) => {
-    if (isSharedAccess && sharedPermission === "view") return;
+    if (effectiveIsSharedAccess && effectiveSharedPermission === "view") return;
+    
+    console.log('⌨️ User typing...');
     
     // Set typing flag
     isTyping.current = true;
     isApplyingYjsUpdate.current = true;
     
+    // Clear existing typing timeout
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+    }
+    
     // Use the granular change handler for HTML content
     collaborative.handleContentChange(newContent);
     
-    // Reset flags after a brief delay
-    setTimeout(() => {
+    // Reset flags after user stops typing (longer delay)
+    typingTimeoutRef.current = setTimeout(() => {
+      console.log('⏸️ User stopped typing');
       isApplyingYjsUpdate.current = false;
       isTyping.current = false;
-    }, 100);
-  }, [collaborative, isSharedAccess, sharedPermission]);
+    }, 500); // Increased from 100ms to 500ms
+  }, [collaborative, effectiveIsSharedAccess, effectiveSharedPermission]);
+
+  // Cleanup typing timeout
+  useEffect(() => {
+    return () => {
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+      }
+    };
+  }, []);
 
   // Enhanced cursor tracking
   const handleTitleSelectionChange = useCallback((event: NativeSyntheticEvent<TextInputSelectionChangeEventData>) => {
@@ -190,17 +228,17 @@ export default function NoteEditor({
   );
 
   const renderSharingStatus = () => {
-    if (!isSharedAccess) return null;
+    if (!effectiveIsSharedAccess) return null;
     
     return (
       <View style={styles.sharingStatus}>
         <Ionicons 
-          name={sharedPermission === 'edit' ? 'create' : 'eye'} 
+          name={effectiveSharedPermission === 'edit' ? 'create' : 'eye'} 
           size={16} 
-          color={sharedPermission === 'edit' ? '#22c55e' : '#60a5fa'} 
+          color={effectiveSharedPermission === 'edit' ? '#22c55e' : '#60a5fa'} 
         />
         <Text style={styles.sharingStatusText}>
-          Shared with {sharedPermission} access
+          Shared with {effectiveSharedPermission} access
         </Text>
       </View>
     );
@@ -285,7 +323,7 @@ export default function NoteEditor({
     const isCollaborator = note.collaborators && note.collaborators[uid];
     const hasEditPermission = isOwner || 
       (isCollaborator && isCollaborator.permission === 'edit') ||
-      (isSharedAccess && sharedPermission === 'edit');
+      (effectiveIsSharedAccess && effectiveSharedPermission === 'edit');
 
     if (!hasEditPermission) {
       Alert.alert("Error", "You don't have permission to edit this note");
@@ -335,12 +373,12 @@ export default function NoteEditor({
 
   // Enhanced OCR text insertion
   const handleOCRTextInsert = useCallback((text: string) => {
-    if (isSharedAccess && sharedPermission === "view") return;
+    if (effectiveIsSharedAccess && effectiveSharedPermission === "view") return;
     
     const newContent = content + (content ? '\n\n' : '') + text;
     collaborative.handleContentChange(newContent);
     setHasUnsavedChanges(true);
-  }, [collaborative, content, isSharedAccess, sharedPermission]);
+  }, [collaborative, content, effectiveIsSharedAccess, effectiveSharedPermission]);
 
   if (loading) {
     return (
@@ -464,7 +502,7 @@ export default function NoteEditor({
               value={title}
               onChangeText={(text) => handleTitleChange(text)}
               onSelectionChange={handleTitleSelectionChange}
-              editable={!(isSharedAccess && sharedPermission === "view")}
+              editable={!(effectiveIsSharedAccess && effectiveSharedPermission === "view")}
               placeholder="Note title..."
               placeholderTextColor="#9ca3af"
               multiline
@@ -479,7 +517,7 @@ export default function NoteEditor({
             ref={richEditorRef}
             initialContent={content}
             onContentChange={handleContentChange}
-            editable={!(isSharedAccess && sharedPermission === "view")}
+            editable={!(effectiveIsSharedAccess && effectiveSharedPermission === "view")}
             placeholder="Start writing your note..."
             onCursorPosition={handleContentCursorPosition}
             style={styles.richEditor}

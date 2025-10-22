@@ -33,7 +33,9 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(({
   const richText = useRef<RichEditor>(null);
   const isInitialMount = useRef(true);
   const lastContent = useRef(initialContent);
-  const isLocalChange = useRef(false); // Track if change is from local typing
+  const isLocalChange = useRef(false);
+  const lastCursorPosition = useRef(0);
+  const updateTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useImperativeHandle(ref, () => ({
     getContentHtml: async () => {
@@ -45,9 +47,24 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(({
     setContentHtml: (html: string) => {
       // Only update if content actually changed AND it's not from local typing
       if (richText.current && html !== lastContent.current && !isLocalChange.current) {
-        console.log('Setting content from remote update');
+        console.log('📝 Setting content from remote update, preserving cursor...');
+        
+        // Save cursor position before update
+        const savedPosition = lastCursorPosition.current;
+        
+        // Update content
         richText.current.setContentHTML(html);
         lastContent.current = html;
+        
+        // Attempt to restore cursor position after a brief delay
+        setTimeout(() => {
+          if (richText.current && savedPosition > 0) {
+            console.log('📍 Attempting to restore cursor to position:', savedPosition);
+            // Note: react-native-pell-rich-editor doesn't have built-in cursor restoration
+            // The WebView will try to maintain focus naturally
+            richText.current.focusContentEditor();
+          }
+        }, 50);
       }
     },
     focusEditor: () => {
@@ -69,6 +86,7 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(({
   // Set initial content
   useEffect(() => {
     if (isInitialMount.current && richText.current && initialContent) {
+      console.log('🎬 Setting initial content');
       richText.current.setContentHTML(initialContent);
       lastContent.current = initialContent;
       isInitialMount.current = false;
@@ -76,8 +94,15 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(({
   }, [initialContent]);
 
   const handleContentChange = useCallback((html: string) => {
+    console.log('✏️ Content changed locally');
+    
     // Mark as local change
     isLocalChange.current = true;
+    
+    // Clear any pending updates
+    if (updateTimeoutRef.current) {
+      clearTimeout(updateTimeoutRef.current);
+    }
     
     // Avoid feedback loops
     if (html !== lastContent.current) {
@@ -85,15 +110,27 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(({
       onContentChange(html);
     }
     
-    // Reset flag after a short delay
-    setTimeout(() => {
+    // Reset flag after processing
+    updateTimeoutRef.current = setTimeout(() => {
       isLocalChange.current = false;
-    }, 100);
+      console.log('✅ Local change flag reset');
+    }, 200);
   }, [onContentChange]);
 
   const handleCursorPosition = useCallback((position: number) => {
+    lastCursorPosition.current = position;
+    console.log('📍 Cursor position:', position);
     onCursorPosition?.(position);
   }, [onCursorPosition]);
+
+  // Cleanup
+  useEffect(() => {
+    return () => {
+      if (updateTimeoutRef.current) {
+        clearTimeout(updateTimeoutRef.current);
+      }
+    };
+  }, []);
 
   return (
     <View style={[styles.container, style]}>

@@ -1,15 +1,17 @@
-// app/screens/Notes/shared-note-handler.tsx (UPDATED FOR GRANULAR COLLABORATION)
+// app/screens/Notes/shared-note-handler.tsx
 import { useAuth } from '@/app/contexts/AuthContext';
 import { Note } from '@/app/types/notebook';
+import RichTextEditor, { RichTextEditorRef } from '@/components/Interface/rich-text-editor';
 import { ShareToken, sharingService } from '@/services/sharing-service';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router, useLocalSearchParams } from 'expo-router';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
   SafeAreaView,
+  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -37,6 +39,7 @@ export default function SharedNoteHandler() {
     migrationNeeded: false,
   });
   const [previewContent, setPreviewContent] = useState<string>('');
+  const richEditorRef = useRef<RichTextEditorRef>(null);
 
   useEffect(() => {
     if (token && typeof token === 'string') {
@@ -51,58 +54,57 @@ export default function SharedNoteHandler() {
   }, [token, user]);
 
   const loadSharedNote = async (shareToken: string) => {
-  try {
-    setState(prev => ({ ...prev, loading: true, error: null }));
-
-    const result = await sharingService.useShareToken(shareToken, user?.uid);
-    
-    // Check if the note needs migration (has old content field)
-    const migrationNeeded = result.note.chunkCount === 0 || 
-      result.note.chunkCount === undefined;
-    
-    if (migrationNeeded) {
-      console.log('Shared note may need migration to chunk-based structure');
-      setPreviewContent('Preview unavailable for this note format.');
-    }
-
-    // Load preview content from chunks
     try {
-      const { getMergedNoteContent } = await import('@/services/notes-service');
-      const content = await getMergedNoteContent(result.note.id);
-      setPreviewContent(content || 'This note is empty.');
-    } catch (error) {
-      console.error('Error loading preview content:', error);
-      setPreviewContent('Unable to load preview');
-    }
-    
-    setState({
-      note: result.note,
-      permission: result.permission,
-      shareToken: result.shareToken,
-      loading: false,
-      error: null,
-      migrationNeeded,
-    });
+      setState(prev => ({ ...prev, loading: true, error: null }));
 
-  } catch (error: any) {
-    console.error('Error loading shared note:', error);
-    setState(prev => ({
-      ...prev,
-      loading: false,
-      error: error.message || 'Failed to load shared note'
-    }));
-  }
-};
+      const result = await sharingService.useShareToken(shareToken, user?.uid);
+      
+      // Check if the note needs migration (has old content field)
+      const migrationNeeded = result.note.chunkCount === 0 || 
+        result.note.chunkCount === undefined;
+      
+      if (migrationNeeded) {
+        console.log('Shared note needs migration to chunk-based structure');
+      }
+
+      // Load preview content from chunks
+      try {
+        const { getMergedNoteContent } = await import('@/services/notes-service');
+        const content = await getMergedNoteContent(result.note.id);
+        setPreviewContent(content || '<p>This note is empty.</p>');
+      } catch (error) {
+        console.error('Error loading preview content:', error);
+        setPreviewContent('<p>Unable to load preview</p>');
+      }
+      
+      setState({
+        note: result.note,
+        permission: result.permission,
+        shareToken: result.shareToken,
+        loading: false,
+        error: null,
+        migrationNeeded,
+      });
+
+    } catch (error: any) {
+      console.error('Error loading shared note:', error);
+      setState(prev => ({
+        ...prev,
+        loading: false,
+        error: error.message || 'Failed to load shared note'
+      }));
+    }
+  };
 
   const handleViewNote = () => {
     if (state.note && state.permission) {
       // For edit permission and migration needed, show warning
       if (state.permission === 'edit' && state.migrationNeeded && user) {
         Alert.alert(
-          'Collaborative Features',
-          'This note may have limited real-time collaboration features. The owner should update the app for optimal collaborative editing.',
+          'Migration Required',
+          'This note needs to be migrated to the new format for optimal collaborative editing. It will be migrated when you open it.',
           [
-            { text: 'Continue Anyway', onPress: navigateToNote },
+            { text: 'Continue', onPress: navigateToNote },
             { text: 'Cancel', style: 'cancel' }
           ]
         );
@@ -114,12 +116,13 @@ export default function SharedNoteHandler() {
   };
 
   const navigateToNote = () => {
+    // Navigate to the main note-editor with shared access params
     router.push({
-      pathname: '../screens/Notes/shared-note-viewer',
+      pathname: '../../screens/Notes/note-editor',
       params: {
         noteId: state.note!.id,
-        permission: state.permission!,
         isSharedAccess: 'true',
+        sharedPermission: state.permission!,
       }
     });
   };
@@ -162,8 +165,13 @@ export default function SharedNoteHandler() {
     const canEdit = state.permission === 'edit' && user;
     const needsLogin = state.permission === 'edit' && !user;
 
+    // Strip HTML tags for character count
+    const stripHtml = (html: string) => {
+      return html.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').trim();
+    };
+
     return (
-      <View style={styles.previewContainer}>
+      <ScrollView style={styles.previewContainer} showsVerticalScrollIndicator={false}>
         {/* Header */}
         <View style={styles.previewHeader}>
           <View style={styles.noteIcon}>
@@ -198,7 +206,7 @@ export default function SharedNoteHandler() {
                 color="#fff" 
               />
               <Text style={styles.collabText}>
-                {state.migrationNeeded ? 'Limited Collab' : 'Real-time Ready'}
+                {state.migrationNeeded ? 'Needs Migration' : 'Real-time Ready'}
               </Text>
             </View>
           )}
@@ -206,37 +214,70 @@ export default function SharedNoteHandler() {
 
         {/* Note info */}
         <View style={styles.noteInfo}>
-          <Text style={styles.noteInfoText}>
-            Shared by: {state.shareToken.createdBy === user?.uid ? 'You' : 'Someone'}
-          </Text>
-          <Text style={styles.noteInfoText}>
-            Created: {state.note.createdAt.toLocaleDateString()}
-          </Text>
+          <View style={styles.infoRow}>
+            <Ionicons name="person" size={16} color="#9ca3af" />
+            <Text style={styles.noteInfoText}>
+              Shared by: {state.shareToken.createdBy === user?.uid ? 'You' : 'Someone'}
+            </Text>
+          </View>
+          
+          <View style={styles.infoRow}>
+            <Ionicons name="calendar" size={16} color="#9ca3af" />
+            <Text style={styles.noteInfoText}>
+              Created: {state.note.createdAt.toLocaleDateString()}
+            </Text>
+          </View>
+          
           {state.note.updatedAt && state.note.updatedAt.getTime() !== state.note.createdAt.getTime() && (
-            <Text style={styles.noteInfoText}>
-              Updated: {state.note.updatedAt.toLocaleDateString()}
-            </Text>
+            <View style={styles.infoRow}>
+              <Ionicons name="time" size={16} color="#9ca3af" />
+              <Text style={styles.noteInfoText}>
+                Last updated: {state.note.updatedAt.toLocaleDateString()}
+              </Text>
+            </View>
           )}
-          {state.note && (
+          
+          <View style={styles.infoRow}>
+            <Ionicons name="document-text" size={16} color="#9ca3af" />
             <Text style={styles.noteInfoText}>
-              Length: {previewContent.length} characters
+              Length: {stripHtml(previewContent).length} characters
             </Text>
-          )}
+          </View>
           
           {/* Collaboration info */}
           {state.note.collaborators && Object.keys(state.note.collaborators).length > 0 && (
-            <Text style={styles.noteInfoText}>
-              Collaborators: {Object.keys(state.note.collaborators).length}
-            </Text>
+            <View style={styles.infoRow}>
+              <Ionicons name="people" size={16} color="#9ca3af" />
+              <Text style={styles.noteInfoText}>
+                {Object.keys(state.note.collaborators).length} collaborator(s)
+              </Text>
+            </View>
+          )}
+
+          {/* Chunk info for debugging */}
+          {state.note.chunkCount !== undefined && state.note.chunkCount > 0 && (
+            <View style={styles.infoRow}>
+              <Ionicons name="cube" size={16} color="#9ca3af" />
+              <Text style={styles.noteInfoText}>
+                Storage: {state.note.chunkCount} chunk(s)
+              </Text>
+            </View>
           )}
         </View>
 
-        {/* Preview content */}
+        {/* Rich Text Preview */}
         <View style={styles.previewContent}>
           <Text style={styles.previewLabel}>Preview:</Text>
-          <Text style={styles.previewText} numberOfLines={6}>
-            {previewContent || 'This note is empty.'}
-          </Text>
+          <View style={styles.richPreviewContainer}>
+            <RichTextEditor
+              ref={richEditorRef}
+              initialContent={previewContent}
+              onContentChange={() => {}} // Read-only preview
+              editable={false}
+              placeholder="Loading preview..."
+              style={styles.richPreview}
+            />
+          </View>
         </View>
 
         {/* Migration warning for edit users */}
@@ -244,27 +285,35 @@ export default function SharedNoteHandler() {
           <View style={styles.warningContainer}>
             <Ionicons name="information-circle" size={20} color="#f59e0b" />
             <Text style={styles.warningText}>
-              This note may have limited real-time collaboration features. 
-              Some edits might not sync immediately with other users.
+              This note will be migrated to support real-time collaboration when you open it. 
+              This is a one-time process and won't affect the content.
+            </Text>
+          </View>
+        )}
+
+        {/* Owner note */}
+        {isOwner && (
+          <View style={styles.ownerContainer}>
+            <Ionicons name="star" size={20} color="#fbbf24" />
+            <Text style={styles.ownerNote}>
+              This is your note. You have full editing permissions.
             </Text>
           </View>
         )}
 
         {/* Actions */}
         <View style={styles.actionsContainer}>
-          {isOwner && (
-            <Text style={styles.ownerNote}>
-              This is your note. You can edit it normally.
-            </Text>
-          )}
-
           <TouchableOpacity 
             style={styles.primaryButton}
             onPress={handleViewNote}
           >
-            <Ionicons name="eye" size={20} color="#fff" />
+            <Ionicons 
+              name={canEdit ? "create" : "eye"} 
+              size={20} 
+              color="#fff" 
+            />
             <Text style={styles.buttonText}>
-              {canEdit ? 'Open & Edit' : 'View Note'}
+              {canEdit ? 'Open & Edit Note' : 'View Note'}
             </Text>
           </TouchableOpacity>
 
@@ -292,17 +341,23 @@ export default function SharedNoteHandler() {
         {/* Share info */}
         <View style={styles.shareInfo}>
           {state.shareToken.expiresAt && (
-            <Text style={styles.shareInfoText}>
-              Expires: {state.shareToken.expiresAt.toLocaleDateString()}
-            </Text>
+            <View style={styles.shareInfoItem}>
+              <Ionicons name="time-outline" size={16} color="#9ca3af" />
+              <Text style={styles.shareInfoText}>
+                Expires: {state.shareToken.expiresAt.toLocaleDateString()}
+              </Text>
+            </View>
           )}
           {state.shareToken.maxUses && (
-            <Text style={styles.shareInfoText}>
-              Uses: {state.shareToken.usageCount}/{state.shareToken.maxUses}
-            </Text>
+            <View style={styles.shareInfoItem}>
+              <Ionicons name="repeat-outline" size={16} color="#9ca3af" />
+              <Text style={styles.shareInfoText}>
+                Uses: {state.shareToken.usageCount}/{state.shareToken.maxUses}
+              </Text>
+            </View>
           )}
         </View>
-      </View>
+      </ScrollView>
     );
   };
 
@@ -310,10 +365,11 @@ export default function SharedNoteHandler() {
     <LinearGradient colors={["#324762", "#0A1C3C"]} style={styles.container}>
       <SafeAreaView style={styles.container}>
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
             <Ionicons name="arrow-back" size={24} color="#fff" />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Shared Note</Text>
+          <View style={styles.headerSpacer} />
         </View>
 
         {state.loading && renderLoading()}
@@ -331,15 +387,26 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     padding: 16,
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(255, 255, 255, 0.1)',
   },
+  backButton: {
+    width: 40,
+    height: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   headerTitle: {
     color: '#fff',
     fontSize: 18,
-    fontWeight: 'bold',
-    marginLeft: 16,
+    fontWeight: '600',
+    flex: 1,
+    textAlign: 'center',
+  },
+  headerSpacer: {
+    width: 40,
   },
   messageContainer: {
     flex: 1,
@@ -389,6 +456,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 16,
+    marginBottom: 8,
   },
   editBadge: {
     backgroundColor: '#22c55e',
@@ -402,23 +470,45 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginLeft: 4,
   },
+  collabBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  collabReady: {
+    backgroundColor: '#059669',
+  },
+  collabWarning: {
+    backgroundColor: '#d97706',
+  },
+  collabText: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: '600',
+    marginLeft: 4,
+  },
   noteInfo: {
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
     borderRadius: 12,
     padding: 16,
     marginBottom: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  infoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
   },
   noteInfoText: {
     color: '#d1d5db',
     fontSize: 14,
-    marginBottom: 4,
+    marginLeft: 8,
   },
   previewContent: {
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 24,
-    flex: 1,
+    marginBottom: 20,
   },
   previewLabel: {
     color: '#60a5fa',
@@ -426,20 +516,52 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginBottom: 12,
   },
-  previewText: {
-    color: '#e5e7eb',
+  richPreviewContainer: {
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+    minHeight: 200,
+    maxHeight: 300,
+    overflow: 'hidden',
+  },
+  richPreview: {
+    flex: 1,
+  },
+  warningContainer: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    backgroundColor: 'rgba(251, 191, 36, 0.1)',
+    padding: 12,
+    borderRadius: 8,
+    borderLeftWidth: 3,
+    borderLeftColor: '#f59e0b',
+    marginBottom: 16,
+  },
+  warningText: {
+    color: '#f59e0b',
     fontSize: 14,
+    marginLeft: 8,
+    flex: 1,
     lineHeight: 20,
   },
-  actionsContainer: {
+  ownerContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(251, 191, 36, 0.1)',
+    padding: 12,
+    borderRadius: 8,
     marginBottom: 16,
   },
   ownerNote: {
     color: '#fbbf24',
     fontSize: 14,
-    textAlign: 'center',
+    fontWeight: '500',
+    marginLeft: 8,
+  },
+  actionsContainer: {
     marginBottom: 16,
-    fontStyle: 'italic',
   },
   primaryButton: {
     flexDirection: 'row',
@@ -461,7 +583,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(96, 165, 250, 0.2)',
+    backgroundColor: 'rgba(96, 165, 250, 0.1)',
     paddingVertical: 16,
     paddingHorizontal: 24,
     borderRadius: 12,
@@ -476,52 +598,18 @@ const styles = StyleSheet.create({
   },
   shareInfo: {
     alignItems: 'center',
+    paddingVertical: 16,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  shareInfoItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
   },
   shareInfoText: {
     color: '#9ca3af',
     fontSize: 12,
-    marginBottom: 4,
-  },
-  collabBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-    marginTop: 4,
-  },
-  
-  collabReady: {
-    backgroundColor: '#059669',
-  },
-  
-  collabWarning: {
-    backgroundColor: '#d97706',
-  },
-  
-  collabText: {
-    color: '#fff',
-    fontSize: 10,
-    fontWeight: '600',
-    marginLeft: 4,
-  },
-  
-  warningContainer: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    backgroundColor: 'rgba(251, 191, 36, 0.1)',
-    padding: 12,
-    borderRadius: 8,
-    borderLeftWidth: 3,
-    borderLeftColor: '#f59e0b',
-    marginVertical: 8,
-  },
-  
-  warningText: {
-    color: '#f59e0b',
-    fontSize: 14,
-    marginLeft: 8,
-    flex: 1,
-    lineHeight: 20,
+    marginLeft: 6,
   },
 });

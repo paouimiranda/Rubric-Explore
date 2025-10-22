@@ -230,6 +230,7 @@ export function useCollaborativeEditing(
         // Set up content observers for all chunks
         collaborativeSession.chunkSessions.forEach((chunkSession) => {
           let observerTimeout: ReturnType<typeof setTimeout> | null = null;
+          let updateCount = 0;
           
           const contentObserver = () => {
             if (!mounted || isApplyingYjsUpdate.current.content) return;
@@ -239,13 +240,19 @@ export function useCollaborativeEditing(
               clearTimeout(observerTimeout);
             }
             
+            updateCount++;
+            
+            // Batch multiple rapid updates
             observerTimeout = setTimeout(() => {
+              console.log(`📡 Yjs observer fired (batched ${updateCount} updates)`);
+              updateCount = 0;
+              
               // Merge all chunks
               const mergedContent = collaborativeService.getMergedContent(noteId);
               console.log('Applying Y.js content update from chunks, total length:', mergedContent.length);
               setContent(mergedContent);
               previousValues.current.content = mergedContent;
-            }, 100);
+            }, 250); // Increased from 100ms to 250ms
           };
 
           chunkSession.contentText.observe(contentObserver);
