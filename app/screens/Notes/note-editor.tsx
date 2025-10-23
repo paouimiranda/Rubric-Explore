@@ -59,13 +59,22 @@ export default function NoteEditor({
     );
   }
 
-  const { noteId: routeNoteId, notebookId, isSharedAccess: routeIsSharedAccess, sharedPermission: routeSharedPermission } = useLocalSearchParams();
+  // Read from route params and merge with props
+  const { 
+    noteId: routeNoteId, 
+    notebookId, 
+    isSharedAccess: routeIsSharedAccess, 
+    sharedPermission: routeSharedPermission 
+  } = useLocalSearchParams();
+  
+  // Use route params if component props aren't provided
   const effectiveIsSharedAccess = isSharedAccess || routeIsSharedAccess === 'true';
   const effectiveSharedPermission = sharedPermission || (routeSharedPermission as 'view' | 'edit');
 
-
   const [note, setNote] = useState<Note | null>(null);
-  const effectiveNote = isSharedAccess ? sharedNote : note;
+  const effectiveNote = effectiveIsSharedAccess ? sharedNote : note;
+  
+  // Typing state management
   const isTyping = useRef(false);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   
@@ -102,7 +111,7 @@ export default function NoteEditor({
   const title = collaborative.title;  
   const content = collaborative.content;
 
-  // Sync Yjs content to rich text editor
+  // Sync Yjs content to rich text editor (debounced to prevent cursor jumping)
   const syncTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastSyncedContent = useRef('');
   const isSyncingRef = useRef(false);
@@ -135,6 +144,8 @@ export default function NoteEditor({
           setTimeout(() => {
             isSyncingRef.current = false;
           }, 100);
+        } else {
+          console.log('⚠️ Cancelled sync - user started typing');
         }
       }, 300); // Increased debounce for better batching
     }
@@ -145,8 +156,6 @@ export default function NoteEditor({
       }
     };
   }, [content]);
-
-  
 
   // Enhanced text change handlers that work with granular updates
   const handleTitleChange = useCallback((newTitle: string, event?: NativeSyntheticEvent<any>) => {
@@ -375,7 +384,7 @@ export default function NoteEditor({
   const handleOCRTextInsert = useCallback((text: string) => {
     if (effectiveIsSharedAccess && effectiveSharedPermission === "view") return;
     
-    const newContent = content + (content ? '\n\n' : '') + text;
+    const newContent = content + (content ? '<p><br></p>' : '') + `<p>${text}</p>`;
     collaborative.handleContentChange(newContent);
     setHasUnsavedChanges(true);
   }, [collaborative, content, effectiveIsSharedAccess, effectiveSharedPermission]);
@@ -401,7 +410,9 @@ export default function NoteEditor({
           </TouchableOpacity>
           
           <View style={styles.headerCenter}>
-            <Text style={styles.headerTitle}>Edit Note</Text>
+            <Text style={styles.headerTitle}>
+              {effectiveIsSharedAccess ? 'Shared Note' : 'Edit Note'}
+            </Text>
             {renderCollaborativeIndicators()}
             {hasUnsavedChanges && (
               <Text style={styles.unsavedIndicator}>● Unsaved changes</Text>
@@ -409,24 +420,28 @@ export default function NoteEditor({
           </View>
           
           <View style={styles.headerActions}>
-            <TouchableOpacity
-              style={styles.headerButton}
-              onPress={() => setOcrModalVisible(true)}
-            >
-              <Ionicons name="scan-outline" size={24} color="#fff" />
-            </TouchableOpacity>
-            
-            <TouchableOpacity
-              style={styles.headerButton}
-              onPress={() => setPropertiesModalVisible(true)}
-            >
-              <Ionicons name="pricetag-outline" size={24} color="#fff" />
-            </TouchableOpacity>
+            {!effectiveIsSharedAccess && (
+              <>
+                <TouchableOpacity
+                  style={styles.headerButton}
+                  onPress={() => setOcrModalVisible(true)}
+                >
+                  <Ionicons name="scan-outline" size={24} color="#fff" />
+                </TouchableOpacity>
+                
+                <TouchableOpacity
+                  style={styles.headerButton}
+                  onPress={() => setPropertiesModalVisible(true)}
+                >
+                  <Ionicons name="pricetag-outline" size={24} color="#fff" />
+                </TouchableOpacity>
+              </>
+            )}
             
             <TouchableOpacity
               style={[styles.headerButton, saving && styles.headerButtonDisabled]}
               onPress={() => saveNote(true)}
-              disabled={saving}
+              disabled={saving || (effectiveIsSharedAccess && effectiveSharedPermission === 'view')}
             >
               {saving ? (
                 <Ionicons name="reload" size={24} color="#9ca3af" />
@@ -434,19 +449,21 @@ export default function NoteEditor({
                 <Ionicons name="save-outline" size={24} color="#fff" />
               )}
             </TouchableOpacity>
-              
-            <TouchableOpacity
-              style={[styles.headerButton]}
-              onPress={() => {
-                if (note) {
-                  setVisible(true);
-                } else {
-                  Alert.alert('Error', 'Please save the note first before sharing');
-                }
-              }}
-            >
-              <Ionicons name="share-social-outline" size={24} color="#fff" />
-            </TouchableOpacity>
+            
+            {!effectiveIsSharedAccess && (
+              <TouchableOpacity
+                style={[styles.headerButton]}
+                onPress={() => {
+                  if (note) {
+                    setVisible(true);
+                  } else {
+                    Alert.alert('Error', 'Please save the note first before sharing');
+                  }
+                }}
+              >
+                <Ionicons name="share-social-outline" size={24} color="#fff" />
+              </TouchableOpacity>
+            )}
           </View>
         </View>
         
@@ -475,7 +492,7 @@ export default function NoteEditor({
           behavior={Platform.OS === "ios" ? "padding" : "height"}
         >
           {/* Properties Display */}
-          {properties.length > 0 && (
+          {properties.length > 0 && !effectiveIsSharedAccess && (
             <View style={styles.propertiesDisplay}>
               <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                 {properties.map((property, index) => (
@@ -513,29 +530,30 @@ export default function NoteEditor({
             />
 
             {/* Rich Text Content Editor */}
-          <RichTextEditor
-            ref={richEditorRef}
-            initialContent={content}
-            onContentChange={handleContentChange}
-            editable={!(effectiveIsSharedAccess && effectiveSharedPermission === "view")}
-            placeholder="Start writing your note..."
-            onCursorPosition={handleContentCursorPosition}
-            style={styles.richEditor}
-            onEditorReady={(editor) => {
-              // Editor is ready
-              console.log('Rich text editor ready');
-            }}
-          />
+            <RichTextEditor
+              ref={richEditorRef}
+              initialContent={content}
+              onContentChange={handleContentChange}
+              editable={!(effectiveIsSharedAccess && effectiveSharedPermission === "view")}
+              placeholder="Start writing your note..."
+              onCursorPosition={handleContentCursorPosition}
+              style={styles.richEditor}
+              onEditorReady={(editor) => {
+                console.log('Rich text editor ready');
+              }}
+            />
           </View>
         </KeyboardAvoidingView>
 
         {/* Rich Text Toolbar */}
-        <RichTextToolbar
-          getEditor={() => richEditorRef.current?.getEditor()}
-          onMetadataPress={() => setMetadataModalVisible(true)}
-          noteId={routeNoteId as string}
-          userId={uid!}
-        />
+        {!(effectiveIsSharedAccess && effectiveSharedPermission === "view") && (
+          <RichTextToolbar
+            getEditor={() => richEditorRef.current?.getEditor()}
+            onMetadataPress={() => setMetadataModalVisible(true)}
+            noteId={routeNoteId as string}
+            userId={uid!}
+          />
+        )}
 
         {/* Metadata Modal */}
         <Modal
@@ -583,7 +601,7 @@ export default function NoteEditor({
                       <View style={styles.metadataTextContainer}>
                         <Text style={styles.metadataLabel}>Statistics</Text>
                         <Text style={styles.metadataValue}>
-                          {content.length} characters • {content.trim().split(/\s+/).filter(word => word.length > 0).length} words
+                          {content.replace(/<[^>]*>/g, '').length} characters • {content.replace(/<[^>]*>/g, '').trim().split(/\s+/).filter(word => word.length > 0).length} words
                         </Text>
                       </View>
                     </View>
@@ -618,29 +636,35 @@ export default function NoteEditor({
           </View>
         </Modal>
 
-        {/* Properties Modal */}
-        <PropertiesModal
-          visible={propertiesModalVisible}
-          onClose={() => setPropertiesModalVisible(false)}
-          properties={properties}
-          onUpdateProperties={handlePropertiesUpdate}
-        />
+        {/* Properties Modal - Only for non-shared notes */}
+        {!effectiveIsSharedAccess && (
+          <PropertiesModal
+            visible={propertiesModalVisible}
+            onClose={() => setPropertiesModalVisible(false)}
+            properties={properties}
+            onUpdateProperties={handlePropertiesUpdate}
+          />
+        )}
 
-        {/* OCR Modal */}
-        <OCRModal
-          isVisible={ocrModalVisible}
-          onClose={() => setOcrModalVisible(false)}
-          onInsertText={handleOCRTextInsert}
-        />
+        {/* OCR Modal - Only for non-shared notes */}
+        {!effectiveIsSharedAccess && (
+          <OCRModal
+            isVisible={ocrModalVisible}
+            onClose={() => setOcrModalVisible(false)}
+            onInsertText={handleOCRTextInsert}
+          />
+        )}
 
-        {/* Sharing Modal */}
-        <SharingModal
-          visible={visible}
-          onClose={() => setVisible(false)}
-          noteId={routeNoteId as string}
-          noteTitle={note?.title || 'Untitled Note'}
-          userUid={uid!}
-        />
+        {/* Sharing Modal - Only for note owners */}
+        {!effectiveIsSharedAccess && note && (
+          <SharingModal
+            visible={visible}
+            onClose={() => setVisible(false)}
+            noteId={routeNoteId as string}
+            noteTitle={note?.title || 'Untitled Note'}
+            userUid={uid!}
+          />
+        )}
       </SafeAreaView>
     </LinearGradient>
   );
