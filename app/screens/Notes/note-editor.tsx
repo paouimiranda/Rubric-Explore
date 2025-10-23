@@ -34,7 +34,6 @@ import { useAuth } from "../../contexts/AuthContext";
 import OCRModal from "./ocr";
 import PropertiesModal from './properties';
 
-
 type NoteEditorProps = {
   isSharedAccess?: boolean;
   sharedPermission?: "view" | "edit";
@@ -59,7 +58,6 @@ export default function NoteEditor({
     );
   }
 
-  // Read from route params and merge with props
   const { 
     noteId: routeNoteId, 
     notebookId, 
@@ -67,16 +65,11 @@ export default function NoteEditor({
     sharedPermission: routeSharedPermission 
   } = useLocalSearchParams();
   
-  // Use route params if component props aren't provided
   const effectiveIsSharedAccess = isSharedAccess || routeIsSharedAccess === 'true';
   const effectiveSharedPermission = sharedPermission || (routeSharedPermission as 'view' | 'edit');
 
   const [note, setNote] = useState<Note | null>(null);
   const effectiveNote = effectiveIsSharedAccess ? sharedNote : note;
-  
-  // Typing state management
-  const isTyping = useRef(false);
-  const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   
   const [properties, setProperties] = useState<NotebookProperty[]>([]);
   const [loading, setLoading] = useState(true); 
@@ -89,65 +82,63 @@ export default function NoteEditor({
   const [showCollaborators, setShowCollaborators] = useState(false);
   const [metadataModalVisible, setMetadataModalVisible] = useState(false);
     
-  // Rich text editor ref
   const richEditorRef = useRef<RichTextEditorRef>(null);
   
-  // Track if we're applying Y.js updates to prevent feedback loops
-  const isApplyingYjsUpdate = useRef(false);
+  const isUserTyping = useCallback(() => {
+    return richEditorRef.current?.isTyping() || false;
+  }, []);
   
   const handlePropertiesUpdate = (updatedProperties: NotebookProperty[]) => {
     setProperties(updatedProperties);
     setHasUnsavedChanges(true);
   };
 
-  // Initialize collaborative editing with the note ID
   const collaborative = useCollaborativeEditing(
     routeNoteId as string,
     user,
     note?.title || '',
   );
 
-  // Use collaborative state instead of local state
   const title = collaborative.title;  
   const content = collaborative.content;
 
-  // Sync Yjs content to rich text editor (debounced to prevent cursor jumping)
+  /**
+   * FAST SYNC with improved cursor preservation
+   * - Only updates when not typing
+   * - Preserves cursor position correctly
+   */
   const syncTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastSyncedContent = useRef('');
-  const isSyncingRef = useRef(false);
+  const isSyncing = useRef(false);
 
   useEffect(() => {
-    // Prevent syncing during active typing
-    if (isTyping.current) {
-      console.log('⏭️ Skipping sync - user is typing');
+    // Don't sync if already syncing or if typing
+    if (isSyncing.current || isUserTyping()) {
       return;
     }
 
-    // Only sync if content actually changed from remote
-    if (content !== lastSyncedContent.current && richEditorRef.current && !isApplyingYjsUpdate.current && !isSyncingRef.current) {
-      console.log('🔄 Content changed from Yjs, scheduling sync...');
+    // Only sync if content actually changed
+    if (content !== lastSyncedContent.current && richEditorRef.current) {
+      console.log('🔄 Yjs content changed, scheduling sync');
       
-      // Clear any pending sync
       if (syncTimeoutRef.current) {
         clearTimeout(syncTimeoutRef.current);
       }
       
-      // Debounce the sync to batch rapid updates
-      syncTimeoutRef.current = setTimeout(() => {
-        if (richEditorRef.current && !isTyping.current) {
-          console.log('📥 Syncing content from Yjs to editor');
-          isSyncingRef.current = true;
-          richEditorRef.current.setContentHtml(content);
-          lastSyncedContent.current = content;
+      syncTimeoutRef.current = setTimeout(async () => {
+        // Final check before applying
+        if (!isUserTyping() && richEditorRef.current && !isSyncing.current) {
+          isSyncing.current = true;
+          console.log('📥 Applying Yjs update with cursor preservation');
           
-          // Reset sync flag
-          setTimeout(() => {
-            isSyncingRef.current = false;
-          }, 100);
-        } else {
-          console.log('⚠️ Cancelled sync - user started typing');
+          try {
+            await richEditorRef.current.setContentHtml(content);
+            lastSyncedContent.current = content;
+          } finally {
+            isSyncing.current = false;
+          }
         }
-      }, 300); // Increased debounce for better batching
+      }, 150);
     }
     
     return () => {
@@ -155,55 +146,25 @@ export default function NoteEditor({
         clearTimeout(syncTimeoutRef.current);
       }
     };
-  }, [content]);
+  }, [content, isUserTyping]);
 
-  // Enhanced text change handlers that work with granular updates
   const handleTitleChange = useCallback((newTitle: string, event?: NativeSyntheticEvent<any>) => {
     if (effectiveIsSharedAccess && effectiveSharedPermission === "view") return;
-    if (isApplyingYjsUpdate.current) return;
     
     const selectionStart = event?.nativeEvent?.selection?.start;
     const selectionEnd = event?.nativeEvent?.selection?.end;
     
-    // Use the granular change handler
     collaborative.handleTitleChange(newTitle, selectionStart, selectionEnd);
   }, [collaborative, effectiveIsSharedAccess, effectiveSharedPermission]);
 
   const handleContentChange = useCallback((newContent: string) => {
     if (effectiveIsSharedAccess && effectiveSharedPermission === "view") return;
     
-    console.log('⌨️ User typing...');
-    
-    // Set typing flag
-    isTyping.current = true;
-    isApplyingYjsUpdate.current = true;
-    
-    // Clear existing typing timeout
-    if (typingTimeoutRef.current) {
-      clearTimeout(typingTimeoutRef.current);
-    }
-    
-    // Use the granular change handler for HTML content
+    console.log('⌨️ Editor content changed');
+    lastSyncedContent.current = newContent;
     collaborative.handleContentChange(newContent);
-    
-    // Reset flags after user stops typing (longer delay)
-    typingTimeoutRef.current = setTimeout(() => {
-      console.log('⏸️ User stopped typing');
-      isApplyingYjsUpdate.current = false;
-      isTyping.current = false;
-    }, 500); // Increased from 100ms to 500ms
   }, [collaborative, effectiveIsSharedAccess, effectiveSharedPermission]);
 
-  // Cleanup typing timeout
-  useEffect(() => {
-    return () => {
-      if (typingTimeoutRef.current) {
-        clearTimeout(typingTimeoutRef.current);
-      }
-    };
-  }, []);
-
-  // Enhanced cursor tracking
   const handleTitleSelectionChange = useCallback((event: NativeSyntheticEvent<TextInputSelectionChangeEventData>) => {
     const { start } = event.nativeEvent.selection;
     collaborative.updateCursor('title', start);
@@ -253,7 +214,6 @@ export default function NoteEditor({
     );
   };
 
-  // Auto-save functionality - only for properties now, Y.js handles content
   const autoSaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -262,7 +222,6 @@ export default function NoteEditor({
     }
   }, [routeNoteId, uid]);
 
-  // Auto-save only for properties (Y.js handles title/content sync)
   useEffect(() => {
     if (note && properties !== note.properties) {
       setHasUnsavedChanges(true);
@@ -271,7 +230,6 @@ export default function NoteEditor({
         clearTimeout(autoSaveTimeoutRef.current);
       }
       
-      // Auto-save properties only
       autoSaveTimeoutRef.current = setTimeout(() => {
         saveNote(false);
       }, 2000);
@@ -293,7 +251,6 @@ export default function NoteEditor({
       if (snap.exists()) {
         const data = snap.data();
         
-        // Check if migration needed
         if (!data.chunkCount || data.chunkCount === 0) {
           console.log('Note needs migration, migrating now...');
           const { migrateNoteToChunks } = await import('@/services/migration/notes-migration');
@@ -309,10 +266,6 @@ export default function NoteEditor({
         
         setNote(noteData);
         setProperties(noteData.properties || []);
-        
-        // DON'T set title/content - collaborative hook handles it
-        // The hook will load chunks automatically
-        
       } else {
         Alert.alert("Error", "Note not found");
         router.back();
@@ -342,8 +295,6 @@ export default function NoteEditor({
     try {
       setSaving(true);
       
-      // Only update properties and metadata
-      // Y.js collaborative service handles title/content updates
       const metadataUpdates = {
         properties,
       };
@@ -380,7 +331,6 @@ export default function NoteEditor({
     }
   };
 
-  // Enhanced OCR text insertion
   const handleOCRTextInsert = useCallback((text: string) => {
     if (effectiveIsSharedAccess && effectiveSharedPermission === "view") return;
     
@@ -403,7 +353,6 @@ export default function NoteEditor({
   return (
     <LinearGradient colors={["#324762", "#0A1C3C"]} style={styles.container}>
       <SafeAreaView style={styles.container}>
-        {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity style={styles.headerButton} onPress={handleBack}>
             <Ionicons name="arrow-back" size={24} color="#fff" />
@@ -467,16 +416,14 @@ export default function NoteEditor({
           </View>
         </View>
         
-        {/* Render Status */}
         {renderSharingStatus()}
 
-        {/* Collaborators List */}
         {showCollaborators && collaborative.activeUsers.length > 0 && (
           <View style={styles.collaboratorsList}>
             {collaborative.activeUsers.map((user, index) => (
               <View key={user.uid} style={styles.collaboratorItem}>
-                <View 
-                  style={[
+                <View
+                style={[
                     styles.collaboratorAvatar, 
                     { backgroundColor: user.color }
                   ]} 
@@ -491,7 +438,6 @@ export default function NoteEditor({
           style={styles.content} 
           behavior={Platform.OS === "ios" ? "padding" : "height"}
         >
-          {/* Properties Display */}
           {properties.length > 0 && !effectiveIsSharedAccess && (
             <View style={styles.propertiesDisplay}>
               <ScrollView horizontal showsHorizontalScrollIndicator={false}>
@@ -510,9 +456,7 @@ export default function NoteEditor({
             </View>
           )}
 
-          {/* Editor Container */}
           <View style={styles.editorContainer}>
-            {/* Title Input */}
             <TextInput
               ref={collaborative.titleInputRef}
               style={styles.titleInput}
@@ -529,7 +473,6 @@ export default function NoteEditor({
               spellCheck={true}
             />
 
-            {/* Rich Text Content Editor */}
             <RichTextEditor
               ref={richEditorRef}
               initialContent={content}
@@ -539,13 +482,12 @@ export default function NoteEditor({
               onCursorPosition={handleContentCursorPosition}
               style={styles.richEditor}
               onEditorReady={(editor) => {
-                console.log('Rich text editor ready');
+                console.log('✅ Rich text editor ready');
               }}
             />
           </View>
         </KeyboardAvoidingView>
 
-        {/* Rich Text Toolbar */}
         {!(effectiveIsSharedAccess && effectiveSharedPermission === "view") && (
           <RichTextToolbar
             getEditor={() => richEditorRef.current?.getEditor()}
@@ -555,7 +497,6 @@ export default function NoteEditor({
           />
         )}
 
-        {/* Metadata Modal */}
         <Modal
           visible={metadataModalVisible}
           transparent
@@ -636,7 +577,6 @@ export default function NoteEditor({
           </View>
         </Modal>
 
-        {/* Properties Modal - Only for non-shared notes */}
         {!effectiveIsSharedAccess && (
           <PropertiesModal
             visible={propertiesModalVisible}
@@ -646,7 +586,6 @@ export default function NoteEditor({
           />
         )}
 
-        {/* OCR Modal - Only for non-shared notes */}
         {!effectiveIsSharedAccess && (
           <OCRModal
             isVisible={ocrModalVisible}
@@ -655,7 +594,6 @@ export default function NoteEditor({
           />
         )}
 
-        {/* Sharing Modal - Only for note owners */}
         {!effectiveIsSharedAccess && note && (
           <SharingModal
             visible={visible}

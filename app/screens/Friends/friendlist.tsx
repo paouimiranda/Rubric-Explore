@@ -1,9 +1,9 @@
-// Updated friends.tsx - replace the chat tab section and import ChatList
+// Updated friends.tsx 
 
 import ChatList from '@/components/Interface/chat-list';
 import FriendCard from '@/components/Interface/friend-card';
 import BottomNavigation from '@/components/Interface/nav-bar';
-import { getTotalUnreadCount } from '@/services/chat-service'; // Add this import
+import { getTotalUnreadCount } from '@/services/chat-service';
 import {
   acceptFriendRequest,
   getFriendRequests,
@@ -16,6 +16,7 @@ import {
   FriendRequest as ServiceFriendRequest,
   User,
 } from '@/services/friends-service';
+import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
@@ -36,20 +37,13 @@ import { auth } from '../../../firebase';
 type TabType = 'friends' | 'requests' | 'chat';
 type Status = 'online' | 'busy' | 'offline';
 
-// Use the service types directly
 interface Friend extends User {
   status?: Status;
 }
 
-// Use the service FriendRequest type
-interface FriendRequest extends ServiceFriendRequest {
-  // Can extend if needed
-}
+interface FriendRequest extends ServiceFriendRequest {}
 
-// Use the service SearchUser type
-interface SearchResult extends SearchUser {
-  // Additional search-specific fields if needed
-}
+interface SearchResult extends SearchUser {}
 
 const router = useRouter();
 
@@ -62,18 +56,16 @@ export default function Friendlist() {
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [searchLoading, setSearchLoading] = useState(false);
-  const [unreadChatCount, setUnreadChatCount] = useState(0); // Add this state
+  const [unreadChatCount, setUnreadChatCount] = useState(0);
 
   const currentUser = auth.currentUser;
 
-  // Load friends on component mount
   useEffect(() => {
     if (currentUser) {
       loadFriends();
       loadFriendRequests();
-      loadUnreadCount(); // Add this
+      loadUnreadCount();
       
-      // Set up real-time listener for friend requests
       const unsubscribe = listenToFriendRequests(currentUser.uid, (requests) => {
         setFriendRequests(requests);
       });
@@ -82,7 +74,6 @@ export default function Friendlist() {
     }
   }, [currentUser]);
 
-  // Handle search
   useEffect(() => {
     if (activeTab === 'friends' && search.trim()) {
       handleSearch(search);
@@ -91,7 +82,6 @@ export default function Friendlist() {
     }
   }, [search, activeTab]);
 
-  // Load unread chat count
   const loadUnreadCount = async () => {
     if (!currentUser) return;
     
@@ -153,7 +143,6 @@ export default function Friendlist() {
     try {
       await sendFriendRequest(currentUser.uid, userId);
       Alert.alert('Success', `Friend request sent to ${username}`);
-      // Remove from search results or update UI state
       setSearchResults(prev => prev.filter(user => user.uid !== userId));
     } catch (error) {
       Alert.alert('Error');
@@ -164,7 +153,7 @@ export default function Friendlist() {
     try {
       await acceptFriendRequest(request.id, request.fromUserId, request.toUserId);
       Alert.alert('Success', 'Friend request accepted');
-      loadFriends(); // Refresh friends list
+      loadFriends();
     } catch (error) {
       Alert.alert('Error', 'Failed to accept friend request');
     }
@@ -186,7 +175,7 @@ export default function Friendlist() {
     } else if (activeTab === 'requests') {
       await loadFriendRequests();
     } else if (activeTab === 'chat') {
-      await loadUnreadCount(); // Refresh unread count
+      await loadUnreadCount();
     }
     setRefreshing(false);
   };
@@ -195,7 +184,6 @@ export default function Friendlist() {
     router.push('./search-screen/');
   };
 
-  // Add function to start chat with a friend
   const startChatWithFriend = async (friend: Friend) => {
     if (!currentUser) return;
     
@@ -225,40 +213,71 @@ export default function Friendlist() {
         return (
           <ScrollView 
             contentContainerStyle={styles.scrollArea}
+            showsVerticalScrollIndicator={false}
             refreshControl={
-              <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+              <RefreshControl 
+                refreshing={refreshing} 
+                onRefresh={onRefresh}
+                tintColor="#3b82f6"
+                colors={["#3b82f6"]}
+              />
             }
           >
             {search.trim() ? (
-              // Show search results when searching
               searchLoading ? (
-                <ActivityIndicator size="large" color="#0EA5E9" style={styles.loader} />
+                <View style={styles.loadingContainer}>
+                  <ActivityIndicator size="large" color="#3b82f6" />
+                  <Text style={styles.loadingText}>Searching users...</Text>
+                </View>
               ) : searchResults.length > 0 ? (
-                searchResults.map((user) => (
-                  <SearchResultCard 
-                    key={user.uid}
-                    user={user}
-                    onSendRequest={handleSendFriendRequest}
-                  />
-                ))
+                <View style={styles.resultsContainer}>
+                  <View style={styles.resultsHeader}>
+                    <Ionicons name="search" size={16} color="#9ca3af" />
+                    <Text style={styles.resultsHeaderText}>
+                      {searchResults.length} {searchResults.length === 1 ? 'result' : 'results'} found
+                    </Text>
+                  </View>
+                  {searchResults.map((user) => (
+                    <SearchResultCard 
+                      key={user.uid}
+                      user={user}
+                      onSendRequest={handleSendFriendRequest}
+                    />
+                  ))}
+                </View>
               ) : (
-                <Text style={styles.emptyText}>No users found</Text>
+                <View style={styles.emptyContainer}>
+                  <View style={styles.emptyCircle}>
+                    <Ionicons name="people-outline" size={48} color="#4b5563" />
+                  </View>
+                  <Text style={styles.emptyText}>No users found</Text>
+                  <Text style={styles.emptySubtext}>Try searching with a different name</Text>
+                </View>
               )
             ) : (
-              // Show friends list when not searching
               loading ? (
-                <ActivityIndicator size="large" color="#0EA5E9" style={styles.loader} />
+                <View style={styles.loadingContainer}>
+                  <ActivityIndicator size="large" color="#3b82f6" />
+                  <Text style={styles.loadingText}>Loading friends...</Text>
+                </View>
               ) : getFilteredFriends().length > 0 ? (
                 getFilteredFriends().map((friend) => (
                   <FriendCard 
                     key={friend.uid} 
                     name={friend.displayName} 
+                    username={friend.username}
                     status={friend.isOnline ? 'online' : 'offline'}
-                    onChatPress={() => startChatWithFriend(friend)} // Add chat functionality
+                    onChatPress={() => startChatWithFriend(friend)}
                   />
                 ))
               ) : (
-                <Text style={styles.emptyText}>No friends yet</Text>
+                <View style={styles.emptyContainer}>
+                  <View style={styles.emptyCircle}>
+                    <Ionicons name="people-outline" size={48} color="#4b5563" />
+                  </View>
+                  <Text style={styles.emptyText}>No friends yet</Text>
+                  <Text style={styles.emptySubtext}>Add friends to start connecting</Text>
+                </View>
               )
             )}
           </ScrollView>
@@ -268,21 +287,41 @@ export default function Friendlist() {
         return (
           <ScrollView 
             contentContainerStyle={styles.scrollArea}
+            showsVerticalScrollIndicator={false}
             refreshControl={
-              <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+              <RefreshControl 
+                refreshing={refreshing} 
+                onRefresh={onRefresh}
+                tintColor="#3b82f6"
+                colors={["#3b82f6"]}
+              />
             }
           >
             {friendRequests.length > 0 ? (
-              friendRequests.map((request) => (
-                <FriendRequestCard
-                  key={request.id}
-                  request={request}
-                  onAccept={handleAcceptRequest}
-                  onReject={handleRejectRequest}
-                />
-              ))
+              <>
+                <View style={styles.requestsHeader}>
+                  <Ionicons name="person-add" size={16} color="#9ca3af" />
+                  <Text style={styles.requestsHeaderText}>
+                    {friendRequests.length} pending {friendRequests.length === 1 ? 'request' : 'requests'}
+                  </Text>
+                </View>
+                {friendRequests.map((request) => (
+                  <FriendRequestCard
+                    key={request.id}
+                    request={request}
+                    onAccept={handleAcceptRequest}
+                    onReject={handleRejectRequest}
+                  />
+                ))}
+              </>
             ) : (
-              <Text style={styles.emptyText}>No friend requests</Text>
+              <View style={styles.emptyContainer}>
+                <View style={styles.emptyCircle}>
+                  <Ionicons name="mail-outline" size={48} color="#4b5563" />
+                </View>
+                <Text style={styles.emptyText}>No friend requests</Text>
+                <Text style={styles.emptySubtext}>You're all caught up!</Text>
+              </View>
             )}
           </ScrollView>
         );
@@ -308,63 +347,126 @@ export default function Friendlist() {
       style={{ flex: 1 }}
     >
       <SafeAreaView style={styles.container}>
-        <View style={styles.tabs}>
-          <TouchableOpacity 
-            style={[styles.tab, activeTab === 'friends' && styles.activeTab]}
-            onPress={() => setActiveTab('friends')}
-          >
-            <Text style={[styles.tabText, activeTab === 'friends' && styles.activeTabText]}>
-              FRIENDS
-            </Text>
-          </TouchableOpacity>
-          
-          <TouchableOpacity 
-            style={[styles.tab, activeTab === 'requests' && styles.activeTab]}
-            onPress={() => setActiveTab('requests')}
-          >
-            <Text style={[styles.tabText, activeTab === 'requests' && styles.activeTabText]}>
-              REQUEST {friendRequests.length > 0 && `(${friendRequests.length})`}
-            </Text>
-          </TouchableOpacity>
-          
-          <TouchableOpacity 
-            style={[styles.tab, activeTab === 'chat' && styles.activeTab]}
-            onPress={() => {
-              setActiveTab('chat');
-              loadUnreadCount(); // Refresh unread count when opening chat tab
-            }}
-          >
-            <Text style={[styles.tabText, activeTab === 'chat' && styles.activeTabText]}>
-              CHAT {unreadChatCount > 0 && `(${unreadChatCount})`}
-            </Text>
-          </TouchableOpacity>
+        {/* Header */}
+        <View style={styles.header}>
+          <Text style={styles.headerTitle}>Social</Text>
+          <View style={styles.headerStats}>
+            <Ionicons name="people" size={16} color="#3b82f6" />
+            <Text style={styles.headerStatsText}>{friends.length} friends</Text>
+          </View>
         </View>
 
-        {activeTab === 'friends' && (
-          <>
-            <Text style={styles.online}>ONLINE: {onlineCount}</Text>
-            
-            <TouchableOpacity style={styles.inviteBtn} onPress={navigateToSearch}>
-              <Text style={styles.inviteText}>FIND FRIENDS</Text>
+        {/* Tabs */}
+        <View style={styles.tabsContainer}>
+          <View style={styles.tabs}>
+            <TouchableOpacity 
+              style={[styles.tab, activeTab === 'friends' && styles.activeTab]}
+              onPress={() => setActiveTab('friends')}
+              activeOpacity={0.7}
+            >
+              <Ionicons 
+                name={activeTab === 'friends' ? 'people' : 'people-outline'} 
+                size={18} 
+                color={activeTab === 'friends' ? '#fff' : '#94A3B8'} 
+              />
+              <Text style={[styles.tabText, activeTab === 'friends' && styles.activeTabText]}>
+                Friends
+              </Text>
             </TouchableOpacity>
-          </>
+            
+            <TouchableOpacity 
+              style={[styles.tab, activeTab === 'requests' && styles.activeTab]}
+              onPress={() => setActiveTab('requests')}
+              activeOpacity={0.7}
+            >
+              <Ionicons 
+                name={activeTab === 'requests' ? 'person-add' : 'person-add-outline'} 
+                size={18} 
+                color={activeTab === 'requests' ? '#fff' : '#94A3B8'} 
+              />
+              <Text style={[styles.tabText, activeTab === 'requests' && styles.activeTabText]}>
+                Requests
+              </Text>
+              {friendRequests.length > 0 && (
+                <View style={styles.badge}>
+                  <Text style={styles.badgeText}>{friendRequests.length}</Text>
+                </View>
+              )}
+            </TouchableOpacity>
+            
+            <TouchableOpacity 
+              style={[styles.tab, activeTab === 'chat' && styles.activeTab]}
+              onPress={() => {
+                setActiveTab('chat');
+                loadUnreadCount();
+              }}
+              activeOpacity={0.7}
+            >
+              <Ionicons 
+                name={activeTab === 'chat' ? 'chatbubbles' : 'chatbubbles-outline'} 
+                size={18} 
+                color={activeTab === 'chat' ? '#fff' : '#94A3B8'} 
+              />
+              <Text style={[styles.tabText, activeTab === 'chat' && styles.activeTabText]}>
+                Chat
+              </Text>
+              {unreadChatCount > 0 && (
+                <View style={styles.badge}>
+                  <Text style={styles.badgeText}>{unreadChatCount}</Text>
+                </View>
+              )}
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* Friends Tab Actions */}
+        {activeTab === 'friends' && (
+          <View style={styles.actionsContainer}>
+            <View style={styles.onlineIndicator}>
+              <View style={styles.onlineDot} />
+              <Text style={styles.onlineText}>{onlineCount} online</Text>
+            </View>
+            
+            <TouchableOpacity style={styles.findFriendsBtn} onPress={navigateToSearch}>
+              <LinearGradient
+                colors={['#3b82f6', '#2563eb']}
+                style={styles.findFriendsBtnGradient}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+              >
+                <Ionicons name="search" size={16} color="#fff" />
+                <Text style={styles.findFriendsText}>Find Friends</Text>
+              </LinearGradient>
+            </TouchableOpacity>
+          </View>
         )}
 
+        {/* Search Bar */}
         {(activeTab === 'friends' || activeTab === 'requests') && (
-          <TextInput
-            style={styles.searchBar}
-            placeholder={
-              activeTab === 'friends' 
-                ? "Search friends or find new users..." 
-                : "Search requests..."
-            }
-            placeholderTextColor="#CBD5E1"
-            value={search}
-            onChangeText={setSearch}
-          />
+          <View style={styles.searchContainer}>
+            <Ionicons name="search" size={18} color="#64748b" style={styles.searchIcon} />
+            <TextInput
+              style={styles.searchBar}
+              placeholder={
+                activeTab === 'friends' 
+                  ? "Search friends or find new users..." 
+                  : "Search requests..."
+              }
+              placeholderTextColor="#64748b"
+              value={search}
+              onChangeText={setSearch}
+            />
+            {search.length > 0 && (
+              <TouchableOpacity onPress={() => setSearch('')}>
+                <Ionicons name="close-circle" size={18} color="#64748b" />
+              </TouchableOpacity>
+            )}
+          </View>
         )}
 
+        {/* Content */}
         {renderTabContent()}
+        
         <BottomNavigation />
       </SafeAreaView>
     </LinearGradient>
@@ -377,15 +479,29 @@ const SearchResultCard = ({ user, onSendRequest }: {
   onSendRequest: (userId: string, username: string) => void;
 }) => (
   <View style={styles.searchResultCard}>
-    <View style={styles.searchResultInfo}>
-      <Text style={styles.searchResultName}>{user.displayName}</Text>
-      <Text style={styles.searchResultUsername}>@{user.username}</Text>
+    <View style={styles.searchResultLeft}>
+      <View style={styles.searchResultAvatar}>
+        <Text style={styles.searchResultAvatarText}>
+          {user.displayName.charAt(0).toUpperCase()}
+        </Text>
+      </View>
+      <View style={styles.searchResultInfo}>
+        <Text style={styles.searchResultName}>{user.displayName}</Text>
+        <Text style={styles.searchResultUsername}>@{user.username}</Text>
+      </View>
     </View>
     <TouchableOpacity 
       style={styles.addButton}
       onPress={() => onSendRequest(user.uid, user.username)}
+      activeOpacity={0.7}
     >
-      <Text style={styles.addButtonText}>Add</Text>
+      <LinearGradient
+        colors={['#3b82f6', '#2563eb']}
+        style={styles.addButtonGradient}
+      >
+        <Ionicons name="person-add" size={16} color="#fff" />
+        <Text style={styles.addButtonText}>Add</Text>
+      </LinearGradient>
     </TouchableOpacity>
   </View>
 );
@@ -397,22 +513,34 @@ const FriendRequestCard = ({ request, onAccept, onReject }: {
   onReject: (request: FriendRequest) => void;
 }) => (
   <View style={styles.requestCard}>
-    <View style={styles.requestInfo}>
-      <Text style={styles.requestName}>{request.senderInfo.displayName}</Text>
-      <Text style={styles.requestUsername}>@{request.senderInfo.username}</Text>
+    <View style={styles.requestLeft}>
+      <View style={styles.requestAvatar}>
+        <Text style={styles.requestAvatarText}>
+          {request.senderInfo.displayName.charAt(0).toUpperCase()}
+        </Text>
+        <View style={styles.requestBadge}>
+          <Ionicons name="person-add" size={10} color="#3b82f6" />
+        </View>
+      </View>
+      <View style={styles.requestInfo}>
+        <Text style={styles.requestName}>{request.senderInfo.displayName}</Text>
+        <Text style={styles.requestUsername}>@{request.senderInfo.username}</Text>
+      </View>
     </View>
     <View style={styles.requestActions}>
       <TouchableOpacity 
         style={styles.acceptButton}
         onPress={() => onAccept(request)}
+        activeOpacity={0.7}
       >
-        <Text style={styles.acceptButtonText}>Accept</Text>
+        <Ionicons name="checkmark" size={18} color="#fff" />
       </TouchableOpacity>
       <TouchableOpacity 
         style={styles.rejectButton}
         onPress={() => onReject(request)}
+        activeOpacity={0.7}
       >
-        <Text style={styles.rejectButtonText}>Reject</Text>
+        <Ionicons name="close" size={18} color="#fff" />
       </TouchableOpacity>
     </View>
   </View>
@@ -421,149 +549,353 @@ const FriendRequestCard = ({ request, onAccept, onReject }: {
 const styles = StyleSheet.create({
   container: { 
     flex: 1, 
-    padding: 20 
+    paddingHorizontal: 16,
+    paddingTop: 8,
+  },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  headerTitle: {
+    color: '#fff',
+    fontSize: 32,
+    fontWeight: '700',
+    letterSpacing: -0.5,
+  },
+  headerStats: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(59, 130, 246, 0.1)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(59, 130, 246, 0.2)',
+  },
+  headerStatsText: {
+    color: '#9ca3af',
+    fontSize: 13,
+    fontWeight: '600',
+    marginLeft: 6,
+  },
+  tabsContainer: {
+    marginBottom: 16,
   },
   tabs: {
     flexDirection: 'row',
-    justifyContent: 'space-around',
-    marginBottom: 20,
-    backgroundColor: '#334155',
-    borderRadius: 50,
+    backgroundColor: 'rgba(31, 41, 55, 0.8)',
+    borderRadius: 16,
     padding: 4,
+    borderWidth: 1,
+    borderColor: 'rgba(75, 85, 99, 0.3)',
   },
   tab: {
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 20,
     flex: 1,
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 8,
+    borderRadius: 12,
+    position: 'relative',
   },
   activeTab: {
-    backgroundColor: '#0EA5E9',
+    backgroundColor: '#3b82f6',
   },
   tabText: {
-    color: '#CBD5E1',
+    color: '#94A3B8',
     fontWeight: '600',
-    fontSize: 12,
-    textAlign: 'center',
+    fontSize: 13,
+    marginLeft: 6,
   },
   activeTabText: {
-    color: '#FFF',
+    color: '#fff',
   },
-  online: {
-    color: '#38BDF8',
-    textAlign: 'center',
-    marginVertical: 10,
-    fontWeight: 'bold',
+  badge: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    backgroundColor: '#ef4444',
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 4,
   },
-  inviteBtn: {
-    backgroundColor: '#93C5FD',
-    padding: 12,
-    borderRadius: 30,
+  badgeText: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  actionsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  onlineIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(34, 197, 94, 0.1)',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(34, 197, 94, 0.2)',
+  },
+  onlineDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#22c55e',
+    marginRight: 8,
+  },
+  onlineText: {
+    color: '#22c55e',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  findFriendsBtn: {
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  findFriendsBtnGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+  },
+  findFriendsText: {
+    color: '#fff',
+    fontWeight: '600',
+    fontSize: 13,
+    marginLeft: 6,
+  },
+  searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(31, 41, 55, 0.6)',
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(75, 85, 99, 0.3)',
+  },
+  searchIcon: {
+    marginRight: 10,
+  },
+  searchBar: {
+    flex: 1,
+    color: '#fff',
+    fontSize: 15,
+  },
+  scrollArea: {
+    paddingBottom: 100,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingTop: 80,
+  },
+  loadingText: {
+    color: '#9ca3af',
+    fontSize: 15,
+    fontWeight: '500',
+    marginTop: 12,
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingTop: 80,
+  },
+  emptyCircle: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: 'rgba(75, 85, 99, 0.2)',
+    justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 20,
   },
-  inviteText: {
-    fontWeight: 'bold',
-    color: '#1E3A8A',
-  },
-  scrollArea: {
-    paddingBottom: 40,
-  },
-  searchBar: {
-    backgroundColor: '#1E293B',
-    color: '#FFF',
-    padding: 12,
-    borderRadius: 30,
-    marginBottom: 20,
-    paddingHorizontal: 20,
-    fontSize: 16,
-  },
-  loader: {
-    marginTop: 50,
-  },
   emptyText: {
-    color: '#CBD5E1',
-    textAlign: 'center',
-    marginTop: 50,
-    fontSize: 16,
+    color: '#9ca3af',
+    fontSize: 18,
+    fontWeight: '600',
+    marginBottom: 8,
+  },
+  emptySubtext: {
+    color: '#6b7280',
+    fontSize: 14,
+  },
+  resultsHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 4,
+    paddingVertical: 8,
+    marginBottom: 12,
+  },
+  resultsHeaderText: {
+    color: '#9ca3af',
+    fontSize: 13,
+    fontWeight: '600',
+    marginLeft: 8,
+  },
+  resultsContainer: {
+    paddingBottom: 20,
   },
   searchResultCard: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: '#1E293B',
-    padding: 15,
-    borderRadius: 12,
+    backgroundColor: 'rgba(31, 41, 55, 0.7)',
+    padding: 14,
+    borderRadius: 16,
     marginBottom: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(75, 85, 99, 0.3)',
+  },
+  searchResultLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  searchResultAvatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#3b82f6',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  searchResultAvatarText: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: '700',
   },
   searchResultInfo: {
     flex: 1,
   },
   searchResultName: {
-    color: '#FFF',
-    fontWeight: 'bold',
+    color: '#fff',
+    fontWeight: '600',
     fontSize: 16,
+    marginBottom: 2,
   },
   searchResultUsername: {
-    color: '#CBD5E1',
-    fontSize: 14,
+    color: '#94A3B8',
+    fontSize: 13,
   },
   addButton: {
-    backgroundColor: '#0EA5E9',
-    paddingHorizontal: 20,
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  addButtonGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
     paddingVertical: 8,
-    borderRadius: 20,
   },
   addButtonText: {
-    color: '#FFF',
+    color: '#fff',
     fontWeight: '600',
+    fontSize: 13,
+    marginLeft: 4,
+  },
+  requestsHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 4,
+    paddingVertical: 8,
+    marginBottom: 12,
+  },
+  requestsHeaderText: {
+    color: '#9ca3af',
+    fontSize: 13,
+    fontWeight: '600',
+    marginLeft: 8,
   },
   requestCard: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: '#1E293B',
-    padding: 15,
-    borderRadius: 12,
+    backgroundColor: 'rgba(31, 41, 55, 0.7)',
+    padding: 14,
+    borderRadius: 16,
     marginBottom: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(59, 130, 246, 0.3)',
+  },
+  requestLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  requestAvatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#334155',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+    position: 'relative',
+  },
+  requestAvatarText: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  requestBadge: {
+    position: 'absolute',
+    bottom: -2,
+    right: -2,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: 'rgba(59, 130, 246, 0.2)',
+    borderWidth: 2,
+    borderColor: 'rgba(31, 41, 55, 0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   requestInfo: {
     flex: 1,
   },
   requestName: {
-    color: '#FFF',
-    fontWeight: 'bold',
+    color: '#fff',
+    fontWeight: '600',
     fontSize: 16,
+    marginBottom: 2,
   },
   requestUsername: {
-    color: '#CBD5E1',
-    fontSize: 14,
+    color: '#94A3B8',
+    fontSize: 13,
   },
   requestActions: {
     flexDirection: 'row',
-    gap: 10,
+    gap: 8,
   },
   acceptButton: {
-    backgroundColor: '#22C55E',
-    paddingHorizontal: 15,
-    paddingVertical: 8,
-    borderRadius: 20,
-  },
-  acceptButtonText: {
-    color: '#FFF',
-    fontWeight: '600',
-    fontSize: 12,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#22c55e',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   rejectButton: {
-    backgroundColor: '#EF4444',
-    paddingHorizontal: 15,
-    paddingVertical: 8,
-    borderRadius: 20,
-  },
-  rejectButtonText: {
-    color: '#FFF',
-    fontWeight: '600',
-    fontSize: 12,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#ef4444',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 });

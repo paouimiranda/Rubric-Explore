@@ -8,6 +8,7 @@ import React, { useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Animated,
   Keyboard,
   Modal,
   StyleSheet,
@@ -35,6 +36,29 @@ export default function JoinNoteModal({
   const [inputMethod, setInputMethod] = useState<InputMethod>('code');
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
+  const [scaleAnim] = useState(new Animated.Value(0.9));
+  const [fadeAnim] = useState(new Animated.Value(0));
+
+  React.useEffect(() => {
+    if (visible) {
+      Animated.parallel([
+        Animated.spring(scaleAnim, {
+          toValue: 1,
+          tension: 50,
+          friction: 7,
+          useNativeDriver: true,
+        }),
+        Animated.timing(fadeAnim, {
+          toValue: 1,
+          duration: 200,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    } else {
+      scaleAnim.setValue(0.9);
+      fadeAnim.setValue(0);
+    }
+  }, [visible]);
 
   // Extract token from various input formats
   const extractToken = (inputText: string): string | null => {
@@ -53,13 +77,9 @@ export default function JoinNoteModal({
 
     // Extract from URLs
     const urlPatterns = [
-      // Production URL: https://yourapp.com/shared/TOKEN
       /(?:https?:\/\/)?(?:www\.)?yourapp\.com\/shared\/([A-Za-z0-9]+)/i,
-      // Development URL: http://localhost:3000/shared/TOKEN
       /(?:https?:\/\/)?(?:localhost|127\.0\.0\.1)(?::\d+)?\/shared\/([A-Za-z0-9]+)/i,
-      // Deep link: yourapp://shared/TOKEN
       /yourapp:\/\/shared\/([A-Za-z0-9]+)/i,
-      // Generic pattern: any URL ending with the token
       /\/shared\/([A-Za-z0-9]+)(?:[\/\?#]|$)/i,
     ];
 
@@ -74,7 +94,6 @@ export default function JoinNoteModal({
   };
 
   const handleJoinNote = async () => {
-    // Check if user is logged in
     if (!user) {
       Alert.alert(
         'Login Required', 
@@ -84,7 +103,6 @@ export default function JoinNoteModal({
             text: 'Login',
             onPress: () => {
               onClose();
-              // Navigate to login screen
               router.push('../../index');
             }
           },
@@ -107,10 +125,8 @@ export default function JoinNoteModal({
     try {
       setLoading(true);
       
-      // Use the sharing service to validate and access the shared note
       const result = await sharingService.useShareToken(token, user?.uid);
       
-      // Show success message
       Alert.alert(
         'Success!', 
         `You now have ${result.permission} access to "${result.note.title}"`,
@@ -122,7 +138,6 @@ export default function JoinNoteModal({
               onClose();
               setInput('');
               
-              // Navigate to the shared note
               router.push({
                 pathname: '/screens/Notes/shared-note-viewer',
                 params: {
@@ -132,7 +147,6 @@ export default function JoinNoteModal({
                 }
               });
               
-              // Call success callback if provided
               onSuccess?.(result.note.id, result.permission);
             }
           },
@@ -175,7 +189,7 @@ export default function JoinNoteModal({
   const getPlaceholderText = () => {
     switch (inputMethod) {
       case 'code':
-        return 'Enter 8-character code (e.g., ABC12345)';
+        return 'Enter 8-character code';
       case 'url':
         return 'Paste share URL here';
       default:
@@ -183,115 +197,165 @@ export default function JoinNoteModal({
     }
   };
 
-  const getExampleText = () => {
-    switch (inputMethod) {
-      case 'code':
-        return 'Example: ABC12345';
-      case 'url':
-        return 'Example: https://yourapp.com/shared/abc123...';
-      default:
-        return '';
-    }
-  };
-
   return (
     <Modal
-      animationType="slide"
+      animationType="fade"
       transparent={true}
       visible={visible}
       onRequestClose={handleClose}
     >
       <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-        <View style={styles.overlay}>
-          <LinearGradient colors={["#324762", "#0A1C3C"]} style={styles.modalContainer}>
-            {/* Header */}
-            <View style={styles.header}>
-              <Text style={styles.title}>Join Shared Note</Text>
-              <TouchableOpacity onPress={handleClose} style={styles.closeButton}>
-                <Ionicons name="close" size={24} color="#fff" />
-              </TouchableOpacity>
-            </View>
+        <Animated.View style={[styles.overlay, { opacity: fadeAnim }]}>
+          <Animated.View 
+            style={[
+              styles.modalWrapper,
+              {
+                transform: [{ scale: scaleAnim }],
+                opacity: fadeAnim,
+              }
+            ]}
+          >
+            <LinearGradient 
+              colors={["#1a1f2e", "#0f1419"]} 
+              style={styles.modalContainer}
+            >
+              {/* Decorative Top Bar */}
+              <LinearGradient
+                colors={['#6366f1', '#8b5cf6']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={styles.topBar}
+              />
 
-            <View style={styles.content}>
-              {/* Instructions */}
-              <View style={styles.instructionsContainer}>
-                <Ionicons name="information-circle" size={20} color="#60a5fa" />
-                <Text style={styles.instructionsText}>
-                  Enter a share code or paste a share URL to access a note someone shared with you.
-                </Text>
-              </View>
-
-              {/* Input Method Selection */}
-              <View style={styles.methodSelection}>
-                <Text style={styles.methodLabel}>Input Method</Text>
-                <View style={styles.methodButtons}>
-                  <TouchableOpacity
-                    style={[
-                      styles.methodButton,
-                      inputMethod === 'code' && styles.methodButtonActive
-                    ]}
-                    onPress={() => {
-                      setInputMethod('code');
-                      setInput('');
-                    }}
+              {/* Header */}
+              <View style={styles.header}>
+                <View style={styles.iconContainer}>
+                  <LinearGradient
+                    colors={['#6366f1', '#8b5cf6']}
+                    style={styles.iconGradient}
                   >
-                    <Ionicons 
-                      name="keypad" 
-                      size={16} 
-                      color={inputMethod === 'code' ? '#fff' : '#9ca3af'} 
-                    />
-                    <Text style={[
-                      styles.methodText,
-                      inputMethod === 'code' && styles.methodTextActive
-                    ]}>Share Code</Text>
-                  </TouchableOpacity>
-                  
-                  <TouchableOpacity
-                    style={[
-                      styles.methodButton,
-                      inputMethod === 'url' && styles.methodButtonActive
-                    ]}
-                    onPress={() => {
-                      setInputMethod('url');
-                      setInput('');
-                    }}
-                  >
-                    <Ionicons 
-                      name="link" 
-                      size={16} 
-                      color={inputMethod === 'url' ? '#fff' : '#9ca3af'} 
-                    />
-                    <Text style={[
-                      styles.methodText,
-                      inputMethod === 'url' && styles.methodTextActive
-                    ]}>Share URL</Text>
-                  </TouchableOpacity>
+                    <Ionicons name="link" size={24} color="#fff" />
+                  </LinearGradient>
                 </View>
-              </View>
-
-              {/* Input Field */}
-              <View style={styles.inputContainer}>
-                <Text style={styles.inputLabel}>
-                  {inputMethod === 'code' ? 'Share Code' : 'Share URL'}
+                <Text style={styles.title}>Join Shared Note</Text>
+                <Text style={styles.subtitle}>
+                  Access notes shared with you
                 </Text>
-                <TextInput
-                  style={styles.textInput}
-                  value={input}
-                  onChangeText={setInput}
-                  placeholder={getPlaceholderText()}
-                  placeholderTextColor="#9ca3af"
-                  autoCapitalize={inputMethod === 'code' ? 'characters' : 'none'}
-                  autoCorrect={false}
-                  multiline={inputMethod === 'url'}
-                  numberOfLines={inputMethod === 'url' ? 3 : 1}
-                />
-                
-                {/* Example text */}
-                <Text style={styles.exampleText}>{getExampleText()}</Text>
+                <TouchableOpacity onPress={handleClose} style={styles.closeButton}>
+                  <Ionicons name="close-circle" size={28} color="#6b7280" />
+                </TouchableOpacity>
               </View>
 
-              {/* Action Buttons */}
-              <View style={styles.buttonsContainer}>
+              <View style={styles.content}>
+                {/* Input Method Tabs */}
+                <View style={styles.methodSelection}>
+                  <View style={styles.tabsContainer}>
+                    <TouchableOpacity
+                      style={[
+                        styles.tab,
+                        inputMethod === 'code' && styles.tabActive
+                      ]}
+                      onPress={() => {
+                        setInputMethod('code');
+                        setInput('');
+                      }}
+                      activeOpacity={0.7}
+                    >
+                      {inputMethod === 'code' && (
+                        <LinearGradient
+                          colors={['#6366f1', '#8b5cf6']}
+                          style={styles.tabGradient}
+                        />
+                      )}
+                      <Ionicons 
+                        name="keypad" 
+                        size={18} 
+                        color={inputMethod === 'code' ? '#fff' : '#6b7280'} 
+                        style={styles.tabIcon}
+                      />
+                      <Text style={[
+                        styles.tabText,
+                        inputMethod === 'code' && styles.tabTextActive
+                      ]}>Code</Text>
+                    </TouchableOpacity>
+                    
+                    <TouchableOpacity
+                      style={[
+                        styles.tab,
+                        inputMethod === 'url' && styles.tabActive
+                      ]}
+                      onPress={() => {
+                        setInputMethod('url');
+                        setInput('');
+                      }}
+                      activeOpacity={0.7}
+                    >
+                      {inputMethod === 'url' && (
+                        <LinearGradient
+                          colors={['#6366f1', '#8b5cf6']}
+                          style={styles.tabGradient}
+                        />
+                      )}
+                      <Ionicons 
+                        name="link" 
+                        size={18} 
+                        color={inputMethod === 'url' ? '#fff' : '#6b7280'} 
+                        style={styles.tabIcon}
+                      />
+                      <Text style={[
+                        styles.tabText,
+                        inputMethod === 'url' && styles.tabTextActive
+                      ]}>URL</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+
+                {/* Input Field */}
+                <View style={styles.inputContainer}>
+                  <View style={styles.inputWrapper}>
+                    <View style={styles.inputIconContainer}>
+                      <Ionicons 
+                        name={inputMethod === 'code' ? 'keypad-outline' : 'link-outline'} 
+                        size={20} 
+                        color="#6366f1" 
+                      />
+                    </View>
+                    <TextInput
+                      style={[
+                        styles.textInput,
+                        inputMethod === 'url' && styles.textInputMultiline
+                      ]}
+                      value={input}
+                      onChangeText={setInput}
+                      placeholder={getPlaceholderText()}
+                      placeholderTextColor="#4b5563"
+                      autoCapitalize={inputMethod === 'code' ? 'characters' : 'none'}
+                      autoCorrect={false}
+                      multiline={inputMethod === 'url'}
+                      numberOfLines={inputMethod === 'url' ? 3 : 1}
+                    />
+                    {input.length > 0 && (
+                      <TouchableOpacity 
+                        onPress={() => setInput('')}
+                        style={styles.clearButton}
+                      >
+                        <Ionicons name="close-circle" size={20} color="#6b7280" />
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                  
+                  {/* Helper Text */}
+                  <View style={styles.helperContainer}>
+                    <Ionicons name="information-circle-outline" size={14} color="#6b7280" />
+                    <Text style={styles.helperText}>
+                      {inputMethod === 'code' 
+                        ? '8 characters (e.g., ABC12345)'
+                        : 'Full URL from message or browser'}
+                    </Text>
+                  </View>
+                </View>
+
+                {/* Action Button */}
                 <TouchableOpacity
                   style={[
                     styles.joinButton,
@@ -299,39 +363,53 @@ export default function JoinNoteModal({
                   ]}
                   onPress={handleJoinNote}
                   disabled={!input.trim() || loading}
+                  activeOpacity={0.8}
                 >
-                  {loading ? (
-                    <>
-                      <ActivityIndicator size="small" color="#fff" />
-                      <Text style={styles.joinButtonText}>Joining...</Text>
-                    </>
-                  ) : (
-                    <>
-                      <Ionicons name="enter" size={20} color="#fff" />
-                      <Text style={styles.joinButtonText}>Join Note</Text>
-                    </>
-                  )}
+                  <LinearGradient
+                    colors={(!input.trim() || loading) ? ['#374151', '#1f2937'] : ['#6366f1', '#8b5cf6']}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 0 }}
+                    style={styles.joinButtonGradient}
+                  >
+                    {loading ? (
+                      <>
+                        <ActivityIndicator size="small" color="#fff" />
+                        <Text style={styles.joinButtonText}>Joining...</Text>
+                      </>
+                    ) : (
+                      <>
+                        <Ionicons name="arrow-forward-circle" size={22} color="#fff" />
+                        <Text style={styles.joinButtonText}>Join Note</Text>
+                      </>
+                    )}
+                  </LinearGradient>
                 </TouchableOpacity>
 
-                <TouchableOpacity
-                  style={styles.cancelButton}
-                  onPress={handleClose}
-                  disabled={loading}
-                >
-                  <Text style={styles.cancelButtonText}>Cancel</Text>
-                </TouchableOpacity>
+                {/* Info Cards */}
+                <View style={styles.infoCards}>
+                  <View style={styles.infoCard}>
+                    <View style={styles.infoIconContainer}>
+                      <Ionicons name="shield-checkmark" size={16} color="#10b981" />
+                    </View>
+                    <Text style={styles.infoCardText}>Secure access</Text>
+                  </View>
+                  <View style={styles.infoCard}>
+                    <View style={styles.infoIconContainer}>
+                      <Ionicons name="time" size={16} color="#f59e0b" />
+                    </View>
+                    <Text style={styles.infoCardText}>Real-time sync</Text>
+                  </View>
+                  <View style={styles.infoCard}>
+                    <View style={styles.infoIconContainer}>
+                      <Ionicons name="people" size={16} color="#6366f1" />
+                    </View>
+                    <Text style={styles.infoCardText}>Collaborative</Text>
+                  </View>
+                </View>
               </View>
-
-              {/* Tips */}
-              <View style={styles.tipsContainer}>
-                <Text style={styles.tipsTitle}>💡 Tips:</Text>
-                <Text style={styles.tipText}>• Share codes are 8 characters (e.g., ABC12345)</Text>
-                <Text style={styles.tipText}>• You can paste full URLs from messages or browsers</Text>
-                <Text style={styles.tipText}>• Some links may require login for edit access</Text>
-              </View>
-            </View>
-          </LinearGradient>
-        </View>
+            </LinearGradient>
+          </Animated.View>
+        </Animated.View>
       </TouchableWithoutFeedback>
     </Modal>
   );
@@ -340,149 +418,199 @@ export default function JoinNoteModal({
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: 'rgba(0, 0, 0, 0.75)',
     justifyContent: 'center',
     alignItems: 'center',
   },
-  modalContainer: {
+  modalWrapper: {
     width: '90%',
-    maxWidth: 400,
-    borderRadius: 20,
-    maxHeight: '80%',
+    maxWidth: 420,
+  },
+  modalContainer: {
+    borderRadius: 24,
     overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 20 },
+    shadowOpacity: 0.5,
+    shadowRadius: 40,
+    elevation: 25,
+  },
+  topBar: {
+    height: 4,
   },
   header: {
-    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255, 255, 255, 0.1)',
+    paddingTop: 32,
+    paddingHorizontal: 24,
+    paddingBottom: 24,
+    position: 'relative',
+  },
+  iconContainer: {
+    marginBottom: 16,
+  },
+  iconGradient: {
+    width: 56,
+    height: 56,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#6366f1',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.4,
+    shadowRadius: 16,
+    elevation: 8,
+  },
+  closeButton: {
+    position: 'absolute',
+    top: 16,
+    right: 16,
+    padding: 4,
   },
   title: {
     color: '#fff',
-    fontSize: 18,
-    fontWeight: 'bold',
+    fontSize: 24,
+    fontWeight: '700',
+    marginBottom: 8,
+    letterSpacing: -0.5,
   },
-  closeButton: {
-    padding: 4,
+  subtitle: {
+    color: '#9ca3af',
+    fontSize: 14,
+    fontWeight: '400',
   },
   content: {
-    padding: 20,
-  },
-  instructionsContainer: {
-    flexDirection: 'row',
-    backgroundColor: 'rgba(96, 165, 250, 0.1)',
-    padding: 12,
-    borderRadius: 8,
-    marginBottom: 20,
-  },
-  instructionsText: {
-    color: '#d1d5db',
-    fontSize: 14,
-    lineHeight: 18,
-    marginLeft: 8,
-    flex: 1,
+    padding: 24,
+    paddingTop: 8,
   },
   methodSelection: {
-    marginBottom: 20,
+    marginBottom: 24,
   },
-  methodLabel: {
-    color: '#d1d5db',
-    fontSize: 14,
-    marginBottom: 8,
-  },
-  methodButtons: {
+  tabsContainer: {
     flexDirection: 'row',
-    gap: 8,
+    backgroundColor: '#0f1419',
+    borderRadius: 12,
+    padding: 4,
+    gap: 4,
   },
-  methodButton: {
+  tab: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 8,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    flex: 1,
     justifyContent: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 10,
+    position: 'relative',
+    overflow: 'hidden',
   },
-  methodButtonActive: {
-    backgroundColor: '#60a5fa',
+  tabActive: {
+    // Active state handled by gradient
   },
-  methodText: {
-    color: '#9ca3af',
-    marginLeft: 8,
-    fontSize: 14,
+  tabGradient: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
   },
-  methodTextActive: {
+  tabIcon: {
+    marginRight: 6,
+  },
+  tabText: {
+    color: '#6b7280',
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  tabTextActive: {
     color: '#fff',
   },
   inputContainer: {
     marginBottom: 24,
   },
-  inputLabel: {
-    color: '#d1d5db',
-    fontSize: 14,
-    marginBottom: 8,
+  inputWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#0f1419',
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: '#1f2937',
+    overflow: 'hidden',
+  },
+  inputIconContainer: {
+    paddingLeft: 16,
+    paddingRight: 12,
   },
   textInput: {
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    borderRadius: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    flex: 1,
     color: '#fff',
     fontSize: 16,
+    paddingVertical: 16,
+    paddingRight: 16,
+  },
+  textInputMultiline: {
+    paddingTop: 16,
+    paddingBottom: 16,
+    minHeight: 80,
     textAlignVertical: 'top',
   },
-  exampleText: {
-    color: '#9ca3af',
-    fontSize: 12,
-    marginTop: 6,
-    fontStyle: 'italic',
+  clearButton: {
+    paddingRight: 16,
+    paddingLeft: 8,
   },
-  buttonsContainer: {
-    marginBottom: 20,
+  helperContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 8,
+    paddingHorizontal: 4,
+  },
+  helperText: {
+    color: '#6b7280',
+    fontSize: 13,
+    marginLeft: 6,
   },
   joinButton: {
+    borderRadius: 12,
+    overflow: 'hidden',
+    marginBottom: 24,
+  },
+  joinButtonGradient: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#52C72B',
-    paddingVertical: 14,
-    borderRadius: 8,
-    marginBottom: 12,
+    paddingVertical: 16,
+    paddingHorizontal: 24,
   },
   joinButtonDisabled: {
-    opacity: 0.6,
+    opacity: 0.5,
   },
   joinButtonText: {
     color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
-    marginLeft: 8,
+    fontSize: 17,
+    fontWeight: '700',
+    marginLeft: 10,
+    letterSpacing: 0.2,
   },
-  cancelButton: {
+  infoCards: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  infoCard: {
+    flex: 1,
+    flexDirection: 'row',
     alignItems: 'center',
+    backgroundColor: '#0f1419',
     paddingVertical: 12,
+    paddingHorizontal: 8,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#1f2937',
   },
-  cancelButtonText: {
-    color: '#9ca3af',
-    fontSize: 16,
+  infoIconContainer: {
+    marginRight: 6,
   },
-  tipsContainer: {
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
-    padding: 16,
-    borderRadius: 8,
-  },
-  tipsTitle: {
-    color: '#fbbf24',
-    fontSize: 14,
-    fontWeight: '600',
-    marginBottom: 8,
-  },
-  tipText: {
+  infoCardText: {
     color: '#9ca3af',
     fontSize: 12,
-    marginBottom: 4,
+    fontWeight: '500',
   },
 });
