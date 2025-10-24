@@ -34,6 +34,7 @@ export interface Quiz {
   category?: string; // Overall quiz category
   tags?: string[]; // Additional tags for organization
   topics?: string[]; // Per-quiz topics list for analytics
+  isPublic: boolean;
 }
 
 export interface AIQuizQuestion {
@@ -747,4 +748,106 @@ export class QuizService {
         return false;
     }
   }
+  
+    /**
+   * Get all public quizzes for a specific user
+   */
+  static async getPublicQuizzes(uid: string): Promise<Quiz[]> {
+    try {
+      const q = query(
+        collection(db, this.COLLECTION_NAME),
+        where('uid', '==', uid),
+        where('isPublic', '==', true),
+        orderBy('updatedAt', 'desc')
+      );
+      
+      const querySnapshot = await getDocs(q);
+      
+      return querySnapshot.docs.map(doc => {
+        const quizData = doc.data() as Omit<Quiz, 'id'>;
+        
+        const questionsWithAllProperties = quizData.questions.map((question: any, index) => ({
+          id: question.id || `question_${index}_${Date.now()}`,
+          type: question.type || 'multiple_choice',
+          question: question.question || '',
+          image: question.image || '',
+          options: question.options || [],
+          correctAnswers: question.correctAnswers || (question.answerIndex !== undefined ? [question.answerIndex] : [0]),
+          correctAnswer: question.correctAnswer || '',
+          matchPairs: question.matchPairs || [],
+          timeLimit: question.timeLimit || 30,
+          topic: question.topic || 'Uncategorized',
+          points: question.points || 1
+        }));
+
+        return {
+          id: doc.id,
+          ...quizData,
+          questions: questionsWithAllProperties,
+          isPublic: quizData.isPublic ?? false,
+        } as Quiz;
+      });
+    } catch (error) {
+      console.error('Error fetching public quizzes:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Get quiz by ID for public viewing (skips ownership check)
+   */
+  static async getPublicQuizById(quizId: string): Promise<Quiz | null> {
+    try {
+      const docRef = doc(db, this.COLLECTION_NAME, quizId);
+      const docSnap = await getDoc(docRef);
+      
+      if (docSnap.exists()) {
+        const quizData = docSnap.data() as Omit<Quiz, 'id'>;
+        
+        // Check if quiz is public
+        if (!quizData.isPublic) {
+          return null;
+        }
+        
+        const questionsWithAllProperties = quizData.questions.map((question: any, index) => ({
+          id: question.id || `question_${index}_${Date.now()}`,
+          type: question.type || 'multiple_choice',
+          question: question.question || '',
+          image: question.image || '',
+          options: question.options || [],
+          correctAnswers: question.correctAnswers || (question.answerIndex !== undefined ? [question.answerIndex] : [0]),
+          correctAnswer: question.correctAnswer || '',
+          matchPairs: question.matchPairs || [],
+          timeLimit: question.timeLimit || 30,
+          topic: question.topic || 'Uncategorized',
+          points: question.points || 1
+        }));
+
+        return {
+          id: docSnap.id,
+          ...quizData,
+          questions: questionsWithAllProperties,
+        } as Quiz;
+      } else {
+        return null;
+      }
+    } catch (error) {
+      console.error('Firestore get public quiz error:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Count public quizzes for a user (for stats)
+   */
+  static async countPublicQuizzes(uid: string): Promise<number> {
+    try {
+      const quizzes = await this.getPublicQuizzes(uid);
+      return quizzes.length;
+    } catch (error) {
+      console.error('Error counting public quizzes:', error);
+      return 0;
+    }
+  }
 }
+

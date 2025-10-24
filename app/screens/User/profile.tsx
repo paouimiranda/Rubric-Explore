@@ -1,335 +1,450 @@
-import { getCurrentUserData, updateUserProfile } from '@/services/auth-service';
-import { useFocusEffect } from '@react-navigation/native';
+// app/screens/Profile/ProfileScreen.tsx
+import { useAuth } from '@/app/contexts/AuthContext';
+import { Note } from '@/app/types/notebook';
+import EditProfileModal from '@/components/Interface/edit-profile-modal';
+import BottomNavigation from '@/components/Interface/nav-bar';
+import { getAvatarUrl } from '@/constants/avatars';
+import { db } from '@/firebase';
+import { getPublicNotes } from '@/services/notes-service';
+import { Quiz, QuizService } from '@/services/quiz-service';
+import { getPublicUserStats, getUserStats } from '@/services/user-stats-service';
+import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import React, { useEffect, useState } from 'react';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
+import { doc, getDoc } from 'firebase/firestore';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
   Image,
-  Modal,
+  RefreshControl,
+  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from 'react-native';
-import { useAuth } from '../../contexts/AuthContext';
-
-const AVATAR_PRESETS = [
-  // Red gradient (new)
-  'https://api.dicebear.com/9.x/fun-emoji/png?seed=Leah&size=200&backgroundType=gradientLinear&backgroundColor=ef4444,b91c1c',
-
-  // Orange gradient
-  'https://api.dicebear.com/9.x/fun-emoji/png?seed=Max&size=200&backgroundType=gradientLinear&backgroundColor=f59e0b,f97316',
-
-  // Yellow gradient (new)
-  'https://api.dicebear.com/9.x/fun-emoji/png?seed=Aneka&size=200&backgroundType=gradientLinear&backgroundColor=facc15,eab308',
-
-  // Green gradient
-  'https://api.dicebear.com/9.x/fun-emoji/png?seed=Jocelyn&size=200&backgroundType=gradientLinear&backgroundColor=10b981,059669',
-
-  // Cyan gradient
-  'https://api.dicebear.com/9.x/fun-emoji/png?seed=Chase&size=200&backgroundType=gradientLinear&backgroundColor=06b6d4,0891b2',
-
-  // Blue gradient
-  'https://api.dicebear.com/9.x/fun-emoji/png?seed=Liam&size=200&backgroundType=gradientLinear&backgroundColor=3b82f6,2563eb',
-
-  // Purple gradient
-  'https://api.dicebear.com/9.x/fun-emoji/png?seed=Cooper&size=200&backgroundType=gradientLinear&backgroundColor=8b5cf6,6366f1',
-
-  // Pink gradient
-  'https://api.dicebear.com/9.x/fun-emoji/png?seed=Sawyer&size=200&backgroundType=gradientLinear&backgroundColor=ec4899,d946ef',
-];
 
 
+interface UserData {
+  uid: string;
+  firstName: string;
+  lastName: string;
+  displayName: string;
+  bio: string;
+  avatarIndex: number;
+  createdAt: any;
+}
 
-// Header gradient presets
-const HEADER_GRADIENTS = [
-  ['#FF999A', '#EE007F'],
-  ['#F2CD41', '#E77F00'],
-  ['#63DC9A', '#52C72B'],
-  ['#6ADBCE', '#568CD2'],
-  ['#EE007F', '#568CD2'],
-  ['#E77F00', '#FF999A'],
-  ['#52C72B', '#6ADBCE'],
-  ['#568CD2', '#EE007F'],
-];
+type TabType = 'overview' | 'notes' | 'quizzes';
 
 export default function ProfileScreen() {
-  const { userData: contextUserData, loading: authLoading } = useAuth();
-  const [userData, setUserData] = useState(contextUserData);
-  const [avatarModalVisible, setAvatarModalVisible] = useState(false);
-  const [headerModalVisible, setHeaderModalVisible] = useState(false);
-  const [selectedAvatar, setSelectedAvatar] = useState<string | null>(null);
-  const [selectedHeader, setSelectedHeader] = useState<string[]>(['#FF999A', '#EE007F']);
-  const [isSaving, setIsSaving] = useState(false);
-  const [hasChanges, setHasChanges] = useState(false);
-  const [isRefreshing, setIsRefreshing] = useState(false);
-
-  // Refresh user data when screen comes into focus
-  useFocusEffect(
-    React.useCallback(() => {
-      const refreshUserData = async () => {
-        setIsRefreshing(true);
-        try {
-          const freshData = await getCurrentUserData();
-          if (freshData) {
-            setUserData(freshData);
-            setSelectedAvatar(freshData.avatar || null);
-            setSelectedHeader(freshData.headerGradient || ['#FF999A', '#EE007F']);
-          }
-        } catch (error) {
-          console.error('Error refreshing user data:', error);
-        } finally {
-          setIsRefreshing(false);
-        }
-      };
-      
-      refreshUserData();
-    }, [])
-  );
+  const router = useRouter();
+  const { user } = useAuth();
+  const { userId } = useLocalSearchParams();
+  
+  // Determine if viewing own profile or someone else's
+  const viewingUserId = (userId as string) || user?.uid;
+  const isOwnProfile = !userId || userId === user?.uid;
+  
+  const [activeTab, setActiveTab] = useState<TabType>('overview');
+  const [userData, setUserData] = useState<UserData | null>(null);
+  const [stats, setStats] = useState<any>(null);
+  const [publicQuizzes, setPublicQuizzes] = useState<Quiz[]>([]);
+  const [publicNotes, setPublicNotes] = useState<Note[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [editModalVisible, setEditModalVisible] = useState(false);
+  const [previewMode, setPreviewMode] = useState(false);
 
   useEffect(() => {
-    if (contextUserData) {
-      setUserData(contextUserData);
-      setSelectedAvatar(contextUserData.avatar || null);
-      setSelectedHeader(contextUserData.headerGradient || ['#FF999A', '#EE007F']);
+    if (viewingUserId) {
+      loadProfileData();
     }
-  }, [contextUserData]);
+  }, [viewingUserId]);
 
-  const handleAvatarSelect = (avatar: string) => {
-    setSelectedAvatar(avatar);
-    setHasChanges(true);
-    setAvatarModalVisible(false);
-  };
+  useFocusEffect(
+    useCallback(() => {
+      if (viewingUserId) {
+        loadProfileData();
+      }
+    }, [viewingUserId])
+  );
 
-  const handleHeaderSelect = (gradient: string[]) => {
-    setSelectedHeader(gradient);
-    setHasChanges(true);
-    setHeaderModalVisible(false);
-  };
-
-  const handleSaveChanges = async () => {
-    if (!userData || !hasChanges) return;
-
-    setIsSaving(true);
+  const loadProfileData = async () => {
     try {
-      await updateUserProfile(userData.uid, {
-        avatar: selectedAvatar,
-        headerGradient: selectedHeader,
-      });
-      setHasChanges(false);
-      Alert.alert('Success', 'Profile updated successfully!');
-    } catch (error: any) {
-      Alert.alert('Error', error.message || 'Failed to update profile');
+      setLoading(true);
+      
+      // Fetch user document
+      const userRef = doc(db, 'users', viewingUserId!);
+      const userSnap = await getDoc(userRef);
+      
+      if (!userSnap.exists()) {
+        Alert.alert('Error', 'User not found');
+        router.back();
+        return;
+      }
+      
+      const userData = userSnap.data() as UserData;
+      setUserData(userData);
+      
+      // Fetch stats (own profile gets full stats, others get public stats only)
+      if (isOwnProfile && !previewMode) {
+        const userStats = await getUserStats(viewingUserId!);
+        setStats(userStats);
+      } else {
+        const publicStats = await getPublicUserStats(viewingUserId!);
+        setStats(publicStats);
+      }
+      
+      // Fetch public content
+      const [quizzes, notes] = await Promise.all([
+        QuizService.getPublicQuizzes(viewingUserId!),
+        getPublicNotes(viewingUserId!),
+      ]);
+      
+      setPublicQuizzes(quizzes);
+      setPublicNotes(notes);
+      
+    } catch (error) {
+      console.error('Error loading profile:', error);
+      Alert.alert('Error', 'Failed to load profile');
     } finally {
-      setIsSaving(false);
+      setLoading(false);
     }
   };
 
-  if (authLoading) {
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await loadProfileData();
+    setRefreshing(false);
+  };
+
+  const formatMemberSince = (date: Date) => {
+    return date.toLocaleDateString('en-US', {
+      month: 'long',
+      day: 'numeric',
+      year: 'numeric',
+    });
+  };
+
+  const handleEditProfile = () => {
+    setEditModalVisible(true);
+  };
+
+  const handleQuizPress = (quizId: string) => {
+    router.push({
+      pathname: '/screens/Quiz/quiz-preview',
+      params: { quizId },
+    });
+  };
+
+  const handleNotePress = (noteId: string) => {
+    router.push({
+      pathname: '/screens/Notes/public-note-viewer',
+      params: { noteId },
+    });
+  };
+
+  if (loading) {
     return (
-      <LinearGradient
-        colors={['#0f2c45ff', '#324762']}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 0, y: 1 }}
-        style={styles.container}
-      >
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#63DC9A" />
-        </View>
+      <LinearGradient colors={['#0f2c45', '#324762']} style={styles.container}>
+        <SafeAreaView style={styles.container}>
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color="#6ADBCE" />
+            <Text style={styles.loadingText}>Loading profile...</Text>
+          </View>
+        </SafeAreaView>
       </LinearGradient>
     );
   }
 
   if (!userData) {
     return (
-      <LinearGradient
-        colors={['#0f2c45ff', '#324762']}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 0, y: 1 }}
-        style={styles.container}
-      >
-        <View style={styles.loadingContainer}>
-          <Text style={styles.errorText}>Unable to load profile</Text>
-        </View>
+      <LinearGradient colors={['#0f2c45', '#324762']} style={styles.container}>
+        <SafeAreaView style={styles.container}>
+          <View style={styles.errorContainer}>
+            <Ionicons name="person-outline" size={64} color="#EE007F" />
+            <Text style={styles.errorText}>Profile not found</Text>
+          </View>
+        </SafeAreaView>
       </LinearGradient>
     );
   }
 
-  return (
-    <LinearGradient
-      colors={['#0f2c45ff', '#324762']}
-      start={{ x: 0, y: 0 }}
-      end={{ x: 0, y: 1 }}
-      style={styles.container}
-    >
-      <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
-        {/* Header Section with Custom Gradient */}
-        <LinearGradient
-          colors={selectedHeader}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 0 }}
-          style={styles.header}
-        >
+  const renderOverviewTab = () => (
+    <View style={styles.tabContent}>
+      {/* Stats Grid */}
+      <View style={styles.statsGrid}>
+        {isOwnProfile && !previewMode ? (
+          <>
+            <View style={[styles.statCard, { backgroundColor: '#FF999A' }]}>
+              <Ionicons name="create-outline" size={28} color="#fff" />
+              <Text style={styles.statNumber}>{stats.totalQuizzesCreated}</Text>
+              <Text style={styles.statLabel}>Quizzes Created</Text>
+            </View>
+            <View style={[styles.statCard, { backgroundColor: '#568CD2' }]}>
+              <Ionicons name="document-text-outline" size={28} color="#fff" />
+              <Text style={styles.statNumber}>{stats.totalNotesCreated}</Text>
+              <Text style={styles.statLabel}>Notes Created</Text>
+            </View>
+            <View style={[styles.statCard, { backgroundColor: '#52C72B' }]}>
+              <Ionicons name="checkmark-circle-outline" size={28} color="#fff" />
+              <Text style={styles.statNumber}>{stats.quizzesTaken}</Text>
+              <Text style={styles.statLabel}>Quizzes Taken</Text>
+            </View>
+            <View style={[styles.statCard, { backgroundColor: '#F2CD41' }]}>
+              <Ionicons name="trophy-outline" size={28} color="#fff" />
+              <Text style={styles.statNumber}>{stats.averageQuizScore}%</Text>
+              <Text style={styles.statLabel}>Avg Score</Text>
+            </View>
+          </>
+        ) : (
+          <>
+            <View style={[styles.statCard, { backgroundColor: '#FF999A' }]}>
+              <Ionicons name="game-controller-outline" size={28} color="#fff" />
+              <Text style={styles.statNumber}>{stats.publicQuizzes}</Text>
+              <Text style={styles.statLabel}>Public Quizzes</Text>
+            </View>
+            <View style={[styles.statCard, { backgroundColor: '#568CD2' }]}>
+              <Ionicons name="document-text-outline" size={28} color="#fff" />
+              <Text style={styles.statNumber}>{stats.publicNotes}</Text>
+              <Text style={styles.statLabel}>Public Notes</Text>
+            </View>
+          </>
+        )}
+      </View>
+    </View>
+  );
+
+  const renderNotesTab = () => (
+    <View style={styles.tabContent}>
+      {publicNotes.length === 0 ? (
+        <View style={styles.emptyState}>
+          <Ionicons name="document-outline" size={64} color="#6b7280" />
+          <Text style={styles.emptyText}>No public notes</Text>
+        </View>
+      ) : (
+        publicNotes.map((note) => (
           <TouchableOpacity
-            style={styles.editHeaderButton}
-            onPress={() => setHeaderModalVisible(true)}
+            key={note.id}
+            style={styles.contentCard}
+            onPress={() => handleNotePress(note.id)}
           >
-            <Text style={styles.editHeaderButtonText}>✨ Change Theme</Text>
+            <View style={styles.cardIcon}>
+              <Ionicons name="document-text" size={24} color="#568CD2" />
+            </View>
+            <View style={styles.cardContent}>
+              <Text style={styles.cardTitle} numberOfLines={2}>
+                {note.title}
+              </Text>
+              <Text style={styles.cardDate}>
+                Updated {note.updatedAt.toLocaleDateString()}
+              </Text>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color="#6b7280" />
           </TouchableOpacity>
-        </LinearGradient>
+        ))
+      )}
+    </View>
+  );
 
-        {/* Avatar Section */}
-        <View style={styles.avatarSection}>
+  const renderQuizzesTab = () => (
+    <View style={styles.tabContent}>
+      {publicQuizzes.length === 0 ? (
+        <View style={styles.emptyState}>
+          <Ionicons name="game-controller-outline" size={64} color="#6b7280" />
+          <Text style={styles.emptyText}>No public quizzes</Text>
+        </View>
+      ) : (
+        publicQuizzes.map((quiz) => (
           <TouchableOpacity
-            style={styles.avatarContainer}
-            onPress={() => setAvatarModalVisible(true)}
+            key={quiz.id}
+            style={styles.contentCard}
+            onPress={() => handleQuizPress(quiz.id!)}
           >
-            {selectedAvatar ? (
-              <Image source={{ uri: selectedAvatar }} style={styles.avatar} />
-            ) : (
-              <View style={styles.avatarPlaceholder}>
-                <Text style={styles.avatarPlaceholderText}>+</Text>
-              </View>
-            )}
-            <View style={styles.editAvatarBadge}>
-              <Text style={styles.editAvatarBadgeText}>✏️</Text>
+            <View style={styles.cardIcon}>
+              <Ionicons name="game-controller" size={24} color="#FF999A" />
             </View>
-          </TouchableOpacity>
-
-          {/* User Info */}
-          <Text style={styles.displayName}>{userData.displayName}</Text>
-          <Text style={styles.username}>@{userData.username}</Text>
-
-          {userData.bio && <Text style={styles.bio}>{userData.bio}</Text>}
-
-          {/* Stats */}
-          <View style={styles.statsContainer}>
-            <View style={styles.statItem}>
-              <Text style={styles.statNumber}>{userData.posts}</Text>
-              <Text style={styles.statLabel}>Posts</Text>
-            </View>
-            <View style={styles.statDivider} />
-            <View style={styles.statItem}>
-              <Text style={styles.statNumber}>{userData.followers}</Text>
-              <Text style={styles.statLabel}>Followers</Text>
-            </View>
-            <View style={styles.statDivider} />
-            <View style={styles.statItem}>
-              <Text style={styles.statNumber}>{userData.following}</Text>
-              <Text style={styles.statLabel}>Following</Text>
-            </View>
-          </View>
-
-          {/* Save Button */}
-          {hasChanges && (
-            <TouchableOpacity
-              style={[styles.saveButton, isSaving && styles.saveButtonDisabled]}
-              onPress={handleSaveChanges}
-              disabled={isSaving}
-            >
-              <LinearGradient
-                colors={['#63DC9A', '#52C72B']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-                style={styles.saveButtonGradient}
-              >
-                {isSaving ? (
-                  <ActivityIndicator size="small" color="#fff" />
-                ) : (
-                  <Text style={styles.saveButtonText}>Save Changes</Text>
+            <View style={styles.cardContent}>
+              <Text style={styles.cardTitle} numberOfLines={2}>
+                {quiz.title}
+              </Text>
+              <View style={styles.quizMeta}>
+                <View style={styles.quizMetaItem}>
+                  <Ionicons name="help-circle-outline" size={14} color="#6ADBCE" />
+                  <Text style={styles.quizMetaText}>{quiz.questions.length} questions</Text>
+                </View>
+                {quiz.category && (
+                  <View style={styles.quizMetaItem}>
+                    <Ionicons name="folder-outline" size={14} color="#F2CD41" />
+                    <Text style={styles.quizMetaText}>{quiz.category}</Text>
+                  </View>
                 )}
-              </LinearGradient>
-            </TouchableOpacity>
-          )}
+              </View>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color="#6b7280" />
+          </TouchableOpacity>
+        ))
+      )}
+    </View>
+  );
+
+  return (
+    <LinearGradient colors={['#0f2c45', '#324762']} start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }} style={styles.container}>
+      <SafeAreaView style={styles.container}>
+        {/* Header */}
+        <View style={styles.header}>
+          <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
+            <Ionicons name="arrow-back" size={24} color="#fff" />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Profile</Text>
+          <View style={styles.placeholder} />
         </View>
-      </ScrollView>
 
-      {/* Avatar Selection Modal */}
-      <Modal
-        visible={avatarModalVisible}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setAvatarModalVisible(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Choose Avatar</Text>
-              <TouchableOpacity onPress={() => setAvatarModalVisible(false)}>
-                <Text style={styles.modalCloseButton}>✕</Text>
-              </TouchableOpacity>
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={styles.scrollContent}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              tintColor="#6ADBCE"
+              colors={['#6ADBCE']}
+            />
+          }
+        >
+          {/* Profile Header Card */}
+          <View style={styles.profileCard}>
+            <LinearGradient
+              colors={['#FF999A', '#EE007F']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.profileGradient}
+            />
+            
+            <View style={styles.avatarContainer}>
+              <Image
+                source={{ uri: getAvatarUrl(userData.avatarIndex || 0) }}
+                style={styles.avatar}
+              />
             </View>
 
-            <View style={styles.avatarGrid}>
-              {AVATAR_PRESETS.map((avatar, index) => (
-                <TouchableOpacity
-                  key={index}
-                  style={[
-                    styles.avatarOption,
-                    selectedAvatar === avatar && styles.avatarOptionSelected,
-                  ]}
-                  onPress={() => handleAvatarSelect(avatar)}
-                >
-                  <Image source={{ uri: avatar }} style={styles.avatarOptionImage} />
-                  {selectedAvatar === avatar && (
-                    <View style={styles.avatarSelectedBadge}>
-                      <Text style={styles.avatarSelectedBadgeText}>✓</Text>
-                    </View>
-                  )}
-                </TouchableOpacity>
-              ))}
-            </View>
-          </View>
-        </View>
-      </Modal>
+            <Text style={styles.displayName}>{userData.displayName}</Text>
+            
+            {userData.bio && (
+              <Text style={styles.bio}>{userData.bio}</Text>
+            )}
 
-      {/* Header Gradient Selection Modal */}
-      <Modal
-        visible={headerModalVisible}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setHeaderModalVisible(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Choose Header Theme</Text>
-              <TouchableOpacity onPress={() => setHeaderModalVisible(false)}>
-                <Text style={styles.modalCloseButton}>✕</Text>
-              </TouchableOpacity>
+            <View style={styles.memberInfo}>
+              <Ionicons name="calendar-outline" size={16} color="#6ADBCE" />
+              <Text style={styles.memberText}>
+                Joined {formatMemberSince(userData.createdAt?.toDate ? userData.createdAt.toDate() : new Date())}
+              </Text>
+              <Text style={styles.memberDot}>•</Text>
+              <Text style={styles.memberText}>
+                {stats?.publicQuizzes || 0} Public Quizzes
+              </Text>
             </View>
 
-            <View style={styles.headerGrid}>
-              {HEADER_GRADIENTS.map((gradient, index) => (
-                <TouchableOpacity
-                  key={index}
-                  style={styles.headerOption}
-                  onPress={() => handleHeaderSelect(gradient)}
-                >
-                  <LinearGradient
-                    colors={gradient}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 0 }}
-                    style={[
-                      styles.headerOptionGradient,
-                      selectedHeader[0] === gradient[0] &&
-                        selectedHeader[1] === gradient[1] &&
-                        styles.headerOptionSelected,
-                    ]}
+            {/* Action Buttons */}
+            <View style={styles.actionButtons}>
+              {isOwnProfile && (
+                <>
+                  <TouchableOpacity
+                    style={styles.primaryButton}
+                    onPress={handleEditProfile}
                   >
-                    {selectedHeader[0] === gradient[0] &&
-                      selectedHeader[1] === gradient[1] && (
-                        <Text style={styles.headerSelectedText}>✓</Text>
-                      )}
-                  </LinearGradient>
-                </TouchableOpacity>
-              ))}
+                    <Ionicons name="create-outline" size={18} color="#fff" />
+                    <Text style={styles.primaryButtonText}>Edit Profile</Text>
+                  </TouchableOpacity>
+                  
+                  <TouchableOpacity
+                    style={[styles.secondaryButton, previewMode && styles.activePreview]}
+                    onPress={() => {
+                      setPreviewMode(!previewMode);
+                      loadProfileData();
+                    }}
+                  >
+                    <Ionicons name={previewMode ? "eye-off-outline" : "eye-outline"} size={18} color="#6ADBCE" />
+                    <Text style={styles.secondaryButtonText}>
+                      {previewMode ? 'Exit Preview' : 'Preview as Public'}
+                    </Text>
+                  </TouchableOpacity>
+                </>
+              )}
             </View>
           </View>
-        </View>
-      </Modal>
+
+          {/* Tabs */}
+          <View style={styles.tabBar}>
+            <TouchableOpacity
+              style={[styles.tab, activeTab === 'overview' && styles.activeTab]}
+              onPress={() => setActiveTab('overview')}
+            >
+              <Ionicons
+                name="grid-outline"
+                size={20}
+                color={activeTab === 'overview' ? '#6ADBCE' : '#6b7280'}
+              />
+              <Text style={[styles.tabText, activeTab === 'overview' && styles.activeTabText]}>
+                Overview
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.tab, activeTab === 'notes' && styles.activeTab]}
+              onPress={() => setActiveTab('notes')}
+            >
+              <Ionicons
+                name="document-text-outline"
+                size={20}
+                color={activeTab === 'notes' ? '#6ADBCE' : '#6b7280'}
+              />
+              <Text style={[styles.tabText, activeTab === 'notes' && styles.activeTabText]}>
+                Notes
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.tab, activeTab === 'quizzes' && styles.activeTab]}
+              onPress={() => setActiveTab('quizzes')}
+            >
+              <Ionicons
+                name="game-controller-outline"
+                size={20}
+                color={activeTab === 'quizzes' ? '#6ADBCE' : '#6b7280'}
+              />
+              <Text style={[styles.tabText, activeTab === 'quizzes' && styles.activeTabText]}>
+                Quizzes
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Tab Content */}
+          {activeTab === 'overview' && renderOverviewTab()}
+          {activeTab === 'notes' && renderNotesTab()}
+          {activeTab === 'quizzes' && renderQuizzesTab()}
+        </ScrollView>
+
+        {/* Edit Profile Modal */}
+        <EditProfileModal
+          visible={editModalVisible}
+          onClose={() => setEditModalVisible(false)}
+          currentData={{
+            firstName: userData.firstName,
+            lastName: userData.lastName,
+            bio: userData.bio || '',
+            avatarIndex: userData.avatarIndex || 0,
+            uid: userData.uid,
+          }}
+          onSave={() => {
+            loadProfileData();
+          }}
+        />
+        <BottomNavigation/>
+      </SafeAreaView>
     </LinearGradient>
   );
 }
@@ -338,246 +453,269 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  backBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#fff',
+  },
+  placeholder: {
+    width: 40,
+  },
   scrollView: {
     flex: 1,
+  },
+  scrollContent: {
+    paddingBottom: 40,
+  },
+  profileCard: {
+    margin: 16,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderRadius: 24,
+    padding: 24,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(106, 219, 206, 0.2)',
+    position: 'relative',
+    overflow: 'hidden',
+  },
+  profileGradient: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 100,
+    opacity: 0.1,
+  },
+  avatarContainer: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    borderWidth: 4,
+    borderColor: '#6ADBCE',
+    marginBottom: 16,
+    overflow: 'hidden',
+  },
+  avatar: {
+    width: '100%',
+    height: '100%',
+  },
+  displayName: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#fff',
+    marginBottom: 8,
+  },
+  bio: {
+    fontSize: 14,
+    color: '#9ca3af',
+    textAlign: 'center',
+    marginBottom: 16,
+    lineHeight: 20,
+  },
+  memberInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 20,
+    gap: 6,
+  },
+  memberText: {
+    fontSize: 13,
+    color: '#9ca3af',
+  },
+  memberDot: {
+    fontSize: 13,
+    color: '#6b7280',
+  },
+  actionButtons: {
+    flexDirection: 'row',
+    gap: 12,
+    width: '100%',
+  },
+  primaryButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#52C72B',
+    paddingVertical: 12,
+    borderRadius: 12,
+    gap: 8,
+  },
+  primaryButtonText: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#fff',
+  },
+  secondaryButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(106, 219, 206, 0.15)',
+    paddingVertical: 12,
+    borderRadius: 12,
+    gap: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(106, 219, 206, 0.3)',
+  },
+  activePreview: {
+    backgroundColor: 'rgba(106, 219, 206, 0.25)',
+    borderColor: '#6ADBCE',
+  },
+  secondaryButtonText: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#6ADBCE',
+  },
+  tabBar: {
+    flexDirection: 'row',
+    marginHorizontal: 16,
+    marginBottom: 16,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderRadius: 16,
+    padding: 4,
+  },
+  tab: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    borderRadius: 12,
+    gap: 6,
+  },
+  activeTab: {
+    backgroundColor: 'rgba(106, 219, 206, 0.2)',
+  },
+  tabText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#6b7280',
+  },
+  activeTabText: {
+    color: '#6ADBCE',
+  },
+  tabContent: {
+    paddingHorizontal: 16,
+  },
+  statsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  statCard: {
+    flex: 1,
+    minWidth: '47%',
+    borderRadius: 16,
+    padding: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  statNumber: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: '#fff',
+  },
+  statLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#fff',
+    textAlign: 'center',
+    opacity: 0.9,
+  },
+  contentCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(106, 219, 206, 0.2)',
+  },
+  cardIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  cardContent: {
+    flex: 1,
+  },
+  cardTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#fff',
+    marginBottom: 4,
+  },
+  cardDate: {
+    fontSize: 12,
+    color: '#9ca3af',
+  },
+  quizMeta: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 4,
+  },
+  quizMetaItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  quizMetaText: {
+    fontSize: 12,
+    color: '#9ca3af',
+  },
+  emptyState: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 60,
+  },
+  emptyText: {
+    fontSize: 16,
+    color: '#6b7280',
+    marginTop: 16,
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    gap: 16,
+  },
+  loadingText: {
+    fontSize: 16,
+    color: '#9ca3af',
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 16,
   },
   errorText: {
-    color: '#FF999A',
-    fontSize: 16,
+    fontSize: 18,
+    color: '#EE007F',
     fontWeight: '600',
-  },
-  header: {
-    height: 180,
-    justifyContent: 'flex-end',
-    paddingHorizontal: 20,
-    paddingBottom: 16,
-  },
-  editHeaderButton: {
-    alignSelf: 'flex-end',
-    backgroundColor: 'rgba(255, 255, 255, 0.25)',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    backdropFilter: 'blur(10px)',
-  },
-  editHeaderButtonText: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  avatarSection: {
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    marginTop: -60,
-  },
-  avatarContainer: {
-    position: 'relative',
-    marginBottom: 16,
-  },
-  avatar: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    borderWidth: 4,
-    borderColor: '#324762',
-    backgroundColor: '#1a3a52',
-  },
-  avatarPlaceholder: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    backgroundColor: '#1a3a52',
-    borderWidth: 4,
-    borderColor: '#324762',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  avatarPlaceholderText: {
-    fontSize: 48,
-    color: '#63DC9A',
-    fontWeight: '300',
-  },
-  editAvatarBadge: {
-    position: 'absolute',
-    bottom: 0,
-    right: 0,
-    backgroundColor: '#568CD2',
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 3,
-    borderColor: '#324762',
-  },
-  editAvatarBadgeText: {
-    fontSize: 16,
-  },
-  displayName: {
-    fontSize: 28,
-    fontWeight: '700',
-    color: '#fff',
-    marginBottom: 4,
-  },
-  username: {
-    fontSize: 16,
-    color: '#6ADBCE',
-    fontWeight: '500',
-    marginBottom: 12,
-  },
-  bio: {
-    fontSize: 15,
-    color: '#b0c4d4',
-    textAlign: 'center',
-    marginBottom: 24,
-    lineHeight: 22,
-  },
-  statsContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
-    borderRadius: 16,
-    paddingVertical: 20,
-    paddingHorizontal: 32,
-    marginTop: 8,
-  },
-  statItem: {
-    alignItems: 'center',
-    flex: 1,
-  },
-  statNumber: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: '#fff',
-    marginBottom: 4,
-  },
-  statLabel: {
-    fontSize: 13,
-    color: '#8a9fb3',
-    fontWeight: '500',
-  },
-  statDivider: {
-    width: 1,
-    height: 40,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-  },
-  saveButton: {
-    marginTop: 24,
-    marginBottom: 32,
-    width: '100%',
-    borderRadius: 12,
-    overflow: 'hidden',
-  },
-  saveButtonDisabled: {
-    opacity: 0.6,
-  },
-  saveButtonGradient: {
-    paddingVertical: 16,
-    alignItems: 'center',
-  },
-  saveButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.8)',
-    justifyContent: 'flex-end',
-  },
-  modalContent: {
-    backgroundColor: '#1a3a52',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    paddingTop: 24,
-    paddingBottom: 40,
-    paddingHorizontal: 20,
-    maxHeight: '80%',
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 24,
-  },
-  modalTitle: {
-    fontSize: 22,
-    fontWeight: '700',
-    color: '#fff',
-  },
-  modalCloseButton: {
-    fontSize: 28,
-    color: '#8a9fb3',
-    fontWeight: '300',
-  },
-  avatarGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
-  },
-  avatarOption: {
-    width: '23%',
-    aspectRatio: 1,
-    marginBottom: 12,
-    borderRadius: 16,
-    overflow: 'hidden',
-    backgroundColor: '#0f2c45',
-    borderWidth: 3,
-    borderColor: 'transparent',
-  },
-  avatarOptionSelected: {
-    borderColor: '#63DC9A',
-  },
-  avatarOptionImage: {
-    width: '100%',
-    height: '100%',
-  },
-  avatarSelectedBadge: {
-    position: 'absolute',
-    top: 4,
-    right: 4,
-    backgroundColor: '#63DC9A',
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  avatarSelectedBadgeText: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  headerGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
-  },
-  headerOption: {
-    width: '48%',
-    marginBottom: 12,
-    borderRadius: 12,
-    overflow: 'hidden',
-  },
-  headerOptionGradient: {
-    height: 80,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 3,
-    borderColor: 'transparent',
-    borderRadius: 12,
-  },
-  headerOptionSelected: {
-    borderColor: '#fff',
-  },
-  headerSelectedText: {
-    color: '#fff',
-    fontSize: 32,
-    fontWeight: '700',
   },
 });

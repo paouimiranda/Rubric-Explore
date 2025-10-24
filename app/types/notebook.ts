@@ -15,6 +15,7 @@ export interface Notebook {
   updatedAt: Date;
   tags?: string[];
   color: string;
+  isPublic: boolean; // NEW: Public visibility flag
   collaborators?: { [userUid: string]: Collaborator };
 }
 
@@ -30,6 +31,7 @@ export interface Note {
   category?: string;
   pinned?: boolean;
   tags?: string[];
+  isPublic: boolean; // NEW: Public visibility flag
   
   collaborators?: { [userUid: string]: Collaborator };
   

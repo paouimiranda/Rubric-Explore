@@ -4,6 +4,7 @@ import {
   collection,
   deleteDoc,
   doc,
+  getDoc,
   getDocs,
   orderBy,
   query,
@@ -11,7 +12,7 @@ import {
   serverTimestamp,
   updateDoc,
   where,
-  writeBatch
+  writeBatch,
 } from "firebase/firestore";
 import { Chunk, CHUNK_CONFIG, Note, Notebook } from '../app/types/notebook';
 import { db } from "../firebase";
@@ -369,3 +370,133 @@ export async function getNotesInNotebook(notebookId: string, uid: string): Promi
     } as Note;
   });
 }
+
+/**
+ * Get all public notes for a specific user
+ */
+export async function getPublicNotes(uid: string): Promise<Note[]> {
+  try {
+    const notesCol = collection(db, "notes");
+    const q = query(
+      notesCol,
+      where("uid", "==", uid),
+      where("isPublic", "==", true),
+      orderBy("updatedAt", "desc")
+    );
+    const snap = await getDocs(q);
+    
+    return snap.docs.map((d: QueryDocumentSnapshot) => {
+      const data = d.data() as any;
+      return {
+        id: d.id,
+        uid: data.uid,
+        title: data.title ?? "",
+        notebookId: data.notebookId ?? null,
+        tags: data.tags ?? [],
+        properties: data.properties ?? [],
+        chunkCount: data.chunkCount ?? 0,
+        totalCharacters: data.totalCharacters ?? 0,
+        createdAt: data.createdAt?.toDate ? data.createdAt.toDate() : new Date(),
+        updatedAt: data.updatedAt?.toDate ? data.updatedAt.toDate() : new Date(),
+        isPublic: data.isPublic ?? false,
+      } as Note;
+    });
+  } catch (error) {
+    console.error("Error fetching public notes:", error);
+    return [];
+  }
+}
+
+/**
+ * Get all public notebooks for a specific user
+ */
+export async function getPublicNotebooks(uid: string): Promise<Notebook[]> {
+  try {
+    const notebooksCol = collection(db, "notebooks");
+    const q = query(
+      notebooksCol,
+      where("uid", "==", uid),
+      where("isPublic", "==", true),
+      orderBy("updatedAt", "desc")
+    );
+    const snap = await getDocs(q);
+    
+    return snap.docs.map((d: QueryDocumentSnapshot) => {
+      const data = d.data() as any;
+      return {
+        id: d.id,
+        uid: data.uid,
+        title: data.title ?? "Untitled Notebook",
+        description: data.description ?? "",
+        coverImage: data.coverImage ?? "",
+        properties: data.properties ?? [],
+        tags: data.tags ?? [],
+        createdAt: data.createdAt?.toDate ? data.createdAt.toDate() : new Date(),
+        updatedAt: data.updatedAt?.toDate ? data.updatedAt.toDate() : new Date(),
+        isPublic: data.isPublic ?? false,
+      } as Notebook;
+    });
+  } catch (error) {
+    console.error("Error fetching public notebooks:", error);
+    return [];
+  }
+}
+
+/**
+ * Get a single note by ID (for public viewing - no ownership check)
+ */
+export async function getNoteById(noteId: string): Promise<Note | null> {
+  try {
+    const docRef = doc(db, "notes", noteId);
+    const snap = await getDoc(docRef);
+    
+    if (snap.exists()) {
+      const data = snap.data() as any;
+      return {
+        id: snap.id,
+        uid: data.uid,
+        title: data.title ?? "",
+        notebookId: data.notebookId ?? null,
+        tags: data.tags ?? [],
+        properties: data.properties ?? [],
+        chunkCount: data.chunkCount ?? 0,
+        totalCharacters: data.totalCharacters ?? 0,
+        createdAt: data.createdAt?.toDate ? data.createdAt.toDate() : new Date(),
+        updatedAt: data.updatedAt?.toDate ? data.updatedAt.toDate() : new Date(),
+        isPublic: data.isPublic ?? false,
+      } as Note;
+    }
+    
+    return null;
+  } catch (error) {
+    console.error("Error fetching note by ID:", error);
+    return null;
+  }
+}
+
+/**
+ * Count public content for a user (for stats)
+ */
+export async function countPublicContent(uid: string): Promise<{
+  publicNotes: number;
+  publicNotebooks: number;
+}> {
+  try {
+    const [notes, notebooks] = await Promise.all([
+      getPublicNotes(uid),
+      getPublicNotebooks(uid),
+    ]);
+    
+    return {
+      publicNotes: notes.length,
+      publicNotebooks: notebooks.length,
+    };
+  } catch (error) {
+    console.error("Error counting public content:", error);
+    return {
+      publicNotes: 0,
+      publicNotebooks: 0,
+    };
+  }
+}
+
