@@ -1,11 +1,11 @@
 // app/screens/Profile/ProfileScreen.tsx
 import { useAuth } from '@/app/contexts/AuthContext';
-import { Note } from '@/app/types/notebook';
+import { Notebook } from '@/app/types/notebook';
 import EditProfileModal from '@/components/Interface/edit-profile-modal';
 import BottomNavigation from '@/components/Interface/nav-bar';
 import { getAvatarUrl } from '@/constants/avatars';
 import { db } from '@/firebase';
-import { getPublicNotes } from '@/services/notes-service';
+import { getPublicNotebooks } from '@/services/notes-service';
 import { Quiz, QuizService } from '@/services/quiz-service';
 import { getPublicUserStats, getUserStats } from '@/services/user-stats-service';
 import { Ionicons } from '@expo/vector-icons';
@@ -37,7 +37,7 @@ interface UserData {
   createdAt: any;
 }
 
-type TabType = 'overview' | 'notes' | 'quizzes';
+type TabType = 'overview' | 'notebooks' | 'quizzes';
 
 export default function ProfileScreen() {
   const router = useRouter();
@@ -52,7 +52,7 @@ export default function ProfileScreen() {
   const [userData, setUserData] = useState<UserData | null>(null);
   const [stats, setStats] = useState<any>(null);
   const [publicQuizzes, setPublicQuizzes] = useState<Quiz[]>([]);
-  const [publicNotes, setPublicNotes] = useState<Note[]>([]);
+  const [publicNotebooks, setPublicNotebooks] = useState<Notebook[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [editModalVisible, setEditModalVisible] = useState(false);
@@ -99,13 +99,13 @@ export default function ProfileScreen() {
       }
       
       // Fetch public content
-      const [quizzes, notes] = await Promise.all([
+      const [quizzes, notebooks] = await Promise.all([
         QuizService.getPublicQuizzes(viewingUserId!),
-        getPublicNotes(viewingUserId!),
+        getPublicNotebooks(viewingUserId!),
       ]);
       
       setPublicQuizzes(quizzes);
-      setPublicNotes(notes);
+      setPublicNotebooks(notebooks);
       
     } catch (error) {
       console.error('Error loading profile:', error);
@@ -140,10 +140,10 @@ export default function ProfileScreen() {
     });
   };
 
-  const handleNotePress = (noteId: string) => {
+  const handleNotebookPress = (notebookId: string) => {
     router.push({
       pathname: '/screens/Notes/public-note-viewer',
-      params: { noteId },
+      params: { notebookId },
     });
   };
 
@@ -185,9 +185,9 @@ export default function ProfileScreen() {
               <Text style={styles.statLabel}>Quizzes Created</Text>
             </View>
             <View style={[styles.statCard, { backgroundColor: '#568CD2' }]}>
-              <Ionicons name="document-text-outline" size={28} color="#fff" />
-              <Text style={styles.statNumber}>{stats.totalNotesCreated}</Text>
-              <Text style={styles.statLabel}>Notes Created</Text>
+              <Ionicons name="book-outline" size={28} color="#fff" />
+              <Text style={styles.statNumber}>{stats.totalNotebooksCreated || 0}</Text>
+              <Text style={styles.statLabel}>Notebooks Created</Text>
             </View>
             <View style={[styles.statCard, { backgroundColor: '#52C72B' }]}>
               <Ionicons name="checkmark-circle-outline" size={28} color="#fff" />
@@ -208,9 +208,9 @@ export default function ProfileScreen() {
               <Text style={styles.statLabel}>Public Quizzes</Text>
             </View>
             <View style={[styles.statCard, { backgroundColor: '#568CD2' }]}>
-              <Ionicons name="document-text-outline" size={28} color="#fff" />
-              <Text style={styles.statNumber}>{stats.publicNotes}</Text>
-              <Text style={styles.statLabel}>Public Notes</Text>
+              <Ionicons name="book-outline" size={28} color="#fff" />
+              <Text style={styles.statNumber}>{stats.publicNotebooks || 0}</Text>
+              <Text style={styles.statLabel}>Public Notebooks</Text>
             </View>
           </>
         )}
@@ -218,29 +218,43 @@ export default function ProfileScreen() {
     </View>
   );
 
-  const renderNotesTab = () => (
+  const renderNotebooksTab = () => (
     <View style={styles.tabContent}>
-      {publicNotes.length === 0 ? (
+      {publicNotebooks.length === 0 ? (
         <View style={styles.emptyState}>
-          <Ionicons name="document-outline" size={64} color="#6b7280" />
-          <Text style={styles.emptyText}>No public notes</Text>
+          <Ionicons name="book-outline" size={64} color="#6b7280" />
+          <Text style={styles.emptyText}>No public notebooks</Text>
         </View>
       ) : (
-        publicNotes.map((note) => (
+        publicNotebooks.map((notebook) => (
           <TouchableOpacity
-            key={note.id}
+            key={notebook.id}
             style={styles.contentCard}
-            onPress={() => handleNotePress(note.id)}
+            onPress={() => handleNotebookPress(notebook.id!)}
           >
-            <View style={styles.cardIcon}>
-              <Ionicons name="document-text" size={24} color="#568CD2" />
-            </View>
+            {notebook.coverImage ? (
+              <View style={styles.cardIcon}>
+                <Image 
+                  source={{ uri: notebook.coverImage }} 
+                  style={styles.notebookCover}
+                />
+              </View>
+            ) : (
+              <View style={styles.cardIcon}>
+                <Ionicons name="book" size={24} color="#568CD2" />
+              </View>
+            )}
             <View style={styles.cardContent}>
               <Text style={styles.cardTitle} numberOfLines={2}>
-                {note.title}
+                {notebook.title}
               </Text>
+              {notebook.description && (
+                <Text style={styles.notebookDescription} numberOfLines={2}>
+                  {notebook.description}
+                </Text>
+              )}
               <Text style={styles.cardDate}>
-                Updated {note.updatedAt.toLocaleDateString()}
+                Updated {notebook.updatedAt.toLocaleDateString()}
               </Text>
             </View>
             <Ionicons name="chevron-forward" size={20} color="#6b7280" />
@@ -344,7 +358,7 @@ export default function ProfileScreen() {
               </Text>
               <Text style={styles.memberDot}>•</Text>
               <Text style={styles.memberText}>
-                {stats?.publicQuizzes || 0} Public Quizzes
+                {stats?.publicNotebooks || 0} Public Notebooks
               </Text>
             </View>
 
@@ -394,16 +408,16 @@ export default function ProfileScreen() {
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={[styles.tab, activeTab === 'notes' && styles.activeTab]}
-              onPress={() => setActiveTab('notes')}
+              style={[styles.tab, activeTab === 'notebooks' && styles.activeTab]}
+              onPress={() => setActiveTab('notebooks')}
             >
               <Ionicons
-                name="document-text-outline"
+                name="book-outline"
                 size={20}
-                color={activeTab === 'notes' ? '#6ADBCE' : '#6b7280'}
+                color={activeTab === 'notebooks' ? '#6ADBCE' : '#6b7280'}
               />
-              <Text style={[styles.tabText, activeTab === 'notes' && styles.activeTabText]}>
-                Notes
+              <Text style={[styles.tabText, activeTab === 'notebooks' && styles.activeTabText]}>
+                Notebooks
               </Text>
             </TouchableOpacity>
 
@@ -424,7 +438,7 @@ export default function ProfileScreen() {
 
           {/* Tab Content */}
           {activeTab === 'overview' && renderOverviewTab()}
-          {activeTab === 'notes' && renderNotesTab()}
+          {activeTab === 'notebooks' && renderNotebooksTab()}
           {activeTab === 'quizzes' && renderQuizzesTab()}
         </ScrollView>
 
@@ -659,6 +673,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
+    overflow: 'hidden',
+  },
+  notebookCover: {
+    width: '100%',
+    height: '100%',
   },
   cardContent: {
     flex: 1,
@@ -667,6 +686,11 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#fff',
+    marginBottom: 4,
+  },
+  notebookDescription: {
+    fontSize: 13,
+    color: '#9ca3af',
     marginBottom: 4,
   },
   cardDate: {

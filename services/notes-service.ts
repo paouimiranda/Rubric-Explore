@@ -224,6 +224,7 @@ export async function getNotes(uid: string): Promise<Note[]> {
       totalCharacters: data.totalCharacters ?? 0,
       createdAt: data.createdAt?.toDate ? data.createdAt.toDate() : new Date(),
       updatedAt: data.updatedAt?.toDate ? data.updatedAt.toDate() : new Date(),
+      isPublic: data.isPublic ?? false, // ADD THIS LINE
     } as Note;
   });
 }
@@ -367,6 +368,7 @@ export async function getNotesInNotebook(notebookId: string, uid: string): Promi
       totalCharacters: data.totalCharacters ?? 0,
       createdAt: data.createdAt?.toDate ? data.createdAt.toDate() : new Date(),
       updatedAt: data.updatedAt?.toDate ? data.updatedAt.toDate() : new Date(),
+      isPublic: data.isPublic ?? false, // ADD THIS LINE
     } as Note;
   });
 }

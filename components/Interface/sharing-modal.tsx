@@ -48,6 +48,27 @@ export default function SharingModal({
   const [inviteeEmail, setInviteeEmail] = useState('');
   const [shareMethod, setShareMethod] = useState<ShareMethod>('public_url');
 
+  const [notePrivacy, setNotePrivacy] = useState<'public' | 'private'>('private');
+  const [togglingPrivacy, setTogglingPrivacy] = useState(false);
+
+  useEffect(() => {
+    if (visible && noteId) {
+      loadNotePrivacy();
+    }
+  }, [visible, noteId]);
+
+  const loadNotePrivacy = async () => {
+    try {
+      const { getNoteById } = await import('@/services/notes-service');
+      const note = await getNoteById(noteId);
+      if (note) {
+        setNotePrivacy(note.isPublic ? 'public' : 'private');
+      }
+    } catch (error) {
+      console.error('Error loading note privacy:', error);
+    }
+  };
+
   useEffect(() => {
     if (visible) {
       loadShareTokens();
@@ -144,6 +165,31 @@ export default function SharingModal({
     return `Expires in ${diffDays}d`;
   };
 
+  const togglePrivacy = async () => {
+    try {
+      setTogglingPrivacy(true);
+      
+      const newPrivacy = notePrivacy === 'public' ? 'private' : 'public';
+      const isPublic = newPrivacy === 'public';
+      
+      // Update in Firestore
+      const { updateNote } = await import('@/services/notes-service');
+      await updateNote(noteId, { isPublic }, userUid);
+      
+      setNotePrivacy(newPrivacy);
+      
+      Alert.alert(
+        'Success',
+        `Note is now ${newPrivacy}. ${isPublic ? 'It will appear in your public profile.' : 'It will only be accessible via share links.'}`
+      );
+    } catch (error) {
+      console.error('Error toggling privacy:', error);
+      Alert.alert('Error', 'Failed to update note privacy');
+    } finally {
+      setTogglingPrivacy(false);
+    }
+  };
+
   return (
     <Modal
       animationType="slide"
@@ -167,6 +213,60 @@ export default function SharingModal({
               <Ionicons name="document-text" size={20} color="#60a5fa" />
               <Text style={styles.noteTitle} numberOfLines={1}>{noteTitle}</Text>
             </View>
+
+            {/* Privacy Toggle Section */}
+              <View style={styles.section}>
+                <View style={styles.privacyHeader}>
+                  <View>
+                    <Text style={styles.sectionTitle}>Note Privacy</Text>
+                    <Text style={styles.privacyDescription}>
+                      {notePrivacy === 'public' 
+                        ? 'Anyone can view this note when shared publicly' 
+                        : 'Only people with share links can access this note'}
+                    </Text>
+                  </View>
+                  <TouchableOpacity
+                    style={[
+                      styles.privacyToggle,
+                      notePrivacy === 'public' && styles.privacyToggleActive
+                    ]}
+                    onPress={togglePrivacy}
+                    disabled={togglingPrivacy}
+                  >
+                    <View style={[
+                      styles.toggleSwitch,
+                      notePrivacy === 'public' && styles.toggleSwitchActive
+                    ]}>
+                      <View style={[
+                        styles.toggleThumb,
+                        notePrivacy === 'public' && styles.toggleThumbActive
+                      ]} />
+                    </View>
+                    <View style={styles.privacyLabelContainer}>
+                      <Ionicons 
+                        name={notePrivacy === 'public' ? 'globe' : 'lock-closed'} 
+                        size={16} 
+                        color={notePrivacy === 'public' ? '#22c55e' : '#ef4444'} 
+                      />
+                      <Text style={[
+                        styles.privacyLabel,
+                        notePrivacy === 'public' ? styles.privacyLabelPublic : styles.privacyLabelPrivate
+                      ]}>
+                        {notePrivacy === 'public' ? 'Public' : 'Private'}
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+                </View>
+                
+                {notePrivacy === 'public' && (
+                  <View style={styles.publicWarning}>
+                    <Ionicons name="information-circle" size={16} color="#f59e0b" />
+                    <Text style={styles.publicWarningText}>
+                      This note will be visible in your public profile
+                    </Text>
+                  </View>
+                )}
+              </View>
 
             {/* Create New Share Link */}
             <View style={styles.section}>
@@ -567,5 +667,72 @@ const styles = StyleSheet.create({
     color: '#60a5fa',
     marginLeft: 6,
     fontSize: 14,
+  },
+  privacyHeader: {
+  flexDirection: 'row',
+  justifyContent: 'space-between',
+  alignItems: 'flex-start',
+  gap: 16,
+  },
+  privacyDescription: {
+    color: '#9ca3af',
+    fontSize: 12,
+    marginTop: 4,
+    maxWidth: '60%',
+  },
+  privacyToggle: {
+    alignItems: 'center',
+    gap: 8,
+  },
+  toggleSwitch: {
+    width: 48,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: 'rgba(239, 68, 68, 0.3)',
+    padding: 2,
+    justifyContent: 'center',
+  },
+  toggleSwitchActive: {
+    backgroundColor: 'rgba(34, 197, 94, 0.3)',
+  },
+  toggleThumb: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#ef4444',
+    alignSelf: 'flex-start',
+  },
+  toggleThumbActive: {
+    backgroundColor: '#22c55e',
+    alignSelf: 'flex-end',
+  },
+  privacyLabelContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  privacyLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  privacyLabelPublic: {
+    color: '#22c55e',
+  },
+  privacyLabelPrivate: {
+    color: '#ef4444',
+  },
+  publicWarning: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(251, 191, 36, 0.1)',
+    padding: 12,
+    borderRadius: 8,
+    marginTop: 12,
+    gap: 8,
+  },
+  publicWarningText: {
+    color: '#f59e0b',
+    fontSize: 12,
+    flex: 1,
   },
 });

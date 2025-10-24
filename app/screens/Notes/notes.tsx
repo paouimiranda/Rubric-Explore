@@ -201,6 +201,7 @@ export default function NotesHome() {
         color: newColor,
         properties,
         tags: selectedTags,
+        isPublic: false, // Default to private
       };
       
       const docId = await createNotebook(notebookData, uid);
@@ -366,6 +367,14 @@ export default function NotesHome() {
               </View>
             )}
 
+            {/* Public Badge */}
+            {item.isPublic && (
+              <View style={styles.publicBadgeOverlay}>
+                <Ionicons name="globe-outline" size={12} color="#52C72B" />
+                <Text style={styles.publicBadgeOverlayText}>Public</Text>
+              </View>
+            )}
+
             <View style={styles.notebookContent}>
               <Text style={styles.notebookTitle} numberOfLines={1}>
                 {item.title}
@@ -414,13 +423,20 @@ export default function NotesHome() {
             }
             onLongPress={() => handleDeleteNotebook(item.id!)}
           >
-            {coverImageSource ? (
-              <Image source={coverImageSource} style={styles.compactCover} />
-            ) : (
-              <View style={[styles.compactCoverPlaceholder, { backgroundColor: `${notebookColor}CC` }]}>
-                <Ionicons name="book-outline" size={20} color="#ffffff" />
-              </View>
-            )}
+            <View style={styles.compactCoverWrapper}>
+              {coverImageSource ? (
+                <Image source={coverImageSource} style={styles.compactCover} />
+              ) : (
+                <View style={[styles.compactCoverPlaceholder, { backgroundColor: `${notebookColor}CC` }]}>
+                  <Ionicons name="book-outline" size={20} color="#ffffff" />
+                </View>
+              )}
+              {item.isPublic && (
+                <View style={styles.compactPublicBadge}>
+                  <Ionicons name="globe" size={10} color="#52C72B" />
+                </View>
+              )}
+            </View>
             
             <View style={styles.compactContent}>
               <View style={styles.compactHeader}>
@@ -466,6 +482,12 @@ export default function NotesHome() {
           ) : (
             <View style={[styles.gridCoverPlaceholder, { backgroundColor: `${notebookColor}CC` }]}>
               <Ionicons name="book-outline" size={28} color="#ffffff" />
+            </View>
+          )}
+          
+          {item.isPublic && (
+            <View style={styles.gridPublicBadge}>
+              <Ionicons name="globe-outline" size={10} color="#52C72B" />
             </View>
           )}
           
@@ -864,6 +886,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     marginBottom: 16,
     overflow: "hidden",
+    position: 'relative',
   },
   notebookCover: { width: "100%", height: 120 },
   notebookCoverPlaceholder: {
@@ -871,6 +894,23 @@ const styles = StyleSheet.create({
     height: 120,
     justifyContent: "center",
     alignItems: "center",
+  },
+  publicBadgeOverlay: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(82, 199, 43, 0.9)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    gap: 4,
+  },
+  publicBadgeOverlayText: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#ffffff',
   },
   notebookContent: { padding: 12 },
   notebookTitle: { fontSize: 18, fontWeight: "bold", color: "#fff" },
@@ -919,6 +959,9 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     padding: 10,
   },
+  compactCoverWrapper: {
+    position: 'relative',
+  },
   compactCover: {
     width: 60,
     height: 60,
@@ -930,6 +973,14 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     justifyContent: "center",
     alignItems: "center",
+  },
+  compactPublicBadge: {
+    position: 'absolute',
+    top: 2,
+    right: 2,
+    backgroundColor: 'rgba(82, 199, 43, 0.9)',
+    borderRadius: 8,
+    padding: 3,
   },
   compactContent: {
     flex: 1,
@@ -985,6 +1036,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     marginBottom: 16,
     overflow: "hidden",
+    position: 'relative',
   },
   gridCover: {
     width: "100%",
@@ -995,6 +1047,14 @@ const styles = StyleSheet.create({
     height: 100,
     justifyContent: "center",
     alignItems: "center",
+  },
+  gridPublicBadge: {
+    position: 'absolute',
+    top: 6,
+    right: 6,
+    backgroundColor: 'rgba(82, 199, 43, 0.9)',
+    borderRadius: 10,
+    padding: 4,
   },
   gridContent: {
     padding: 10,

@@ -14,16 +14,18 @@ import {
   Dimensions,
   FlatList,
   Image,
+  Modal,
   RefreshControl,
   SafeAreaView,
   StyleSheet,
+  Switch,
   Text,
   TouchableOpacity,
   View
 } from "react-native";
 
 // Import service functions
-import { createNote, deleteNote, getNotesInNotebook } from '../../../services/notes-service';
+import { createNote, deleteNote, getNotesInNotebook, updateNotebook } from '../../../services/notes-service';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const HEADER_IMAGE_HEIGHT = 280;
@@ -43,6 +45,8 @@ interface Notebook {
   tags?: string[];
   createdAt: Date;
   updatedAt: Date;
+  color?: string;
+  isPublic: boolean;
 }
 
 interface Note {
@@ -54,6 +58,7 @@ interface Note {
   properties?: NotebookProperty[];
   createdAt: Date;
   updatedAt: Date;
+  isPublic?: boolean;
 }
 
 export default function NotebookScreen() {
@@ -76,6 +81,11 @@ export default function NotebookScreen() {
   const [notes, setNotes] = useState<Note[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  
+  // Settings modal state
+  const [settingsModalVisible, setSettingsModalVisible] = useState(false);
+  const [isPublicToggle, setIsPublicToggle] = useState(false);
+  const [savingSettings, setSavingSettings] = useState(false);
 
   // Default cover images mapping
   const defaultCoverImages = {
@@ -112,12 +122,15 @@ export default function NotebookScreen() {
           router.back();
           return;
         }
-        setNotebook({
+        const notebookData = {
           id: snap.id,
           ...data,
           createdAt: data.createdAt?.toDate() || new Date(),
           updatedAt: data.updatedAt?.toDate() || new Date(),
-        } as Notebook);
+          isPublic: data.isPublic ?? false,
+        } as Notebook;
+        setNotebook(notebookData);
+        setIsPublicToggle(notebookData.isPublic);
       }
     } catch (error) {
       console.error("Error fetching notebook:", error);
@@ -207,6 +220,42 @@ export default function NotebookScreen() {
     );
   };
 
+  const handleSaveSettings = async () => {
+    if (!notebookId || !uid) return;
+    
+    setSavingSettings(true);
+    try {
+      await updateNotebook(
+        notebookId as string,
+        { isPublic: isPublicToggle },
+        uid
+      );
+      
+      // Update local state
+      if (notebook) {
+        setNotebook({ ...notebook, isPublic: isPublicToggle });
+      }
+      
+      setSettingsModalVisible(false);
+      Alert.alert(
+        "Success",
+        `Notebook is now ${isPublicToggle ? 'public' : 'private'}`
+      );
+    } catch (error) {
+      console.error("Error updating notebook settings:", error);
+      Alert.alert("Error", "Failed to update notebook settings");
+    } finally {
+      setSavingSettings(false);
+    }
+  };
+
+  const openSettingsModal = () => {
+    if (notebook) {
+      setIsPublicToggle(notebook.isPublic);
+      setSettingsModalVisible(true);
+    }
+  };
+
   const renderNote = ({ item }: { item: Note }) => {
     const primaryProperty = item.properties?.[0];
     
@@ -229,9 +278,16 @@ export default function NotebookScreen() {
         </View>
         
         <View style={styles.noteContent}>
-          <Text style={styles.noteTitle} numberOfLines={2}>
-            {item.title}
-          </Text>
+          <View style={styles.noteTitleRow}>
+            <Text style={styles.noteTitle} numberOfLines={2}>
+              {item.title}
+            </Text>
+            {item.isPublic && (
+              <View style={styles.notePublicBadge}>
+                <Ionicons name="globe" size={10} color="#52C72B" />
+              </View>
+            )}
+          </View>
           {primaryProperty && (
             <View style={styles.propertyBadge}>
               <Ionicons name="pricetag" size={10} color="#60a5fa" />
@@ -289,10 +345,26 @@ export default function NotebookScreen() {
           colors={['rgba(31, 41, 55, 0.95)', 'rgba(17, 24, 39, 0.95)']}
           style={styles.infoCard}
         >
-          {/* Accent line at top */}
-          <View style={styles.accentLine} />
+          {/* Header with Settings Button */}
+          <View style={styles.infoCardHeader}>
+            <View style={styles.accentLine} />
+            <TouchableOpacity 
+              style={styles.settingsButton}
+              onPress={openSettingsModal}
+            >
+              <Ionicons name="ellipsis-horizontal" size={20} color="#9ca3af" />
+            </TouchableOpacity>
+          </View>
           
-          <Text style={styles.notebookTitle}>{notebook?.title}</Text>
+          <View style={styles.titleRow}>
+            <Text style={styles.notebookTitle}>{notebook?.title}</Text>
+            {notebook?.isPublic && (
+              <View style={styles.publicBadge}>
+                <Ionicons name="globe-outline" size={14} color="#52C72B" />
+                <Text style={styles.publicBadgeText}>Public</Text>
+              </View>
+            )}
+          </View>
           
           {notebook?.description ? (
             <View style={styles.descriptionContainer}>
@@ -309,7 +381,7 @@ export default function NotebookScreen() {
             <View style={styles.tagsSection}>
               <View style={styles.tagsSectionHeader}>
                 <Ionicons name="pricetags-outline" size={14} color="#9ca3af" />
-                <Text style={styles.sectionLabel}>Tags</Text>
+                <Text style={styles.sectionLabel}>Tagay</Text>
               </View>
               <View style={styles.tagsContainer}>
                 {notebook.tags.map((tag, index) => (
@@ -459,6 +531,88 @@ export default function NotebookScreen() {
             <Ionicons name="add" size={28} color="#ffffff" />
           </LinearGradient>
         </TouchableOpacity>
+
+        {/* Settings Modal */}
+        <Modal
+          animationType="fade"
+          transparent
+          visible={settingsModalVisible}
+          onRequestClose={() => setSettingsModalVisible(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.settingsModalContent}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Notebook Settings</Text>
+                <TouchableOpacity 
+                  onPress={() => setSettingsModalVisible(false)}
+                  style={styles.modalCloseButton}
+                >
+                  <Ionicons name="close" size={24} color="#9ca3af" />
+                </TouchableOpacity>
+              </View>
+
+              <View style={styles.settingsSection}>
+                <View style={styles.settingItem}>
+                  <View style={styles.settingInfo}>
+                    <View style={styles.settingIconContainer}>
+                      <Ionicons 
+                        name={isPublicToggle ? "globe" : "lock-closed"} 
+                        size={20} 
+                        color={isPublicToggle ? "#52C72B" : "#9ca3af"} 
+                      />
+                    </View>
+                    <View style={styles.settingTextContainer}>
+                      <Text style={styles.settingTitle}>Public Notebook</Text>
+                      <Text style={styles.settingDescription}>
+                        {isPublicToggle 
+                          ? "Anyone can view this notebook on your profile" 
+                          : "Only you can see this notebook"}
+                      </Text>
+                    </View>
+                  </View>
+                  <Switch
+                    value={isPublicToggle}
+                    onValueChange={setIsPublicToggle}
+                    trackColor={{ false: "#374151", true: "#52C72B" }}
+                    thumbColor={isPublicToggle ? "#ffffff" : "#9ca3af"}
+                    ios_backgroundColor="#374151"
+                  />
+                </View>
+
+                {isPublicToggle && (
+                  <View style={styles.warningBox}>
+                    <Ionicons name="information-circle-outline" size={20} color="#f59e0b" />
+                    <Text style={styles.warningText}>
+                      Public notebooks will be visible on your profile. Individual notes still need to be set to public separately.
+                    </Text>
+                  </View>
+                )}
+              </View>
+
+              <View style={styles.modalActions}>
+                <TouchableOpacity
+                  style={[styles.modalButton, styles.cancelButton]}
+                  onPress={() => setSettingsModalVisible(false)}
+                >
+                  <Text style={styles.cancelButtonText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.modalButton, 
+                    styles.saveButton,
+                    savingSettings && styles.disabledButton
+                  ]}
+                  onPress={handleSaveSettings}
+                  disabled={savingSettings}
+                >
+                  <Text style={styles.saveButtonText}>
+                    {savingSettings ? "Saving..." : "Save Changes"}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
       </SafeAreaView>
     </LinearGradient>
   );
@@ -580,19 +734,56 @@ const styles = StyleSheet.create({
     shadowRadius: 12,
     elevation: 8,
   },
+  infoCardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
   accentLine: {
     width: 60,
     height: 4,
     backgroundColor: '#3b82f6',
     borderRadius: 2,
+  },
+  settingsButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(156, 163, 175, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(156, 163, 175, 0.2)',
+  },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
     marginBottom: 16,
+    gap: 12,
   },
   notebookTitle: {
     color: '#ffffff',
     fontSize: 28,
     fontWeight: '700',
-    marginBottom: 16,
     letterSpacing: -0.5,
+    flex: 1,
+  },
+  publicBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(82, 199, 43, 0.15)',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 12,
+    gap: 6,
+    borderWidth: 1,
+    borderColor: 'rgba(82, 199, 43, 0.3)',
+  },
+  publicBadgeText: {
+    color: '#52C72B',
+    fontSize: 12,
+    fontWeight: '600',
   },
   descriptionContainer: {
     backgroundColor: 'rgba(59, 130, 246, 0.05)',
@@ -780,12 +971,25 @@ const styles = StyleSheet.create({
     flex: 1,
     marginRight: 12,
   },
+  noteTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+    gap: 8,
+  },
   noteTitle: {
     color: '#ffffff',
     fontSize: 17,
     fontWeight: '600',
-    marginBottom: 8,
     letterSpacing: -0.2,
+    flex: 1,
+  },
+  notePublicBadge: {
+    backgroundColor: 'rgba(82, 199, 43, 0.2)',
+    borderRadius: 10,
+    padding: 4,
+    borderWidth: 1,
+    borderColor: 'rgba(82, 199, 43, 0.3)',
   },
   propertyBadge: {
     flexDirection: 'row',
@@ -876,5 +1080,134 @@ const styles = StyleSheet.create({
     fontSize: 14,
     textAlign: 'center',
     lineHeight: 20,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  settingsModalContent: {
+    backgroundColor: '#1e293b',
+    borderRadius: 20,
+    width: '100%',
+    maxWidth: 500,
+    borderWidth: 1,
+    borderColor: 'rgba(59, 130, 246, 0.2)',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(75, 85, 99, 0.3)',
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#ffffff',
+  },
+  modalCloseButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(156, 163, 175, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  settingsSection: {
+    padding: 20,
+  },
+  settingItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: 'rgba(31, 41, 55, 0.5)',
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(75, 85, 99, 0.3)',
+  },
+  settingInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    marginRight: 12,
+  },
+  settingIconContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: 'rgba(59, 130, 246, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  settingTextContainer: {
+    flex: 1,
+  },
+  settingTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#ffffff',
+    marginBottom: 4,
+  },
+  settingDescription: {
+    fontSize: 13,
+    color: '#9ca3af',
+    lineHeight: 18,
+  },
+  warningBox: {
+    flexDirection: 'row',
+    backgroundColor: 'rgba(245, 158, 11, 0.1)',
+    padding: 12,
+    borderRadius: 12,
+    marginTop: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(245, 158, 11, 0.3)',
+    gap: 12,
+  },
+  warningText: {
+    flex: 1,
+    fontSize: 13,
+    color: '#f59e0b',
+    lineHeight: 18,
+  },
+  modalActions: {
+    flexDirection: 'row',
+    padding: 20,
+    gap: 12,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(75, 85, 99, 0.3)',
+  },
+  modalButton: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cancelButton: {
+    backgroundColor: 'rgba(107, 114, 128, 0.2)',
+    borderWidth: 1,
+    borderColor: 'rgba(107, 114, 128, 0.3)',
+  },
+  cancelButtonText: {
+    color: '#9ca3af',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  saveButton: {
+    backgroundColor: '#3b82f6',
+  },
+  saveButtonText: {
+    color: '#ffffff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  disabledButton: {
+    opacity: 0.5,
   },
 });

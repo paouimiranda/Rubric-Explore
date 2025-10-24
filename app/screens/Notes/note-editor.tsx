@@ -368,6 +368,13 @@ export default function NoteEditor({
               <Text style={styles.unsavedIndicator}>● Unsaved changes</Text>
             )}
           </View>
+
+          {note?.isPublic && (
+            <View style={styles.publicBadge}>
+              <Ionicons name="globe" size={12} color="#22c55e" />
+              <Text style={styles.publicBadgeText}>Public</Text>
+            </View>
+          )}
           
           <View style={styles.headerActions}>
             {!effectiveIsSharedAccess && (
@@ -820,5 +827,21 @@ const styles = StyleSheet.create({
   metadataValue: {
     fontSize: 14,
     color: '#1f2937',
+  },
+  publicBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(34, 197, 94, 0.2)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    marginTop: 4,
+    alignSelf: 'center',
+  },
+  publicBadgeText: {
+    color: '#22c55e',
+    fontSize: 10,
+    fontWeight: '600',
+    marginLeft: 4,
   },
 });
