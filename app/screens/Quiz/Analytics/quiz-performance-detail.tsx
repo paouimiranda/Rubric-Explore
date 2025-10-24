@@ -441,7 +441,9 @@ const QuizPerformanceDetail = () => {
           {/* Topic Insights */}
           {renderTopicInsights()}
         </ScrollView>
+
       </SafeAreaView>
+      
     </LinearGradient>
   );
 };

@@ -1,4 +1,4 @@
-// app/screens/Notes/shared-note-viewer.tsx (UPDATED FOR GRANULAR COLLABORATION)
+// app/screens/Notes/shared-note-viewer.tsx (VERY OUTDATED!)
 import { useAuth } from '@/app/contexts/AuthContext';
 import { Note } from '@/app/types/notebook';
 import { db } from '@/firebase';

@@ -207,8 +207,18 @@ export default function HomeScreen() {
   };
 
   if (!fontsLoaded) {
-    return null; // or a loading spinner
-  }
+  return (
+    <LinearGradient
+      colors={['#0f2c45ff','#324762']}
+      style={{flex: 1, justifyContent: 'center', alignItems: 'center'}}>
+      <Image
+        source={require('../../assets/images/logo.png')}
+        style={{width: 100, height: 100, opacity: 0.8}}
+        resizeMode="contain"
+      />
+    </LinearGradient>
+  );
+}
 
   return (
     <LinearGradient

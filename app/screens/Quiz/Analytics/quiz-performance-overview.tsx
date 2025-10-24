@@ -1,4 +1,5 @@
 // File: app/analytics/quiz-performance-overview.tsx
+import BottomNavigation from '@/components/Interface/nav-bar';
 import { QuizService, type QuizAttempt } from '@/services/quiz-service';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -324,6 +325,8 @@ const QuizPerformanceOverview = () => {
             getFilteredSummaries().map(renderQuizCard)
           )}
         </ScrollView>
+        
+        <BottomNavigation/>
       </SafeAreaView>
     </LinearGradient>
   );

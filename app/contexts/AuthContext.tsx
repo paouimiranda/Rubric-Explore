@@ -6,11 +6,24 @@ import { getCurrentUserData } from '../../services/auth-service';
 
 // Define the shape of your user data
 interface UserData {
+  uid: string;
   username: string;
-  // Add other properties that your user data might have
-  email?: string;
-  displayName?: string;
-  // Add any other fields that getCurrentUserData() returns
+  email: string;
+  displayName: string;
+  firstName: string;
+  lastName: string;
+  dateOfBirth: string;
+  profilePicture: string | null;
+  avatar: string | null;
+  headerGradient: string[];
+  bio: string;
+  followers: number;
+  following: number;
+  posts: number;
+  isVerified: boolean;
+  isActive: boolean;
+  createdAt: any;
+  updatedAt: any;
 }
 
 // Define the context type
@@ -47,7 +60,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         setUser(user);
         try {
           const data = await getCurrentUserData();
-          setUserData(data as any);
+          setUserData(data as UserData);
         } catch (error) {
           console.error('Error fetching user data:', error);
           setUserData(null);

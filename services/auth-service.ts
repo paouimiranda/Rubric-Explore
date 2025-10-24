@@ -1,3 +1,4 @@
+//services/auth-service.ts
 import {
   createUserWithEmailAndPassword,
   User as FirebaseUser,
@@ -13,6 +14,7 @@ import {
   query,
   serverTimestamp,
   setDoc,
+  updateDoc,
   where,
 } from 'firebase/firestore';
 import { auth, db } from '../firebase';
@@ -29,6 +31,8 @@ export interface UserData {
   createdAt: any;
   updatedAt: any;
   profilePicture: string | null;
+  avatar: string | null; // New field for avatar URL
+  headerGradient: string[]; // New field for header gradient colors
   bio: string;
   followers: number;
   following: number;
@@ -46,13 +50,20 @@ export interface RegisterData {
   dateOfBirth: string;
 }
 
+export interface UpdateProfileData {
+  avatar?: string | null;
+  headerGradient?: string[];
+  bio?: string;
+  displayName?: string;
+}
+
 // --- Username Availability ---
 export const checkUsernameAvailability = async (username: string): Promise<boolean> => {
   try {
-    const usernamesRef = collection(db, 'usernames'); //reference to the specific document/level in the database
-    const q = query(usernamesRef, where('username', '==', username.toLowerCase())); //basically filtering 
-    const querySnapshot = await getDocs(q);  //gets the snapshot from the database based on the query
-    return querySnapshot.empty; // what is this for?
+    const usernamesRef = collection(db, 'usernames');
+    const q = query(usernamesRef, where('username', '==', username.toLowerCase()));
+    const querySnapshot = await getDocs(q);
+    return querySnapshot.empty; // Returns true if username is available
   } catch (error) {
     console.error('Error checking username availability:', error);
     throw new Error('Failed to check username availability');
@@ -100,6 +111,8 @@ export const registerUser = async (userData: RegisterData): Promise<UserData> =>
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
       profilePicture: null,
+      avatar: null, // Default avatar
+      headerGradient: ['#FF999A', '#EE007F'], // Default header gradient
       bio: '',
       followers: 0,
       following: 0,
@@ -135,7 +148,7 @@ export const registerUser = async (userData: RegisterData): Promise<UserData> =>
   }
 };
 
-// --- Login User --- (auth service)
+// --- Login User ---
 export const loginUser = async (email: string, password: string): Promise<UserData> => {
   try {
     const userCredential = await signInWithEmailAndPassword(auth, email, password);
@@ -171,6 +184,23 @@ export const logoutUser = async (): Promise<void> => {
   } catch (error) {
     console.error('Logout error:', error);
     throw new Error('Failed to logout');
+  }
+};
+
+// --- Update User Profile ---
+export const updateUserProfile = async (
+  uid: string,
+  updates: UpdateProfileData
+): Promise<void> => {
+  try {
+    const userRef = doc(db, 'users', uid);
+    await updateDoc(userRef, {
+      ...updates,
+      updatedAt: serverTimestamp(),
+    });
+  } catch (error) {
+    console.error('Error updating user profile:', error);
+    throw new Error('Failed to update profile');
   }
 };
 

@@ -1,18 +1,26 @@
-import { useRouter } from 'expo-router';
+import { usePathname, useRouter } from 'expo-router';
 import React from "react";
 import { Image, StyleSheet, TouchableOpacity, View } from 'react-native';
 
 const BottomNavigation = () => {
   const router = useRouter();
+  const pathname = usePathname();
+
+  const safeNavigate = (target: string) => {
+    if (pathname !== target) {
+      router.replace(target as any);
+    }
+  };
+
   return (
     <View style={styles.container}>
       {/* Main Navigation Bar */}
       <View style={styles.bottomNav}>
-        <TouchableOpacity style={styles.navButton} onPress={() => router.push(`../HomeScreen`)}>
+        <TouchableOpacity style={styles.navButton} onPress={() => safeNavigate(`/screens/HomeScreen`)}>
           <Image source={require('@/assets/images/home_icon.png')} style={styles.navIcon} />
         </TouchableOpacity>
         
-        <TouchableOpacity style={styles.navButton} onPress={() => router.push(`../Quiz/Analytics/quiz-performance-overview`)}>
+        <TouchableOpacity style={styles.navButton} onPress={() => safeNavigate(`/screens/Quiz/Analytics/quiz-performance-overview`)}>
           <Image source={require('@/assets/images/discover_icon.png')} style={styles.navIcon} />
         </TouchableOpacity>
         
@@ -21,11 +29,11 @@ const BottomNavigation = () => {
           <View style={styles.navIcon}/>
         </View>
         
-        <TouchableOpacity style={styles.navButton} onPress={() => router.push(`../User/settings`)}>
+        <TouchableOpacity style={styles.navButton} onPress={() => safeNavigate(`/screens/User/settings`)}>
           <Image source={require('@/assets/images/settings_icon.png')} style={styles.navIcon} />
         </TouchableOpacity>
         
-        <TouchableOpacity style={styles.navButton} onPress={() => router.push(`../User/profile`)}>
+        <TouchableOpacity style={styles.navButton} onPress={() => safeNavigate(`/screens/User/profile`)}>
           <Image source={require('@/assets/images/account_circle.png')} style={styles.navIcon} />
         </TouchableOpacity>
       </View>
@@ -34,7 +42,7 @@ const BottomNavigation = () => {
       <View style={styles.middleButtonContainer}>
         <TouchableOpacity 
           style={styles.middleButton} 
-          onPress={() => router.push(`../YourScreen`)}
+          onPress={() => safeNavigate(`/screens/Explore/explore`)}
           activeOpacity={0.8}
         >
           <Image 
