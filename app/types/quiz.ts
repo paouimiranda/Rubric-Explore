@@ -1,4 +1,5 @@
-//quiz.ts (types for quiz)
+// File: types/quiz.ts
+
 export interface QuizQuestion {
   id: string;
   question: string;
@@ -6,7 +7,10 @@ export interface QuizQuestion {
   correctAnswer: number;
   explanation?: string;
   timeLimit?: number; // in seconds
-  points?: number;
+  points?: number; // Points awarded for correct answer
+  
+  // Analytics field
+  topic: string; // Required: Main category for analytics (e.g., "Algebra", "Biology")
 }
 
 export interface Quiz {
@@ -17,8 +21,7 @@ export interface Quiz {
   createdAt: Date;
   updatedAt: Date;
   createdBy: string;
-  category?: string;
-  difficulty: 'easy' | 'medium' | 'hard';
+  category?: string; // Overall quiz category
   isPublic: boolean;
   tags: string[];
   totalPoints: number;
@@ -63,6 +66,13 @@ export interface QuizStats {
   totalTimeSpent: number;
 }
 
-export type QuizMode = 'practice' | 'timed' | 'multiplayer';
-export type QuizDifficulty = 'easy' | 'medium' | 'hard';
-export type QuizCategory = 'general' | 'science' | 'history' | 'technology' | 'sports' | 'entertainment' | 'custom';
+// New interface for topic-based analytics
+export interface TopicPerformance {
+  topic: string;
+  totalQuestions: number;
+  correctAnswers: number;
+  incorrectAnswers: number;
+  averageTimeSpent: number;
+  accuracy: number; // percentage
+  lastAttempted?: Date;
+}

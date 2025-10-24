@@ -1,5 +1,5 @@
 // File: app/Quiz/quiz-play.tsx - Updated Quiz Play Screen
-import { QuizService, type Question, type Quiz } from '@/services/quiz-service';
+import { QuizService, type Question, type QuestionResult, type Quiz } from '@/services/quiz-service';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -39,16 +39,8 @@ interface QuizResult {
 const { width: screenWidth } = Dimensions.get('window');
 
 const MATCHING_COLORS = [
-  '#ef4444', // Red
-  '#f59e0b', // Amber
-  '#10b981', // Green
-  '#3b82f6', // Blue
-  '#8b5cf6', // Purple
-  '#ec4899', // Pink
-  '#06b6d4', // Cyan
-  '#f97316', // Orange
-  '#14b8a6', // Teal
-  '#a855f7', // Violet
+  '#ef4444', '#f59e0b', '#10b981', '#3b82f6', '#8b5cf6',
+  '#ec4899', '#06b6d4', '#f97316', '#14b8a6', '#a855f7',
 ];
 
 const QuizPlay = () => {
@@ -64,11 +56,13 @@ const QuizPlay = () => {
   const [quizResults, setQuizResults] = useState<QuizResult[]>([]);
   const [showResults, setShowResults] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
+  const [savingAttempt, setSavingAttempt] = useState(false);
   
   // Timer and animations
   const timerRef = useRef<number | null>(null);
   const progressAnim = useRef(new Animated.Value(1)).current;
   const questionStartTime = useRef(Date.now());
+  const quizStartTime = useRef(Date.now());
   
   // Question-specific state
   const [selectedAnswers, setSelectedAnswers] = useState<number[]>([]);
@@ -111,6 +105,7 @@ const QuizPlay = () => {
           questionId: q.id,
           timeSpent: 0
         })));
+        quizStartTime.current = Date.now();
       } else {
         Alert.alert('Error', 'Quiz not found');
         router.back();
@@ -220,7 +215,7 @@ const QuizPlay = () => {
     }
   };
 
-  const finishQuiz = (finalAnswers: QuizAnswer[]) => {
+  const finishQuiz = async (finalAnswers: QuizAnswer[]) => {
     if (!quiz) return;
     
     setIsQuizCompleted(true);
@@ -240,14 +235,14 @@ const QuizPlay = () => {
           const correctAnswers = question.correctAnswers || [];
           isCorrect = userSelected.length === correctAnswers.length &&
                      userSelected.every(ans => correctAnswers.includes(ans));
-          points = isCorrect ? 1 : 0;
+          points = isCorrect ? (question.points || 1) : 0;
           break;
           
         case 'fill_blank':
           const userText = (userAnswer.fillBlankAnswer || '').toLowerCase().trim();
           const correctText = (question.correctAnswer || '').toLowerCase().trim();
           isCorrect = userText === correctText;
-          points = isCorrect ? 1 : 0;
+          points = isCorrect ? (question.points || 1) : 0;
           break;
           
         case 'matching':
@@ -263,7 +258,7 @@ const QuizPlay = () => {
           });
           
           isCorrect = correctMatches === correctPairs.length;
-          points = correctMatches / correctPairs.length; // Partial credit
+          points = (correctMatches / correctPairs.length) * (question.points || 1); // Partial credit
           break;
       }
       
@@ -279,6 +274,50 @@ const QuizPlay = () => {
     
     setQuizResults(results);
     setShowResults(true);
+    
+    // Save attempt to Firestore for analytics
+    await saveAttemptToFirestore(results);
+  };
+
+  const saveAttemptToFirestore = async (results: QuizResult[]) => {
+    if (!quiz || !quiz.id) return;
+    
+    try {
+      setSavingAttempt(true);
+      
+      const totalPoints = results.reduce((sum, r) => sum + r.points, 0);
+      const maxPoints = quiz.questions.reduce((sum, q) => sum + (q.points || 1), 0);
+      const totalTime = results.reduce((sum, r) => sum + r.timeSpent, 0);
+      const percentage = Math.round((totalPoints / maxPoints) * 100);
+      
+      // Map results to QuestionResult format
+      const questionResults: QuestionResult[] = results.map((result, index) => ({
+        questionId: result.questionId,
+        isCorrect: result.isCorrect,
+        timeSpent: result.timeSpent,
+        topic: quiz.questions[index].topic || 'Uncategorized',
+        points: result.points,
+      }));
+      
+      await QuizService.saveQuizAttempt({
+        quizId: quiz.id,
+        quizTitle: quiz.title,
+        score: totalPoints,
+        totalPoints: maxPoints,
+        percentage,
+        timeSpent: totalTime,
+        startedAt: new Date(quizStartTime.current),
+        completedAt: new Date(),
+        questionResults,
+      });
+      
+      console.log('Quiz attempt saved successfully!');
+    } catch (error) {
+      console.error('Failed to save quiz attempt:', error);
+      // Don't show error to user - this is background operation
+    } finally {
+      setSavingAttempt(false);
+    }
   };
 
   // Question type handlers
@@ -296,44 +335,44 @@ const QuizPlay = () => {
   };
 
   const handleMatchingSelection = (side: 'left' | 'right', index: number) => {
-  if (side === 'left') {
-    // Check if this left item is already matched
-    if (matchingPairs[index]?.right) {
-      // Unmatch it
-      const newPairs = [...matchingPairs];
-      newPairs[index] = { left: quiz!.questions[currentQuestionIndex].matchPairs[index].left, right: '' };
-      setMatchingPairs(newPairs);
-      setSelectedLeft(null);
-      setSelectedRight(null);
+    if (side === 'left') {
+      // Check if this left item is already matched
+      if (matchingPairs[index]?.right) {
+        // Unmatch it
+        const newPairs = [...matchingPairs];
+        newPairs[index] = { left: quiz!.questions[currentQuestionIndex].matchPairs[index].left, right: '' };
+        setMatchingPairs(newPairs);
+        setSelectedLeft(null);
+        setSelectedRight(null);
+      } else {
+        // Select it
+        setSelectedLeft(selectedLeft === index ? null : index);
+        setSelectedRight(null);
+      }
     } else {
-      // Select it
-      setSelectedLeft(selectedLeft === index ? null : index);
-      setSelectedRight(null);
-    }
-  } else {
-    // Right side
-    const leftIndex = findLeftIndexForRightItem(shuffledRightItems[index]);
-    
-    // Check if this right item is already matched
-    if (leftIndex !== -1) {
-      // Unmatch it
-      const newPairs = [...matchingPairs];
-      newPairs[leftIndex] = { left: quiz!.questions[currentQuestionIndex].matchPairs[leftIndex].left, right: '' };
-      setMatchingPairs(newPairs);
-      setSelectedLeft(null);
-      setSelectedRight(null);
-    } else if (selectedLeft !== null) {
-      // Create or update matching pair
-      const newPairs = [...matchingPairs];
-      newPairs[selectedLeft] = {
-        left: quiz!.questions[currentQuestionIndex].matchPairs[selectedLeft].left,
-        right: shuffledRightItems[index]
-      };
-      setMatchingPairs(newPairs);
-      setSelectedLeft(null);
-      setSelectedRight(null);
-    } else {
-      setSelectedRight(selectedRight === index ? null : index);
+      // Right side
+      const leftIndex = findLeftIndexForRightItem(shuffledRightItems[index]);
+      
+      // Check if this right item is already matched
+      if (leftIndex !== -1) {
+        // Unmatch it
+        const newPairs = [...matchingPairs];
+        newPairs[leftIndex] = { left: quiz!.questions[currentQuestionIndex].matchPairs[leftIndex].left, right: '' };
+        setMatchingPairs(newPairs);
+        setSelectedLeft(null);
+        setSelectedRight(null);
+      } else if (selectedLeft !== null) {
+        // Create or update matching pair
+        const newPairs = [...matchingPairs];
+        newPairs[selectedLeft] = {
+          left: quiz!.questions[currentQuestionIndex].matchPairs[selectedLeft].left,
+          right: shuffledRightItems[index]
+        };
+        setMatchingPairs(newPairs);
+        setSelectedLeft(null);
+        setSelectedRight(null);
+      } else {
+        setSelectedRight(selectedRight === index ? null : index);
       }
     }
   };
@@ -342,10 +381,9 @@ const QuizPlay = () => {
     return MATCHING_COLORS[leftIndex % MATCHING_COLORS.length];
   };
 
-const findLeftIndexForRightItem = (rightItem: string): number => {
+  const findLeftIndexForRightItem = (rightItem: string): number => {
     return matchingPairs.findIndex(pair => pair.right === rightItem);
   };
-  
 
   const renderMultipleChoice = (question: Question) => (
     <View style={styles.questionContent}>
@@ -358,18 +396,10 @@ const findLeftIndexForRightItem = (rightItem: string): number => {
           
           // Add color style based on index
           switch (index) {
-            case 0:
-              optionStyles.push(styles.option0);
-              break;
-            case 1:
-              optionStyles.push(styles.option1);
-              break;
-            case 2:
-              optionStyles.push(styles.option2);
-              break;
-            case 3:
-              optionStyles.push(styles.option3);
-              break;
+            case 0: optionStyles.push(styles.option0); break;
+            case 1: optionStyles.push(styles.option1); break;
+            case 2: optionStyles.push(styles.option2); break;
+            case 3: optionStyles.push(styles.option3); break;
           }
 
           return (
@@ -410,91 +440,90 @@ const findLeftIndexForRightItem = (rightItem: string): number => {
       </View>
     </View>
   );
-  
 
   const renderMatching = (question: Question) => (
-  <View style={styles.questionContent}>
-    <Text style={styles.matchingInstructions}>
-      Tap items to match them together
-    </Text>
-    
-    <View style={styles.matchingContainer}>
-      <View style={styles.matchingColumn}>
-        <Text style={styles.columnHeader}>Match These</Text>
-        {question.matchPairs.map((pair, index) => {
-          const isMatched = matchingPairs[index]?.right;
-          const matchColor = isMatched ? getMatchColor(index) : undefined;
-          
-          return (
-            <TouchableOpacity
-              key={index}
-              style={[
-                styles.matchingItem,
-                styles.leftMatchingItem,
-                selectedLeft === index && styles.selectedMatchingItem,
-                isMatched && { 
-                  backgroundColor: matchColor,
-                  borderColor: matchColor,
-                }
-              ]}
-              onPress={() => handleMatchingSelection('left', index)}
-            >
-              <Text style={[
-                styles.matchingItemText,
-                isMatched && styles.matchedItemText
-              ]}>{pair.left}</Text>
-              {isMatched && (
-                <View style={styles.matchIndicator}>
-                  <Ionicons name="checkmark-circle" size={16} color="#ffffff" />
-                </View>
-              )}
-            </TouchableOpacity>
-          );
-        })}
-      </View>
+    <View style={styles.questionContent}>
+      <Text style={styles.matchingInstructions}>
+        Tap items to match them together
+      </Text>
+      
+      <View style={styles.matchingContainer}>
+        <View style={styles.matchingColumn}>
+          <Text style={styles.columnHeader}>Match These</Text>
+          {question.matchPairs.map((pair, index) => {
+            const isMatched = matchingPairs[index]?.right;
+            const matchColor = isMatched ? getMatchColor(index) : undefined;
+            
+            return (
+              <TouchableOpacity
+                key={index}
+                style={[
+                  styles.matchingItem,
+                  styles.leftMatchingItem,
+                  selectedLeft === index && styles.selectedMatchingItem,
+                  isMatched && { 
+                    backgroundColor: matchColor,
+                    borderColor: matchColor,
+                  }
+                ]}
+                onPress={() => handleMatchingSelection('left', index)}
+              >
+                <Text style={[
+                  styles.matchingItemText,
+                  isMatched && styles.matchedItemText
+                ]}>{pair.left}</Text>
+                {isMatched && (
+                  <View style={styles.matchIndicator}>
+                    <Ionicons name="checkmark-circle" size={16} color="#ffffff" />
+                  </View>
+                )}
+              </TouchableOpacity>
+            );
+          })}
+        </View>
 
-      <View style={styles.matchingArrow}>
-        <Ionicons name="arrow-forward" size={24} color="#64748b" />
-      </View>
+        <View style={styles.matchingArrow}>
+          <Ionicons name="arrow-forward" size={24} color="#64748b" />
+        </View>
 
-      <View style={styles.matchingColumn}>
-        <Text style={styles.columnHeader}>With These</Text>
-        {shuffledRightItems.map((item, index) => {
-          const leftIndex = findLeftIndexForRightItem(item);
-          const isMatched = leftIndex !== -1;
-          const matchColor = isMatched ? getMatchColor(leftIndex) : undefined;
-          
-          return (
-            <TouchableOpacity
-              key={index}
-              style={[
-                styles.matchingItem,
-                styles.rightMatchingItem,
-                selectedRight === index && styles.selectedMatchingItem,
-                isMatched && {
-                  backgroundColor: matchColor,
-                  borderColor: matchColor,
-                }
-              ]}
-              onPress={() => handleMatchingSelection('right', index)}
-              disabled={isMatched}
-            >
-              <Text style={[
-                styles.matchingItemText,
-                isMatched && styles.matchedItemText
-              ]}>{item}</Text>
-              {isMatched && (
-                <View style={styles.matchIndicator}>
-                  <Ionicons name="checkmark-circle" size={16} color="#ffffff" />
-                </View>
-              )}
-            </TouchableOpacity>
-          );
-        })}
+        <View style={styles.matchingColumn}>
+          <Text style={styles.columnHeader}>With These</Text>
+          {shuffledRightItems.map((item, index) => {
+            const leftIndex = findLeftIndexForRightItem(item);
+            const isMatched = leftIndex !== -1;
+            const matchColor = isMatched ? getMatchColor(leftIndex) : undefined;
+            
+            return (
+              <TouchableOpacity
+                key={index}
+                style={[
+                  styles.matchingItem,
+                  styles.rightMatchingItem,
+                  selectedRight === index && styles.selectedMatchingItem,
+                  isMatched && {
+                    backgroundColor: matchColor,
+                    borderColor: matchColor,
+                  }
+                ]}
+                onPress={() => handleMatchingSelection('right', index)}
+                disabled={isMatched}
+              >
+                <Text style={[
+                  styles.matchingItemText,
+                  isMatched && styles.matchedItemText
+                ]}>{item}</Text>
+                {isMatched && (
+                  <View style={styles.matchIndicator}>
+                    <Ionicons name="checkmark-circle" size={16} color="#ffffff" />
+                  </View>
+                )}
+              </TouchableOpacity>
+            );
+          })}
+        </View>
       </View>
     </View>
-  </View>
-);
+  );
 
   const renderQuestion = () => {
     if (!quiz) return null;
@@ -516,16 +545,23 @@ const findLeftIndexForRightItem = (rightItem: string): number => {
     );
   };
 
+  const handleViewAnalytics = () => {
+    if (quiz?.id) {
+      router.push(`./Analytics/quiz-detail?quizId=${quiz.id}`);
+    }
+  };
+
   const renderResults = () => {
     const totalQuestions = quizResults.length;
     const correctAnswers = quizResults.filter(r => r.isCorrect).length;
     const totalPoints = quizResults.reduce((sum, r) => sum + r.points, 0);
-    const percentage = Math.round((totalPoints / totalQuestions) * 100);
+    const maxPoints = quiz?.questions.reduce((sum, q) => sum + (q.points || 1), 0) || totalQuestions;
+    const percentage = Math.round((totalPoints / maxPoints) * 100);
     const totalTime = quizResults.reduce((sum, r) => sum + r.timeSpent, 0);
     
     return (
       <Modal visible={showResults} animationType="slide" presentationStyle="pageSheet">
-        <LinearGradient colors={['#0f172a', '#1e293b']} style={styles.resultsContainer}>
+        <LinearGradient colors={['#0f2c45ff','#324762']} start={{x: 0, y: 0}} end={{ x: 0, y: 1 }} style={styles.resultsContainer}>
           <SafeAreaView style={styles.resultsContainer}>
             <View style={styles.resultsHeader}>
               <Text style={styles.resultsTitle}>Quiz Complete!</Text>
@@ -541,6 +577,9 @@ const findLeftIndexForRightItem = (rightItem: string): number => {
               <Text style={styles.scorePercentage}>{percentage}%</Text>
               <Text style={styles.scoreDetails}>
                 {correctAnswers} of {totalQuestions} correct
+              </Text>
+              <Text style={styles.scoreSubDetails}>
+                {totalPoints.toFixed(1)} / {maxPoints} points
               </Text>
               <Text style={styles.timeDetails}>
                 Completed in {Math.floor(totalTime / 60)}:{(totalTime % 60).toString().padStart(2, '0')}
@@ -579,6 +618,14 @@ const findLeftIndexForRightItem = (rightItem: string): number => {
             
             <View style={styles.resultsActions}>
               <TouchableOpacity
+                style={styles.analyticsBtn}
+                onPress={handleViewAnalytics}
+              >
+                <Ionicons name="stats-chart" size={20} color="#ffffff" />
+                <Text style={styles.analyticsBtnText}>View Analytics</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity
                 style={styles.playAgainBtn}
                 onPress={() => {
                   setShowResults(false);
@@ -588,20 +635,21 @@ const findLeftIndexForRightItem = (rightItem: string): number => {
                     questionId: q.id,
                     timeSpent: 0
                   })));
+                  quizStartTime.current = Date.now();
                   initializeQuestion();
                 }}
               >
                 <Ionicons name="refresh" size={20} color="#ffffff" />
                 <Text style={styles.playAgainText}>Play Again</Text>
               </TouchableOpacity>
-              
-              <TouchableOpacity
-                style={styles.homeBtn}
-                onPress={() => router.back()}
-              >
-                <Text style={styles.homeBtnText}>Back to Quiz</Text>
-              </TouchableOpacity>
             </View>
+            
+            <TouchableOpacity
+              style={styles.homeBtn}
+              onPress={() => router.back()}
+            >
+              <Text style={styles.homeBtnText}>Back to Quiz</Text>
+            </TouchableOpacity>
           </SafeAreaView>
         </LinearGradient>
       </Modal>
@@ -610,7 +658,7 @@ const findLeftIndexForRightItem = (rightItem: string): number => {
 
   if (loading) {
     return (
-      <LinearGradient colors={['#0f172a', '#1e293b']} style={styles.container}>
+      <LinearGradient colors={['#0f2c45ff','#324762']} start={{x: 0, y: 0}} end={{ x: 0, y: 1 }} style={styles.container}>
         <SafeAreaView style={styles.container}>
           <View style={styles.loadingContainer}>
             <Text style={styles.loadingText}>Loading quiz...</Text>
@@ -622,7 +670,7 @@ const findLeftIndexForRightItem = (rightItem: string): number => {
 
   if (!quiz) {
     return (
-      <LinearGradient colors={['#0f172a', '#1e293b']} style={styles.container}>
+      <LinearGradient colors={['#0f2c45ff','#324762']} start={{x: 0, y: 0}} end={{ x: 0, y: 1 }} style={styles.container}>
         <SafeAreaView style={styles.container}>
           <View style={styles.errorContainer}>
             <Text style={styles.errorText}>Quiz not found</Text>
@@ -633,7 +681,7 @@ const findLeftIndexForRightItem = (rightItem: string): number => {
   }
 
   return (
-    <LinearGradient colors={['#0f172a', '#1e293b']} style={styles.container}>
+    <LinearGradient colors={['#0f2c45ff','#324762']} start={{x: 0, y: 0}} end={{ x: 0, y: 1 }} style={styles.container}>
       <SafeAreaView style={styles.container}>
         {/* Header with progress */}
         <View style={styles.header}>
@@ -733,9 +781,7 @@ const findLeftIndexForRightItem = (rightItem: string): number => {
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
+  container: { flex: 1 },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -768,7 +814,7 @@ const styles = StyleSheet.create({
   },
   progressFill: {
     height: '100%',
-    backgroundColor: '#10b981',
+    backgroundColor: '#52C72B',
     borderRadius: 2,
   },
   pauseBtn: {
@@ -786,7 +832,7 @@ const styles = StyleSheet.create({
   },
   timerBar: {
     height: 6,
-    backgroundColor: '#ef4444',
+    backgroundColor: '#EE007F',
     borderRadius: 3,
   },
   timerText: {
@@ -815,22 +861,17 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     marginBottom: 20,
   },
-  questionContent: {
-    flex: 1,
-  },
-  // Multiple choice styles
-  optionsGrid: {
-    gap: 12,
-  },
+  questionContent: { flex: 1 },
+  optionsGrid: { gap: 12 },
   optionButton: {
     borderRadius: 12,
     padding: 16,
     minHeight: 60,
   },
-  option0: { backgroundColor: '#ef4444' },
-  option1: { backgroundColor: '#3b82f6' },
-  option2: { backgroundColor: '#f59e0b' },
-  option3: { backgroundColor: '#10b981' },
+  option0: { backgroundColor: '#FF999A' },
+  option1: { backgroundColor: '#568CD2' },
+  option2: { backgroundColor: '#F2CD41' },
+  option3: { backgroundColor: '#63DC9A' },
   selectedOption: {
     borderWidth: 3,
     borderColor: '#ffffff',
@@ -854,7 +895,6 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     flex: 1,
   },
-  // Fill blank styles
   fillBlankContainer: {
     alignItems: 'center',
     paddingVertical: 40,
@@ -876,7 +916,6 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: '#334155',
   },
-  // Matching styles
   matchingInstructions: {
     color: '#94a3b8',
     fontSize: 16,
@@ -889,9 +928,7 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     flex: 1,
   },
-  matchingColumn: {
-    flex: 1,
-  },
+  matchingColumn: { flex: 1 },
   columnHeader: {
     color: '#ffffff',
     fontSize: 16,
@@ -911,41 +948,33 @@ const styles = StyleSheet.create({
     borderColor: '#334155',
     position: 'relative',
   },
-  leftMatchingItem: {
-    backgroundColor: '#1e293b',
-  },
-  rightMatchingItem: {
-    backgroundColor: '#1e293b',
-  },
+  leftMatchingItem: { backgroundColor: '#1e293b' },
+  rightMatchingItem: { backgroundColor: '#1e293b' },
   selectedMatchingItem: {
     borderColor: '#8b5cf6',
     backgroundColor: '#312e81',
   },
   matchedItem: {
     backgroundColor: '#065f46',
-    borderColor: '#10b981',
+    borderColor: '#52C72B',
   },
   matchingItemText: {
     color: '#ffffff',
     fontSize: 14,
     fontWeight: '500',
   },
-  matchedItemText: {
-    color: '#d1fae5',
-  },
+  matchedItemText: { color: '#d1fae5' },
   matchIndicator: {
     position: 'absolute',
     top: 4,
     right: 4,
   },
-  bottomContainer: {
-    padding: 20,
-  },
+  bottomContainer: { padding: 20 },
   submitBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#10b981',
+    backgroundColor: '#52C72B',
     paddingVertical: 16,
     borderRadius: 12,
     gap: 8,
@@ -968,7 +997,7 @@ const styles = StyleSheet.create({
     marginBottom: 32,
   },
   resumeBtn: {
-    backgroundColor: '#10b981',
+    backgroundColor: '#52C72B',
     paddingVertical: 12,
     paddingHorizontal: 24,
     borderRadius: 8,
@@ -993,13 +1022,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   errorText: {
-    color: '#ef4444',
+    color: '#EE007F',
     fontSize: 18,
   },
-  // Results modal styles
-  resultsContainer: {
-    flex: 1,
-  },
+  resultsContainer: { flex: 1 },
   resultsHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -1021,41 +1047,47 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   scoreCard: {
-    backgroundColor: '#1e293b',
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
     marginHorizontal: 20,
     marginBottom: 20,
     borderRadius: 16,
     padding: 24,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#334155',
+    borderColor: 'rgba(255, 255, 255, 0.2)',
   },
   scorePercentage: {
-    color: '#ffffff',
+    color: '#63DC9A',
     fontSize: 48,
     fontWeight: 'bold',
   },
   scoreDetails: {
-    color: '#94a3b8',
+    color: '#ffffff',
     fontSize: 16,
     marginTop: 8,
   },
-  timeDetails: {
-    color: '#64748b',
+  scoreSubDetails: {
+    color: '#94a3b8',
     fontSize: 14,
     marginTop: 4,
+  },
+  timeDetails: {
+    color: '#F2CD41',
+    fontSize: 14,
+    marginTop: 8,
+    fontWeight: '600',
   },
   resultsList: {
     flex: 1,
     paddingHorizontal: 20,
   },
   resultItem: {
-    backgroundColor: '#1e293b',
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
     borderRadius: 12,
     padding: 16,
     marginBottom: 8,
     borderWidth: 1,
-    borderColor: '#334155',
+    borderColor: 'rgba(255, 255, 255, 0.1)',
   },
   resultHeader: {
     flexDirection: 'row',
@@ -1064,7 +1096,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   resultQuestionNumber: {
-    color: '#8b5cf6',
+    color: '#568CD2',
     fontSize: 14,
     fontWeight: 'bold',
   },
@@ -1075,32 +1107,44 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  correctStatus: {
-    backgroundColor: '#10b981',
-  },
-  incorrectStatus: {
-    backgroundColor: '#ef4444',
-  },
+  correctStatus: { backgroundColor: '#52C72B' },
+  incorrectStatus: { backgroundColor: '#EE007F' },
   resultQuestion: {
     color: '#ffffff',
     fontSize: 16,
     marginBottom: 4,
   },
   resultTime: {
-    color: '#64748b',
+    color: '#94a3b8',
     fontSize: 12,
   },
   resultsActions: {
     flexDirection: 'row',
-    padding: 20,
+    paddingHorizontal: 20,
+    paddingTop: 12,
     gap: 12,
+  },
+  analyticsBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#568CD2',
+    paddingVertical: 16,
+    borderRadius: 12,
+    gap: 8,
+  },
+  analyticsBtnText: {
+    color: '#ffffff',
+    fontSize: 16,
+    fontWeight: 'bold',
   },
   playAgainBtn: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#8b5cf6',
+    backgroundColor: '#E77F00',
     paddingVertical: 16,
     borderRadius: 12,
     gap: 8,
@@ -1111,14 +1155,16 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   homeBtn: {
-    flex: 1,
+    marginHorizontal: 20,
+    marginTop: 12,
+    marginBottom: 20,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'transparent',
     paddingVertical: 16,
     borderRadius: 12,
     borderWidth: 2,
-    borderColor: '#334155',
+    borderColor: 'rgba(255, 255, 255, 0.3)',
   },
   homeBtnText: {
     color: '#ffffff',

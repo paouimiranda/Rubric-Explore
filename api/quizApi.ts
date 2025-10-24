@@ -1,4 +1,6 @@
-// Updated quiz API integration
+// File: api/quizApi.ts
+// Updated quiz API integration with topic field for analytics
+
 export interface QuizQuestion {
   id: string;
   type: 'multiple_choice' | 'fill_blank' | 'matching';
@@ -9,6 +11,10 @@ export interface QuizQuestion {
   timeLimit: number;
   matchPairs: Array<{ left: string; right: string }>;  // For matching questions
   correctAnswer: string;  // For fill in the blank
+  
+  // Analytics field
+  topic: string;  // Required: Main category for performance tracking
+  points?: number;  // Optional: custom point value for the question
 }
 
 interface QuizResponse {
@@ -76,7 +82,14 @@ export async function generateQuizFromAI(
     console.warn('This usually means the backend couldn\'t generate questions from the content');
   }
 
-  return data.quiz;
+  // Ensure each question has a topic field (fallback to main topic if not provided by API)
+  const questionsWithTopic = data.quiz.map((q) => ({
+    ...q,
+    topic: q.topic || topic || 'General',  // Fallback to main topic if not provided
+    points: q.points || 1  // Default points if not provided
+  }));
+
+  return questionsWithTopic;
 }
 
 // Utility function to convert API response to internal Question format
@@ -90,6 +103,29 @@ export function convertAPIQuestionToInternalFormat(apiQuestion: QuizQuestion): a
     correctAnswers: apiQuestion.correctAnswers,
     timeLimit: apiQuestion.timeLimit,
     matchPairs: apiQuestion.matchPairs,
-    correctAnswer: apiQuestion.correctAnswer
+    correctAnswer: apiQuestion.correctAnswer,
+    
+    // Analytics fields
+    topic: apiQuestion.topic || 'Uncategorized',
+    points: apiQuestion.points || 1
   };
+}
+
+// Utility function to validate API question has required analytics fields
+export function validateAPIQuestion(apiQuestion: QuizQuestion): { isValid: boolean; error?: string } {
+  if (!apiQuestion.topic || !apiQuestion.topic.trim()) {
+    return { 
+      isValid: false, 
+      error: 'Question is missing required topic field for analytics' 
+    };
+  }
+  
+  if (apiQuestion.topic.length > 50) {
+    return { 
+      isValid: false, 
+      error: 'Topic must be 50 characters or less' 
+    };
+  }
+  
+  return { isValid: true };
 }

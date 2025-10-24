@@ -1,4 +1,5 @@
-// File: app/Quiz/quiz-overview.tsx - Updated with Dark Theme
+
+// File: app/Quiz/quiz-overview.tsx - Updated with Topic Management
 import { convertAPIQuestionToInternalFormat, generateQuizFromAI } from '@/api/quizApi';
 import { TopicSelectionModal } from '@/components/Interface/ai-quiz-modal';
 import { QuizService, type Question, type Quiz } from '@/services/quiz-service';
@@ -12,6 +13,7 @@ import {
   Alert,
   FlatList,
   Image,
+  Modal,
   SafeAreaView,
   ScrollView,
   StyleSheet,
@@ -30,6 +32,7 @@ const QuizOverview: React.FC = () => {
     quizTitle,
     quizImage,
     questions,
+    topics,
     isLoading,
     loadingMessage,
     setQuizTitle,
@@ -40,10 +43,18 @@ const QuizOverview: React.FC = () => {
     setLoading,
     loadQuizData,
     resetToDefaults,
-    setIsFromOverview
+    setIsFromOverview,
+    addTopic,
+    updateTopic,
+    deleteTopic,
+    extractTopicsFromQuestions
   } = useQuizStore();
 
   const [showTopicModal, setShowTopicModal] = useState(false);
+  const [showManageTopicsModal, setShowManageTopicsModal] = useState(false);
+  const [newTopicInput, setNewTopicInput] = useState('');
+  const [editingTopic, setEditingTopic] = useState<string | null>(null);
+  const [editTopicInput, setEditTopicInput] = useState('');
 
   // Hardcoded quiz cover images
   const defaultQuizImages = [
@@ -65,6 +76,13 @@ const QuizOverview: React.FC = () => {
     }
   }, [quizId]);
 
+  // Auto-extract topics from questions when component mounts or questions change
+  useEffect(() => {
+    if (questions.length > 0 && topics.length === 0) {
+      extractTopicsFromQuestions();
+    }
+  }, [questions.length]);
+
   const loadQuiz = async (id: string) => {
     try {
       setLoading(true, 'Loading quiz...');
@@ -73,7 +91,8 @@ const QuizOverview: React.FC = () => {
         loadQuizData({
           title: quiz.title,
           image: '', // Set if you store images in quiz data
-          questions: quiz.questions
+          questions: quiz.questions,
+          topics: quiz.topics || []
         });
       }
     } catch (error) {
@@ -98,6 +117,7 @@ const QuizOverview: React.FC = () => {
     const quiz: Omit<Quiz, 'uid' | 'id' | 'createdAt' | 'updatedAt'> = {
       title: quizTitle,
       questions,
+      topics // Include topics in quiz data
     };
 
     const validation = QuizService.validateQuiz(quiz);
@@ -227,7 +247,9 @@ const QuizOverview: React.FC = () => {
       correctAnswers: [0],
       timeLimit: 30,
       matchPairs: [],
-      correctAnswer: ''
+      correctAnswer: '',
+      topic: '', // Empty topic initially
+      points: 1
     };
 
     addQuestion(newQuestion);
@@ -272,6 +294,9 @@ const QuizOverview: React.FC = () => {
         setQuizTitle(topic);
       }
       
+      // Extract any new topics from AI-generated questions
+      extractTopicsFromQuestions();
+      
       Alert.alert("Success", `Added ${convertedQuestions.length} question${convertedQuestions.length > 1 ? 's' : ''} to your quiz!`);
     } catch (error: any) {
       console.error(error);
@@ -293,6 +318,79 @@ const QuizOverview: React.FC = () => {
           onPress: () => {
             resetToDefaults();
             router.back();
+          }
+        }
+      ]
+    );
+  };
+
+  // Topic Management Functions
+  const handleAddTopic = () => {
+    const trimmedTopic = newTopicInput.trim();
+    
+    if (!trimmedTopic) {
+      Alert.alert('Validation Error', 'Topic name cannot be empty.');
+      return;
+    }
+
+    if (trimmedTopic.length > 50) {
+      Alert.alert('Validation Error', 'Topic name must be 50 characters or less.');
+      return;
+    }
+
+    const success = addTopic(trimmedTopic);
+    
+    if (success) {
+      setNewTopicInput('');
+      Alert.alert('Success', `Topic "${trimmedTopic}" added successfully!`);
+    } else {
+      Alert.alert('Duplicate Topic', 'This topic already exists.');
+    }
+  };
+
+  const handleStartEditTopic = (topic: string) => {
+    setEditingTopic(topic);
+    setEditTopicInput(topic);
+  };
+
+  const handleSaveEditTopic = () => {
+    if (!editingTopic) return;
+    
+    const trimmedTopic = editTopicInput.trim();
+    
+    if (!trimmedTopic) {
+      Alert.alert('Validation Error', 'Topic name cannot be empty.');
+      return;
+    }
+
+    if (trimmedTopic.length > 50) {
+      Alert.alert('Validation Error', 'Topic name must be 50 characters or less.');
+      return;
+    }
+
+    const success = updateTopic(editingTopic, trimmedTopic);
+    
+    if (success) {
+      setEditingTopic(null);
+      setEditTopicInput('');
+      Alert.alert('Success', 'Topic updated successfully!');
+    } else {
+      Alert.alert('Error', 'A topic with this name already exists.');
+    }
+  };
+
+  const handleDeleteTopic = (topic: string) => {
+    Alert.alert(
+      'Delete Topic',
+      `Are you sure you want to delete "${topic}"? Questions using this topic will have their topic cleared.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => {
+            deleteTopic(topic);
+            Alert.alert('Success', 'Topic deleted successfully!');
           }
         }
       ]
@@ -339,9 +437,22 @@ const QuizOverview: React.FC = () => {
         </View>
         
         <View style={styles.questionContent}>
-          <Text style={styles.questionMeta}>
-            #{index + 1} • {getQuestionTypeLabel(item.type)}
-          </Text>
+          <View style={styles.questionMetaRow}>
+            <Text style={styles.questionMeta}>
+              #{index + 1} • {getQuestionTypeLabel(item.type)}
+            </Text>
+            {item.topic && (
+              <View style={styles.topicBadge}>
+                <Ionicons name="pricetag" size={10} color="#8b5cf6" />
+                <Text style={styles.topicBadgeText}>{item.topic}</Text>
+              </View>
+            )}
+            {!item.topic && (
+              <View style={styles.noTopicBadge}>
+                <Text style={styles.noTopicBadgeText}>No Topic</Text>
+              </View>
+            )}
+          </View>
           <Text style={styles.questionPreview} numberOfLines={2}>
             {getQuestionPreview(item)}
           </Text>
@@ -406,6 +517,39 @@ const QuizOverview: React.FC = () => {
             multiline
           />
 
+          {/* Topics Section */}
+          <View style={styles.topicsSection}>
+            <View style={styles.topicsHeader}>
+              <Text style={styles.topicsTitle}>Topics ({topics.length})</Text>
+              <TouchableOpacity
+                style={styles.manageTopicsButton}
+                onPress={() => setShowManageTopicsModal(true)}
+              >
+                <Ionicons name="pricetags" size={16} color="#ffffff" />
+                <Text style={styles.manageTopicsButtonText}>Manage Topics</Text>
+              </TouchableOpacity>
+            </View>
+
+            {topics.length > 0 ? (
+              <ScrollView 
+                horizontal 
+                showsHorizontalScrollIndicator={false}
+                style={styles.topicsScrollView}
+              >
+                {topics.map((topic, index) => (
+                  <View key={index} style={styles.topicChip}>
+                    <Ionicons name="pricetag" size={12} color="#8b5cf6" />
+                    <Text style={styles.topicChipText}>{topic}</Text>
+                  </View>
+                ))}
+              </ScrollView>
+            ) : (
+              <Text style={styles.noTopicsText}>
+                No topics defined yet. Tap "Manage Topics" to add some!
+              </Text>
+            )}
+          </View>
+
           {/* Questions Section */}
           <View style={styles.questionsSection}>
             <View style={styles.questionsHeader}>
@@ -457,6 +601,123 @@ const QuizOverview: React.FC = () => {
           <Ionicons name="add" size={24} color="#ffffff" />
           <Text style={styles.fabText}>Add Question</Text>
         </TouchableOpacity>
+
+        {/* Manage Topics Modal */}
+        <Modal
+          visible={showManageTopicsModal}
+          transparent={true}
+          animationType="slide"
+          onRequestClose={() => setShowManageTopicsModal(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Manage Topics</Text>
+                <TouchableOpacity
+                  onPress={() => setShowManageTopicsModal(false)}
+                  style={styles.modalCloseIcon}
+                >
+                  <Ionicons name="close" size={24} color="#94a3b8" />
+                </TouchableOpacity>
+              </View>
+
+              {/* Add New Topic */}
+              <View style={styles.addTopicSection}>
+                <TextInput
+                  style={styles.topicInput}
+                  placeholder="Enter new topic..."
+                  placeholderTextColor="#64748b"
+                  value={newTopicInput}
+                  onChangeText={setNewTopicInput}
+                  maxLength={50}
+                />
+                <TouchableOpacity
+                  style={styles.addTopicButton}
+                  onPress={handleAddTopic}
+                >
+                  <Ionicons name="add-circle" size={20} color="#ffffff" />
+                  <Text style={styles.addTopicButtonText}>Add</Text>
+                </TouchableOpacity>
+              </View>
+
+              {/* Topics List */}
+              <ScrollView style={styles.topicsListContainer}>
+                {topics.length === 0 ? (
+                  <View style={styles.emptyTopicsList}>
+                    <Ionicons name="pricetags-outline" size={48} color="#475569" />
+                    <Text style={styles.emptyTopicsText}>No topics yet</Text>
+                    <Text style={styles.emptyTopicsSubtext}>
+                      Add topics to categorize your questions for better analytics
+                    </Text>
+                  </View>
+                ) : (
+                  topics.map((topic, index) => (
+                    <View key={index} style={styles.topicListItem}>
+                      {editingTopic === topic ? (
+                        <>
+                          <TextInput
+                            style={styles.editTopicInput}
+                            value={editTopicInput}
+                            onChangeText={setEditTopicInput}
+                            maxLength={50}
+                            autoFocus
+                          />
+                          <TouchableOpacity
+                            style={styles.saveEditButton}
+                            onPress={handleSaveEditTopic}
+                          >
+                            <Ionicons name="checkmark" size={20} color="#10b981" />
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            style={styles.cancelEditButton}
+                            onPress={() => {
+                              setEditingTopic(null);
+                              setEditTopicInput('');
+                            }}
+                          >
+                            <Ionicons name="close" size={20} color="#ef4444" />
+                          </TouchableOpacity>
+                        </>
+                      ) : (
+                        <>
+                          <View style={styles.topicListItemContent}>
+                            <Ionicons name="pricetag" size={16} color="#8b5cf6" />
+                            <Text style={styles.topicListItemText}>{topic}</Text>
+                            <Text style={styles.topicUsageCount}>
+                              ({questions.filter(q => q.topic === topic).length} questions)
+                            </Text>
+                          </View>
+                          <View style={styles.topicActions}>
+                            <TouchableOpacity
+                              style={styles.editTopicButton}
+                              onPress={() => handleStartEditTopic(topic)}
+                            >
+                              <Ionicons name="pencil" size={18} color="#3b82f6" />
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                              style={styles.deleteTopicButton}
+                              onPress={() => handleDeleteTopic(topic)}
+                            >
+                              <Ionicons name="trash" size={18} color="#ef4444" />
+                            </TouchableOpacity>
+                          </View>
+                        </>
+                      )}
+                    </View>
+                  ))
+                )}
+              </ScrollView>
+
+              {/* Close Button */}
+              <TouchableOpacity
+                style={styles.modalCloseButton}
+                onPress={() => setShowManageTopicsModal(false)}
+              >
+                <Text style={styles.modalCloseButtonText}>Done</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Modal>
 
         {/* Topic Selection Modal */}
         <TopicSelectionModal
@@ -670,6 +931,241 @@ const styles = StyleSheet.create({
     color: '#94a3b8',
     fontSize: 16,
   },
+   topicsSection: {
+    marginBottom: 24,
+    backgroundColor: '#1e293b',
+    borderRadius: 12,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#334155',
+  },
+  topicsHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  topicsTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#ffffff',
+  },
+  manageTopicsButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#8b5cf6',
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 16,
+    gap: 4,
+  },
+  manageTopicsButtonText: {
+    color: '#ffffff',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  topicsScrollView: {
+    flexDirection: 'row',
+  },
+  topicChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(139, 92, 246, 0.15)',
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 16,
+    marginRight: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(139, 92, 246, 0.3)',
+    gap: 4,
+  },
+  topicChipText: {
+    color: '#c4b5fd',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  noTopicsText: {
+    color: '#64748b',
+    fontSize: 14,
+    fontStyle: 'italic',
+    textAlign: 'center',
+  },
+  questionMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4,
+    gap: 8,
+  },
+  topicBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(139, 92, 246, 0.15)',
+    paddingVertical: 2,
+    paddingHorizontal: 6,
+    borderRadius: 8,
+    gap: 3,
+  },
+  topicBadgeText: {
+    color: '#c4b5fd',
+    fontSize: 9,
+    fontWeight: '600',
+  },
+  noTopicBadge: {
+    backgroundColor: 'rgba(239, 68, 68, 0.15)',
+    paddingVertical: 2,
+    paddingHorizontal: 6,
+    borderRadius: 8,
+  },
+  noTopicBadgeText: {
+    color: '#fca5a5',
+    fontSize: 9,
+    fontWeight: '600',
+  },
+  
+  // Modal styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContent: {
+    backgroundColor: '#1e293b',
+    borderRadius: 16,
+    padding: 24,
+    width: '90%',
+    maxHeight: '80%',
+    borderWidth: 1,
+    borderColor: '#334155',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  modalTitle: {
+    color: '#ffffff',
+    fontSize: 20,
+    fontWeight: 'bold',
+  },
+  modalCloseIcon: {
+    padding: 4,
+  },
+  addTopicSection: {
+    flexDirection: 'row',
+    marginBottom: 20,
+    gap: 8,
+  },
+  topicInput: {
+    flex: 1,
+    backgroundColor: '#0f172a',
+    borderRadius: 8,
+    padding: 12,
+    color: '#ffffff',
+    fontSize: 14,
+    borderWidth: 1,
+    borderColor: '#334155',
+  },
+  addTopicButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#8b5cf6',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 8,
+    gap: 4,
+  },
+  addTopicButtonText: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  topicsListContainer: {
+    maxHeight: 300,
+    marginBottom: 16,
+  },
+  emptyTopicsList: {
+    alignItems: 'center',
+    paddingVertical: 40,
+    gap: 8,
+  },
+  emptyTopicsText: {
+    fontSize: 16,
+    color: '#94a3b8',
+    fontWeight: '600',
+  },
+  emptyTopicsSubtext: {
+    fontSize: 12,
+    color: '#64748b',
+    textAlign: 'center',
+    paddingHorizontal: 20,
+  },
+  topicListItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#0f172a',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#334155',
+  },
+  topicListItemContent: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  topicListItemText: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  topicUsageCount: {
+    color: '#64748b',
+    fontSize: 12,
+  },
+  topicActions: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  editTopicButton: {
+    padding: 6,
+  },
+  deleteTopicButton: {
+    padding: 6,
+  },
+  editTopicInput: {
+    flex: 1,
+    backgroundColor: '#334155',
+    borderRadius: 6,
+    padding: 8,
+    color: '#ffffff',
+    fontSize: 14,
+    borderWidth: 1,
+    borderColor: '#475569',
+  },
+  saveEditButton: {
+    padding: 6,
+    marginLeft: 8,
+  },
+  cancelEditButton: {
+    padding: 6,
+  },
+  modalCloseButton: {
+    backgroundColor: '#10b981',
+    borderRadius: 8,
+    padding: 14,
+    alignItems: 'center',
+  },
+  modalCloseButtonText: {
+    color: '#ffffff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  
+
 });
 
 export default QuizOverview;

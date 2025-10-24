@@ -1,7 +1,7 @@
 // File: services/quiz-service.ts
 import { generateQuizFromAI } from '@/api/quizApi';
 import { addDoc, collection, deleteDoc, doc, getDoc, getDocs, orderBy, query, serverTimestamp, updateDoc, where } from 'firebase/firestore';
-import { auth, db } from '../firebase'; // Make sure to import auth
+import { auth, db } from '../firebase';
 
 export interface MatchPair {
   left: string;
@@ -18,15 +18,22 @@ export interface Question {
   correctAnswer: string;
   matchPairs: MatchPair[];
   timeLimit: number;
+  
+  // Analytics field
+  topic: string; // Required for analytics
+  points?: number; // Optional: custom point value
 }
 
 export interface Quiz {
   id?: string;
   title: string;
   questions: Question[];
-  uid: string; // Changed from userId to uid for consistency
+  uid: string;
   createdAt?: any;
   updatedAt?: any;
+  category?: string; // Overall quiz category
+  tags?: string[]; // Additional tags for organization
+  topics?: string[]; // Per-quiz topics list for analytics
 }
 
 export interface AIQuizQuestion {
@@ -39,8 +46,58 @@ export interface AIQuizQuestion {
   };
 }
 
+// ============================================
+// NEW ANALYTICS INTERFACES
+// ============================================
+
+export interface QuestionResult {
+  questionId: string;
+  isCorrect: boolean;
+  timeSpent: number;
+  topic: string;
+  points: number;
+}
+
+export interface QuizAttempt {
+  id?: string;
+  quizId: string;
+  quizTitle: string;
+  userId: string;
+  score: number;
+  totalPoints: number;
+  percentage: number;
+  timeSpent: number;
+  startedAt: any;
+  completedAt: any;
+  questionResults: QuestionResult[];
+}
+
+export interface TopicPerformance {
+  topic: string;
+  correct: number;
+  total: number;
+  accuracy: number;
+  avgTime: number;
+}
+
+export interface ScoreTrend {
+  attemptNumber: number;
+  score: number;
+  percentage: number;
+  date: Date;
+  attemptId: string;
+}
+
+export interface TimingTrend {
+  attemptNumber: number;
+  avgTimePerQuestion: number;
+  totalTime: number;
+  date: Date;
+}
+
 export class QuizService {
   private static readonly COLLECTION_NAME = 'quizzes';
+  private static readonly ATTEMPTS_SUBCOLLECTION = 'attempts';
 
   /**
    * Get current user ID
@@ -63,7 +120,9 @@ export class QuizService {
       const quizData = {
         title: quiz.title,
         questions: quiz.questions,
-        uid, // Using uid instead of userId
+        category: quiz.category || '',
+        tags: quiz.tags || [],
+        uid,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       };
@@ -102,7 +161,11 @@ export class QuizService {
           correctAnswers: question.correctAnswers || (question.answerIndex !== undefined ? [question.answerIndex] : [0]),
           correctAnswer: question.correctAnswer || '',
           matchPairs: question.matchPairs || [],
-          timeLimit: question.timeLimit || 30
+          timeLimit: question.timeLimit || 30,
+          
+          // Analytics field with default
+          topic: question.topic || 'Uncategorized',
+          points: question.points || 1
         }));
 
         return {
@@ -202,7 +265,11 @@ export class QuizService {
           correctAnswers: question.correctAnswers || (question.answerIndex !== undefined ? [question.answerIndex] : [0]),
           correctAnswer: question.correctAnswer || '',
           matchPairs: question.matchPairs || [],
-          timeLimit: question.timeLimit || 30
+          timeLimit: question.timeLimit || 30,
+          
+          // Analytics field with default
+          topic: question.topic || 'Uncategorized',
+          points: question.points || 1
         }));
 
         return {
@@ -238,13 +305,204 @@ export class QuizService {
         correctAnswers: apiQuestion.correctAnswers || [0],
         correctAnswer: apiQuestion.correctAnswer || "",
         matchPairs: apiQuestion.matchPairs || [],
-        timeLimit: apiQuestion.timeLimit || 30
+        timeLimit: apiQuestion.timeLimit || 30,
+        
+        // Analytics field - AI should provide this, fallback to main topic
+        topic: apiQuestion.topic || topic || 'General',
+        points: apiQuestion.points || 1
       }));
     } catch (error) {
       console.error('AI quiz generation error:', error);
       throw new Error('Failed to generate quiz questions with AI.');
     }
   }
+
+  // ============================================
+  // ANALYTICS METHODS
+  // ============================================
+
+  /**
+   * Save a quiz attempt to /users/{uid}/attempts/{attemptId}
+   */
+  static async saveQuizAttempt(attemptData: Omit<QuizAttempt, 'id' | 'userId'>): Promise<string> {
+    try {
+      const uid = this.getCurrentUserId();
+      
+      const attemptDoc = {
+        ...attemptData,
+        userId: uid,
+        completedAt: serverTimestamp(),
+      };
+
+      const attemptsRef = collection(db, 'users', uid, this.ATTEMPTS_SUBCOLLECTION);
+      const docRef = await addDoc(attemptsRef, attemptDoc);
+      
+      console.log('Quiz attempt saved:', docRef.id);
+      return docRef.id;
+    } catch (error) {
+      console.error('Error saving quiz attempt:', error);
+      throw new Error('Failed to save quiz attempt.');
+    }
+  }
+
+  /**
+   * Get all quiz attempts for the current user
+   * Optionally filter by quizId
+   */
+  static async getUserQuizAttempts(quizId?: string): Promise<QuizAttempt[]> {
+    try {
+      const uid = this.getCurrentUserId();
+      const attemptsRef = collection(db, 'users', uid, this.ATTEMPTS_SUBCOLLECTION);
+      
+      let q;
+      if (quizId) {
+        q = query(
+          attemptsRef,
+          where('quizId', '==', quizId),
+          orderBy('completedAt', 'desc')
+        );
+      } else {
+        q = query(
+          attemptsRef,
+          orderBy('completedAt', 'desc')
+        );
+      }
+      
+      const querySnapshot = await getDocs(q);
+      
+      return querySnapshot.docs.map(doc => {
+        const data = doc.data();
+        return {
+          id: doc.id,
+          ...data,
+          startedAt: data.startedAt?.toDate() || new Date(),
+          completedAt: data.completedAt?.toDate() || new Date(),
+        } as QuizAttempt;
+      });
+    } catch (error) {
+      console.error('Error fetching quiz attempts:', error);
+      throw new Error('Failed to fetch quiz attempts.');
+    }
+  }
+
+  /**
+   * Get performance breakdown by topic
+   */
+  static getPerformanceByTopic(attempts: QuizAttempt[]): TopicPerformance[] {
+    const topicMap = new Map<string, { correct: number; total: number; totalTime: number }>();
+    
+    attempts.forEach(attempt => {
+      attempt.questionResults.forEach(result => {
+        const topic = result.topic || 'Uncategorized';
+        const existing = topicMap.get(topic) || { correct: 0, total: 0, totalTime: 0 };
+        
+        topicMap.set(topic, {
+          correct: existing.correct + (result.isCorrect ? 1 : 0),
+          total: existing.total + 1,
+          totalTime: existing.totalTime + result.timeSpent,
+        });
+      });
+    });
+    
+    const topicPerformance: TopicPerformance[] = [];
+    topicMap.forEach((value, topic) => {
+      topicPerformance.push({
+        topic,
+        correct: value.correct,
+        total: value.total,
+        accuracy: (value.correct / value.total) * 100,
+        avgTime: value.totalTime / value.total,
+      });
+    });
+    
+    // Sort by accuracy (lowest first to highlight weak areas)
+    return topicPerformance.sort((a, b) => a.accuracy - b.accuracy);
+  }
+
+  /**
+   * Get score trends across attempts
+   */
+  static getScoreTrends(attempts: QuizAttempt[]): ScoreTrend[] {
+    return attempts
+      .map((attempt, index) => ({
+        attemptNumber: attempts.length - index,
+        score: attempt.score,
+        percentage: attempt.percentage,
+        date: attempt.completedAt instanceof Date ? attempt.completedAt : new Date(attempt.completedAt),
+        attemptId: attempt.id || '',
+      }))
+      .reverse(); // Oldest to newest
+  }
+
+  /**
+   * Get timing trends across attempts
+   */
+  static getTimingTrends(attempts: QuizAttempt[]): TimingTrend[] {
+    return attempts
+      .map((attempt, index) => {
+        const totalQuestions = attempt.questionResults.length;
+        return {
+          attemptNumber: attempts.length - index,
+          avgTimePerQuestion: attempt.timeSpent / totalQuestions,
+          totalTime: attempt.timeSpent,
+          date: attempt.completedAt instanceof Date ? attempt.completedAt : new Date(attempt.completedAt),
+        };
+      })
+      .reverse(); // Oldest to newest
+  }
+
+  /**
+   * Get summary statistics for a quiz
+   */
+  static getQuizSummaryStats(attempts: QuizAttempt[]) {
+    if (attempts.length === 0) {
+      return {
+        totalAttempts: 0,
+        averageScore: 0,
+        bestScore: 0,
+        worstScore: 0,
+        averageTime: 0,
+        lastAttemptDate: null,
+      };
+    }
+
+    const scores = attempts.map(a => a.percentage);
+    const times = attempts.map(a => a.timeSpent);
+    
+    return {
+      totalAttempts: attempts.length,
+      averageScore: scores.reduce((a, b) => a + b, 0) / scores.length,
+      bestScore: Math.max(...scores),
+      worstScore: Math.min(...scores),
+      averageTime: times.reduce((a, b) => a + b, 0) / times.length,
+      lastAttemptDate: attempts[0].completedAt,
+    };
+  }
+
+  /**
+   * Group attempts by quiz for overview
+   */
+  static async getAttemptsGroupedByQuiz(): Promise<Map<string, QuizAttempt[]>> {
+    try {
+      const allAttempts = await this.getUserQuizAttempts();
+      const grouped = new Map<string, QuizAttempt[]>();
+      
+      allAttempts.forEach(attempt => {
+        const existing = grouped.get(attempt.quizId) || [];
+        existing.push(attempt);
+        grouped.set(attempt.quizId, existing);
+      });
+      
+      return grouped;
+    } catch (error) {
+      console.error('Error grouping attempts:', error);
+      throw error;
+    }
+  }
+
+  // ============================================
+  // EXISTING VALIDATION METHODS
+  // ============================================
 
   /**
    * Validate quiz data before saving
@@ -263,6 +521,18 @@ export class QuizService {
     quiz.questions.forEach((question, index) => {
       if (!question.question || !question.question.trim()) {
         errors.push(`Question ${index + 1} text is required.`);
+      }
+
+      // Validate topic field
+      if (!question.topic || !question.topic.trim()) {
+        errors.push(`Question ${index + 1} must have a topic assigned for analytics.`);
+      } else if (question.topic.length > 50) {
+        errors.push(`Question ${index + 1} topic must be 50 characters or less.`);
+      }
+
+      // Validate points if provided
+      if (question.points !== undefined && (typeof question.points !== 'number' || question.points < 0)) {
+        errors.push(`Question ${index + 1} points must be a non-negative number.`);
       }
 
       switch (question.type) {
@@ -364,6 +634,44 @@ export class QuizService {
     return { isValid: true };
   }
 
+  /**
+   * Get common topics from existing quizzes for autocomplete
+   */
+  static async getCommonTopics(): Promise<string[]> {
+    try {
+      const quizzes = await this.getAllQuizzes();
+      const topicsSet = new Set<string>();
+      
+      quizzes.forEach(quiz => {
+        quiz.questions.forEach(question => {
+          if (question.topic && question.topic !== 'Uncategorized') {
+            topicsSet.add(question.topic);
+          }
+        });
+      });
+      
+      return Array.from(topicsSet).sort();
+    } catch (error) {
+      console.error('Error fetching common topics:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Get suggested topics based on quiz category
+   */
+  static getSuggestedTopics(category?: string): string[] {
+    const topicSuggestions: Record<string, string[]> = {
+      'Math': ['Algebra', 'Geometry', 'Calculus', 'Statistics', 'Trigonometry'],
+      'Science': ['Biology', 'Chemistry', 'Physics', 'Earth Science', 'Astronomy'],
+      'History': ['Ancient History', 'Modern History', 'World Wars', 'Civilizations', 'Revolution'],
+      'Language': ['Grammar', 'Vocabulary', 'Literature', 'Writing', 'Reading Comprehension'],
+      'Computer Science': ['Programming', 'Data Structures', 'Algorithms', 'Databases', 'Networking']
+    };
+
+    return category && topicSuggestions[category] ? topicSuggestions[category] : [];
+  }
+
   static createBlankQuestion(type: Question['type'], id?: string): Question {
     const baseQuestion = {
       id: id || `question_${Date.now()}`,
@@ -371,6 +679,8 @@ export class QuizService {
       question: '',
       image: '',
       timeLimit: 30,
+      topic: '', // Required field
+      points: 1
     };
 
     switch (type) {
@@ -419,6 +729,7 @@ export class QuizService {
 
   static isQuestionComplete(question: Question): boolean {
     if (!question.question.trim()) return false;
+    if (!question.topic || !question.topic.trim()) return false; // Topic is now required
 
     switch (question.type) {
       case 'multiple_choice':

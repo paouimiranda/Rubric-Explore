@@ -12,7 +12,7 @@ const BottomNavigation = () => {
           <Image source={require('@/assets/images/home_icon.png')} style={styles.navIcon} />
         </TouchableOpacity>
         
-        <TouchableOpacity style={styles.navButton} onPress={() => router.push(`../Explore/explore`)}>
+        <TouchableOpacity style={styles.navButton} onPress={() => router.push(`../Quiz/Analytics/quiz-performance-overview`)}>
           <Image source={require('@/assets/images/discover_icon.png')} style={styles.navIcon} />
         </TouchableOpacity>
         

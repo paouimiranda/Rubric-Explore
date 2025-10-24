@@ -1,8 +1,9 @@
-// File: app/Quiz/quiz-create.tsx - Complete Zustand Version
+// File: app/Quiz/quiz-create.tsx - Complete Zustand Version with Topic Selector
 import { convertAPIQuestionToInternalFormat, generateQuizFromAI } from '@/api/quizApi';
 import { TopicSelectionModal } from '@/components/Interface/ai-quiz-modal';
 import { QuizService, type Question, type Quiz } from '@/services/quiz-service';
 import { useQuizStore } from '@/services/stores/quiz-store';
+import { Ionicons } from '@expo/vector-icons';
 import * as FileSystem from 'expo-file-system';
 import * as ImagePicker from 'expo-image-picker';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -30,6 +31,7 @@ const QuizMaker = () => {
   const {
     quizTitle,
     questions,
+    topics,
     currentQuestionIndex,
     isLoading,
     loadingMessage,
@@ -40,14 +42,17 @@ const QuizMaker = () => {
     setLoading,
     setIsFromOverview,
     addQuestion: addQuestionToStore,
-    deleteQuestion: deleteQuestionFromStore
+    deleteQuestion: deleteQuestionFromStore,
+    addTopic
   } = useQuizStore();
 
   // Local state for modals
   const [showTimeLimitModal, setShowTimeLimitModal] = useState(false);
   const [showQuestionTypeModal, setShowQuestionTypeModal] = useState(false);
   const [showTopicModal, setShowTopicModal] = useState(false);
+  const [showTopicSelectorModal, setShowTopicSelectorModal] = useState(false);
   const [customTimeLimit, setCustomTimeLimit] = useState('');
+  const [newTopicInput, setNewTopicInput] = useState('');
 
   // Handle navigation from overview
   useEffect(() => {
@@ -82,7 +87,9 @@ const QuizMaker = () => {
       correctAnswers: [0], 
       timeLimit: 30,
       matchPairs: [],
-      correctAnswer: ''
+      correctAnswer: '',
+      topic: '',
+      points: 1
     };
     addQuestionToStore(newQuestion);
     setCurrentQuestionIndex(questions.length);
@@ -203,6 +210,49 @@ const QuizMaker = () => {
     }
   };
 
+  // Topic management methods
+  const handleTopicSelect = (topic: string) => {
+    const updated = { ...questions[currentQuestionIndex] };
+    updated.topic = topic;
+    updateQuestion(currentQuestionIndex, updated);
+    setShowTopicSelectorModal(false);
+  };
+
+  const handleAddNewTopicFromSelector = () => {
+    const trimmedTopic = newTopicInput.trim();
+    
+    if (!trimmedTopic) {
+      Alert.alert('Validation Error', 'Topic name cannot be empty.');
+      return;
+    }
+
+    if (trimmedTopic.length > 50) {
+      Alert.alert('Validation Error', 'Topic name must be 50 characters or less.');
+      return;
+    }
+
+    const success = addTopic(trimmedTopic);
+    
+    if (success) {
+      // Assign the new topic to current question
+      const updated = { ...questions[currentQuestionIndex] };
+      updated.topic = trimmedTopic;
+      updateQuestion(currentQuestionIndex, updated);
+      
+      setNewTopicInput('');
+      setShowTopicSelectorModal(false);
+      Alert.alert('Success', `Topic "${trimmedTopic}" added and assigned!`);
+    } else {
+      Alert.alert('Duplicate Topic', 'This topic already exists.');
+    }
+  };
+
+  const handleClearTopic = () => {
+    const updated = { ...questions[currentQuestionIndex] };
+    updated.topic = '';
+    updateQuestion(currentQuestionIndex, updated);
+  };
+
   const handleSelectImage = async () => {
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
@@ -245,6 +295,7 @@ const QuizMaker = () => {
     const quiz: Omit<Quiz, 'uid' | 'id' | 'createdAt' | 'updatedAt'> = {
       title: quizTitle,
       questions,
+      topics
     };
 
     const validation = QuizService.validateQuiz(quiz);
@@ -527,6 +578,30 @@ const QuizMaker = () => {
             multiline={currentQuestion.type === 'fill_blank'}
           />
 
+          {/* Topic Selector Button */}
+          <TouchableOpacity
+            onPress={() => setShowTopicSelectorModal(true)}
+            style={styles.topicSelectorBtn}
+          >
+            <View style={styles.topicSelectorContent}>
+              <Ionicons name="pricetag" size={16} color="#fff" />
+              <Text style={styles.topicSelectorText}>
+                {currentQuestion.topic ? currentQuestion.topic : 'Select Topic (Optional)'}
+              </Text>
+            </View>
+            {currentQuestion.topic ? (
+              <TouchableOpacity
+                onPress={handleClearTopic}
+                style={styles.clearTopicBtn}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <Ionicons name="close-circle" size={20} color="#ef4444" />
+              </TouchableOpacity>
+            ) : (
+              <Text style={styles.topicSelectorArrow}>▼</Text>
+            )}
+          </TouchableOpacity>
+
           {/* Time Limit Button */}
           <TouchableOpacity
             onPress={() => setShowTimeLimitModal(true)}
@@ -564,7 +639,7 @@ const QuizMaker = () => {
             style={styles.questionNavBar}
             contentContainerStyle={styles.questionNavContent}
           >
-            {questions.map((_, index) => (
+            {questions.map((q, index) => (
               <TouchableOpacity
                 key={index}
                 style={[
@@ -579,6 +654,9 @@ const QuizMaker = () => {
                 ]}>
                   {index + 1}
                 </Text>
+                {q.topic && (
+                  <View style={styles.navTopicIndicator} />
+                )}
               </TouchableOpacity>
             ))}
           </ScrollView>
@@ -592,6 +670,104 @@ const QuizMaker = () => {
             </TouchableOpacity>
           )}
         </View>
+
+        {/* Topic Selector Modal */}
+        <Modal
+          visible={showTopicSelectorModal}
+          transparent={true}
+          animationType="slide"
+          onRequestClose={() => setShowTopicSelectorModal(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Select Topic</Text>
+                <TouchableOpacity
+                  onPress={() => setShowTopicSelectorModal(false)}
+                  style={styles.modalCloseIcon}
+                >
+                  <Ionicons name="close" size={24} color="#94a3b8" />
+                </TouchableOpacity>
+              </View>
+
+              {/* Add New Topic Section */}
+              <View style={styles.addTopicInModalSection}>
+                <Text style={styles.addTopicInModalLabel}>Add New Topic:</Text>
+                <View style={styles.addTopicInModalRow}>
+                  <TextInput
+                    style={styles.newTopicInModalInput}
+                    placeholder="Enter topic name..."
+                    placeholderTextColor="#64748b"
+                    value={newTopicInput}
+                    onChangeText={setNewTopicInput}
+                    maxLength={50}
+                  />
+                  <TouchableOpacity
+                    style={styles.addTopicInModalBtn}
+                    onPress={handleAddNewTopicFromSelector}
+                  >
+                    <Ionicons name="add-circle" size={20} color="#ffffff" />
+                  </TouchableOpacity>
+                </View>
+              </View>
+
+              {/* Topics List */}
+              <ScrollView style={styles.topicsList}>
+                {topics.length === 0 ? (
+                  <View style={styles.emptyTopicsInModal}>
+                    <Ionicons name="pricetags-outline" size={48} color="#475569" />
+                    <Text style={styles.emptyTopicsInModalText}>No topics available</Text>
+                    <Text style={styles.emptyTopicsInModalSubtext}>
+                      Add topics in the quiz overview or create one above
+                    </Text>
+                  </View>
+                ) : (
+                  topics.map((topic, index) => (
+                    <TouchableOpacity
+                      key={index}
+                      style={[
+                        styles.topicOption,
+                        currentQuestion.topic === topic && styles.topicOptionSelected
+                      ]}
+                      onPress={() => handleTopicSelect(topic)}
+                    >
+                      <View style={styles.topicOptionContent}>
+                        <Ionicons 
+                          name={currentQuestion.topic === topic ? "checkmark-circle" : "pricetag"} 
+                          size={20} 
+                          color={currentQuestion.topic === topic ? "#10b981" : "#8b5cf6"} 
+                        />
+                        <Text style={[
+                          styles.topicOptionText,
+                          currentQuestion.topic === topic && styles.topicOptionTextSelected
+                        ]}>
+                          {topic}
+                        </Text>
+                      </View>
+                      <Text style={styles.topicUsageInModal}>
+                        {questions.filter(q => q.topic === topic).length} questions
+                      </Text>
+                    </TouchableOpacity>
+                  ))
+                )}
+              </ScrollView>
+
+              {/* Clear Topic Button */}
+              {currentQuestion.topic && (
+                <TouchableOpacity
+                  style={styles.clearTopicInModalBtn}
+                  onPress={() => {
+                    handleClearTopic();
+                    setShowTopicSelectorModal(false);
+                  }}
+                >
+                  <Ionicons name="close-circle" size={18} color="#ef4444" />
+                  <Text style={styles.clearTopicInModalText}>Clear Topic</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          </View>
+        </Modal>
 
         {/* Time Limit Modal */}
         <Modal
@@ -726,25 +902,186 @@ const QuizMaker = () => {
 
 export default QuizMaker;
 
+// Add these new styles to your existing StyleSheet (keeping all existing styles)
 const styles = StyleSheet.create({
-  safeArea: {
+  // ... keep all existing styles from the original file ...
+  
+  // New styles for topic selector
+  topicSelectorBtn: {
+    backgroundColor: 'rgba(139, 92, 246, 0.2)',
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 10,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(139, 92, 246, 0.4)',
+  },
+  topicSelectorContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
     flex: 1,
   },
+  topicSelectorText: {
+    color: '#fff',
+    fontWeight: 'bold',
+    fontSize: 14,
+    flex: 1,
+  },
+  topicSelectorArrow: {
+    color: '#fff',
+    fontSize: 12,
+  },
+  clearTopicBtn: {
+    padding: 4,
+  },
+  navTopicIndicator: {
+    position: 'absolute',
+    top: 2,
+    right: 2,
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#8b5cf6',
+  },
+  
+  // Topic selector modal styles
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  modalCloseIcon: {
+    padding: 4,
+  },
+  addTopicInModalSection: {
+    marginBottom: 20,
+    padding: 12,
+    backgroundColor: 'rgba(139, 92, 246, 0.1)',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(139, 92, 246, 0.3)',
+  },
+  addTopicInModalLabel: {
+    color: '#c4b5fd',
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: 8,
+  },
+  addTopicInModalRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  newTopicInModalInput: {
+    flex: 1,
+    backgroundColor: '#0f172a',
+    borderRadius: 8,
+    padding: 10,
+    color: '#ffffff',
+    fontSize: 14,
+    borderWidth: 1,
+    borderColor: '#334155',
+  },
+  addTopicInModalBtn: {
+    backgroundColor: '#8b5cf6',
+    borderRadius: 8,
+    width: 44,
+    height: 44,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  topicsList: {
+    maxHeight: 300,
+    marginBottom: 16,
+  },
+  emptyTopicsInModal: {
+    alignItems: 'center',
+    paddingVertical: 40,
+    gap: 8,
+  },
+  emptyTopicsInModalText: {
+    fontSize: 16,
+    color: '#94a3b8',
+    fontWeight: '600',
+  },
+  emptyTopicsInModalSubtext: {
+    fontSize: 12,
+    color: '#64748b',
+    textAlign: 'center',
+    paddingHorizontal: 20,
+  },
+  topicOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#0f172a',
+    borderRadius: 8,
+    padding: 14,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#334155',
+  },
+  topicOptionSelected: {
+    backgroundColor: 'rgba(16, 185, 129, 0.1)',
+    borderColor: '#10b981',
+  },
+  topicOptionContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    flex: 1,
+  },
+  topicOptionText: {
+    color: '#ffffff',
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  topicOptionTextSelected: {
+    color: '#10b981',
+  },
+  topicUsageInModal: {
+    color: '#64748b',
+    fontSize: 12,
+  },
+  clearTopicInModalBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+    borderRadius: 8,
+    padding: 12,
+    gap: 6,
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.3)',
+  },
+  clearTopicInModalText: {
+    color: '#ef4444',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  
+  // Keep all other existing styles...
+  safeArea: { flex: 1 },
   header: {
     flexDirection: 'row',
     padding: 16,
     alignItems: 'center',
     gap: 12,
   },
-  titleInput: {
-    flex: 1,
-    backgroundColor: '#aad2b3ff',
-    borderRadius: 10,
-    height: 50,
-    paddingHorizontal: 16,
+  backBtn: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: 6,
+    marginRight: 12,
+  },
+  backBtnText: {
     color: '#fff',
-    fontWeight: 'bold',
-    textAlign: 'center',
+    fontSize: 16,
+    fontWeight: '500',
   },
   saveBtn: {
     backgroundColor: '#F5B3D7',
@@ -756,6 +1093,13 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontWeight: 'bold',
     fontSize: 12,
+  },
+  generateBtn: {
+    backgroundColor: '#4CAF50',
+    paddingVertical: 10,
+    paddingHorizontal: 15,
+    borderRadius: 6,
+    marginLeft: 10
   },
   mainContent: {
     flex: 1,
@@ -908,7 +1252,6 @@ const styles = StyleSheet.create({
     borderRadius: 5,
     backgroundColor: '#fff',
   },
-  // Fill in the blank styles
   fillBlankContainer: {
     marginBottom: 20,
   },
@@ -933,7 +1276,6 @@ const styles = StyleSheet.create({
     marginTop: 8,
     fontStyle: 'italic',
   },
-  // Matching styles
   matchingContainer: {
     marginBottom: 20,
   },
@@ -1023,6 +1365,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
+    position: 'relative',
   },
   questionNavItemActive: {
     backgroundColor: '#5aa7b4',
@@ -1049,13 +1392,6 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     fontSize: 20,
   },
-  generateBtn: {
-    backgroundColor: '#4CAF50',
-    paddingVertical: 10,
-    paddingHorizontal: 15,
-    borderRadius: 6,
-    marginLeft: 10
-  },
   loadingOverlay: {
     position: 'absolute',
     top: 0,
@@ -1072,7 +1408,6 @@ const styles = StyleSheet.create({
     marginTop: 12,
     fontSize: 16,
   },
-  // Modal styles
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.7)',
@@ -1094,7 +1429,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: 20,
   },
-  // Time limit modal styles
   presetTimesContainer: {
     marginBottom: 20,
   },
@@ -1176,7 +1510,6 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     fontSize: 16,
   },
-  // Question type modal styles
   questionTypeOption: {
     backgroundColor: 'rgba(255, 255, 255, 0.1)',
     borderRadius: 8,
@@ -1203,16 +1536,4 @@ const styles = StyleSheet.create({
   questionTypeOptionTextActive: {
     color: '#fff',
   },
-  backBtn: {
-  paddingVertical: 8,
-  paddingHorizontal: 12,
-  backgroundColor: 'rgba(255, 255, 255, 0.1)',
-  borderRadius: 6,
-  marginRight: 12,
-},
-backBtnText: {
-  color: '#fff',
-  fontSize: 16,
-  fontWeight: '500',
-},
 });
