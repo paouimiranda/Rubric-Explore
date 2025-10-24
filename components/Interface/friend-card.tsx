@@ -1,5 +1,6 @@
-// components/Interface/friend-card.tsx (Updated)
+// components/Interface/friend-card.tsx (Polished)
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import React from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
@@ -35,26 +36,60 @@ export default function FriendCard({ name, status, onChatPress, username }: Frie
     }
   };
 
+  const getStatusIcon = () => {
+    switch (status) {
+      case 'online':
+        return 'checkmark-circle';
+      case 'busy':
+        return 'remove-circle';
+      case 'offline':
+      default:
+        return 'ellipse';
+    }
+  };
+
+  // Generate a consistent color based on the name
+  const getAvatarGradient = () => {
+    const firstChar = name.charCodeAt(0);
+    const gradients = [
+      ['#3b82f6', '#2563eb'], // Blue
+      ['#8b5cf6', '#6366f1'], // Purple
+      ['#ec4899', '#d946ef'], // Pink
+      ['#f59e0b', '#f97316'], // Orange
+      ['#10b981', '#059669'], // Green
+      ['#06b6d4', '#0891b2'], // Cyan
+    ];
+    return gradients[firstChar % gradients.length];
+  };
+
   return (
     <View style={styles.card}>
       <View style={styles.leftSection}>
         <View style={styles.avatarContainer}>
-          <View style={styles.avatar}>
+          <LinearGradient
+            colors={getAvatarGradient()} 
+            style={styles.avatar}
+          >
             <Text style={styles.avatarText}>
               {name.charAt(0).toUpperCase()}
             </Text>
+          </LinearGradient>
+          <View style={[styles.statusIndicator, { backgroundColor: getStatusColor() }]}>
+            <View style={styles.statusPulse} />
           </View>
-          <View style={[styles.statusIndicator, { backgroundColor: getStatusColor() }]} />
         </View>
         
         <View style={styles.userInfo}>
-          <Text style={styles.name}>{name}</Text>
+          <Text style={styles.name} numberOfLines={1}>{name}</Text>
           {username && (
-            <Text style={styles.username}>@{username}</Text>
+            <Text style={styles.username} numberOfLines={1}>@{username}</Text>
           )}
-          <Text style={[styles.status, { color: getStatusColor() }]}>
-            {getStatusText()}
-          </Text>
+          <View style={styles.statusRow}>
+            <Ionicons name={getStatusIcon()} size={12} color={getStatusColor()} />
+            <Text style={[styles.statusText, { color: getStatusColor() }]}>
+              {getStatusText()}
+            </Text>
+          </View>
         </View>
       </View>
 
@@ -65,12 +100,20 @@ export default function FriendCard({ name, status, onChatPress, username }: Frie
             onPress={onChatPress}
             activeOpacity={0.7}
           >
-            <Ionicons name="chatbubble" size={20} color="#0EA5E9" />
+            <LinearGradient
+              colors={['rgba(59, 130, 246, 0.15)', 'rgba(37, 99, 235, 0.15)']}
+              style={styles.chatButtonGradient}
+            >
+              <Ionicons name="chatbubble" size={18} color="#3b82f6" />
+            </LinearGradient>
           </TouchableOpacity>
         )}
         
-        <TouchableOpacity style={styles.moreButton}>
-          <Ionicons name="ellipsis-vertical" size={20} color="#94A3B8" />
+        <TouchableOpacity 
+          style={styles.moreButton}
+          activeOpacity={0.7}
+        >
+          <Ionicons name="ellipsis-vertical" size={18} color="#94A3B8" />
         </TouchableOpacity>
       </View>
     </View>
@@ -82,10 +125,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: '#1E293B',
-    padding: 16,
-    borderRadius: 12,
-    marginBottom: 8,
+    backgroundColor: 'rgba(31, 41, 55, 0.7)',
+    padding: 14,
+    borderRadius: 16,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(75, 85, 99, 0.3)',
   },
   leftSection: {
     flexDirection: 'row',
@@ -100,63 +145,84 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: '#334155',
     justifyContent: 'center',
     alignItems: 'center',
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
   },
   avatarText: {
     color: '#FFF',
-    fontSize: 18,
-    fontWeight: 'bold',
+    fontSize: 20,
+    fontWeight: '700',
   },
   statusIndicator: {
     position: 'absolute',
-    bottom: 2,
-    right: 2,
-    width: 12,
-    height: 12,
-    borderRadius: 6,
+    bottom: 0,
+    right: 0,
+    width: 14,
+    height: 14,
+    borderRadius: 7,
     borderWidth: 2,
-    borderColor: '#1E293B',
+    borderColor: 'rgba(31, 41, 55, 0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  statusPulse: {
+    position: 'absolute',
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    backgroundColor: 'inherit',
   },
   userInfo: {
     flex: 1,
+    justifyContent: 'center',
   },
   name: {
     color: '#FFF',
     fontSize: 16,
-    fontWeight: 'bold',
-    marginBottom: 2,
+    fontWeight: '600',
+    marginBottom: 3,
+    letterSpacing: -0.2,
   },
   username: {
     color: '#94A3B8',
     fontSize: 13,
-    marginBottom: 2,
+    marginBottom: 4,
   },
-  status: {
+  statusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  statusText: {
     fontSize: 12,
-    fontWeight: '500',
+    fontWeight: '600',
+    marginLeft: 4,
   },
   rightSection: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 6,
   },
   chatButton: {
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  chatButtonGradient: {
     width: 40,
     height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(14, 165, 233, 0.1)',
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(14, 165, 233, 0.3)',
+    borderColor: 'rgba(59, 130, 246, 0.3)',
+    borderRadius: 12,
   },
   moreButton: {
     width: 40,
     height: 40,
-    borderRadius: 20,
+    borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: 'rgba(31, 41, 55, 0.5)',
   },
 });

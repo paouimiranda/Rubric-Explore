@@ -1,4 +1,4 @@
-// hooks/useCollaborativeEditing.ts - Chunk-based version with FAST updates
+// hooks/useCollaborativeEditing.ts - Optimized for cursor preservation
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { TextInput } from 'react-native';
 import { CHUNK_CONFIG } from '../app/types/notebook';
@@ -88,7 +88,6 @@ export function useCollaborativeEditing(
     });
   };
 
-  // Determine which chunk should handle the content at a given position
   const getChunkForPosition = useCallback((position: number): string | null => {
     if (!sessionRef.current) return null;
 
@@ -104,11 +103,9 @@ export function useCollaborativeEditing(
       currentPos += chunkLength;
     }
 
-    // Return last chunk if position is beyond content
     return chunks[chunks.length - 1].chunkId;
   }, [noteId]);
 
-  // Check if we need to create a new chunk
   const checkAndSplitChunk = useCallback(async (chunkId: string) => {
     if (!sessionRef.current || !noteId || !user) return;
 
@@ -123,7 +120,6 @@ export function useCollaborativeEditing(
       try {
         const { splitChunk, getNoteChunks } = await import('../services/notes-service');
         
-        // Create chunk object for splitting
         const chunkData = {
           id: chunkId,
           index: chunkSession.index,
@@ -135,11 +131,9 @@ export function useCollaborativeEditing(
         
         await splitChunk(noteId, chunkId, chunkData);
         
-        // Reload chunks
         const updatedChunks = await getNoteChunks(noteId);
         setChunkCount(updatedChunks.length);
         
-        // Create session for new chunk
         const newChunk = updatedChunks.find(c => c.index === chunkSession.index + 1);
         if (newChunk) {
           await collaborativeService.createChunkSession(
@@ -154,7 +148,6 @@ export function useCollaborativeEditing(
           );
         }
         
-        // Refresh merged content
         const mergedContent = collaborativeService.getMergedContent(noteId);
         setContent(mergedContent);
         previousValues.current.content = mergedContent;
@@ -166,10 +159,10 @@ export function useCollaborativeEditing(
   }, [noteId, user]);
 
   /**
-   * FAST YJS OBSERVERS with smart batching
-   * - Short debounce (150ms) for responsive updates
-   * - Batches rapid bursts (e.g., paste operations)
-   * - Updates propagate to remote users in ~150-200ms total
+   * OPTIMIZED YJS OBSERVERS
+   * - Longer debounce (300ms) to reduce cursor disruption
+   * - Smart batching for rapid updates
+   * - Only triggers React updates when content actually changes
    */
   useEffect(() => {
     if (!noteId || !user?.uid) {
@@ -201,31 +194,32 @@ export function useCollaborativeEditing(
         setIsConnected(true);
         setChunkCount(collaborativeSession.chunkSessions.size);
 
-        // Track observers for proper cleanup
-        let titleObserver: (() => void) | null = null;
         const chunkObservers = new Map<string, () => void>();
+        let titleObserver: (() => void) | null = null;
 
-        // Set up title observer with minimal debounce
+        // Title observer with debouncing
         if (collaborativeSession.titleSession) {
           let titleUpdateTimeout: ReturnType<typeof setTimeout> | null = null;
           
           titleObserver = () => {
             if (!mounted || isApplyingYjsUpdate.current.title) return;
             
-            // Quick debounce for batching only
             if (titleUpdateTimeout) clearTimeout(titleUpdateTimeout);
             
             titleUpdateTimeout = setTimeout(() => {
               const newTitle = collaborativeSession.titleSession!.contentText.toString();
-              console.log('📝 Applying Y.js title update:', newTitle.substring(0, 50));
-              setTitle(newTitle);
-              previousValues.current.title = newTitle;
-            }, 50); // Fast 50ms batching
+              
+              // Only update if content actually changed
+              if (newTitle !== previousValues.current.title) {
+                console.log('📝 Applying Y.js title update');
+                setTitle(newTitle);
+                previousValues.current.title = newTitle;
+              }
+            }, 100);
           };
 
           collaborativeSession.titleSession.contentText.observe(titleObserver);
           
-          // Initialize title
           const currentTitle = collaborativeSession.titleSession.contentText.toString();
           if (currentTitle.length === 0 && initialTitle) {
             isApplyingYjsUpdate.current.title = true;
@@ -240,40 +234,42 @@ export function useCollaborativeEditing(
         }
 
         /**
-         * FAST CONTENT OBSERVERS
-         * - 150ms debounce (good balance for responsiveness)
-         * - Batches rapid updates (typing, paste, etc.)
-         * - User sees changes in ~200ms total (Firestore + debounce)
+         * CURSOR-FRIENDLY CONTENT OBSERVERS
+         * - 300ms debounce (better for cursor stability)
+         * - Batches all updates during typing bursts
+         * - Only updates React state when content differs
          */
         collaborativeSession.chunkSessions.forEach((chunkSession) => {
           let observerTimeout: ReturnType<typeof setTimeout> | null = null;
           let updateCount = 0;
+          let lastAppliedContent = '';
           
           const contentObserver = () => {
             if (!mounted || isApplyingYjsUpdate.current.content) return;
             
-            // Clear pending update
             if (observerTimeout) {
               clearTimeout(observerTimeout);
             }
             
             updateCount++;
             
-            // FAST debounce for responsive collaboration
+            // CURSOR-FRIENDLY: Longer debounce reduces interruptions
             observerTimeout = setTimeout(() => {
               console.log(`📡 Yjs observer fired (batched ${updateCount} updates)`);
               updateCount = 0;
               
-              // Merge all chunks
               const mergedContent = collaborativeService.getMergedContent(noteId);
-              console.log('📦 Applying Y.js content update from chunks, total length:', mergedContent.length);
               
-              // Only update if content changed (prevents unnecessary re-renders)
-              if (mergedContent !== previousValues.current.content) {
+              // Critical: Only update if content actually changed
+              if (mergedContent !== lastAppliedContent && mergedContent !== previousValues.current.content) {
+                console.log('📦 Applying Y.js content update from chunks');
                 setContent(mergedContent);
                 previousValues.current.content = mergedContent;
+                lastAppliedContent = mergedContent;
+              } else {
+                console.log('⏭️ Skipping duplicate content update');
               }
-            }, 150); // Fast 150ms debounce for responsive updates
+            }, 300); // Longer debounce for better cursor stability
           };
 
           chunkSession.contentText.observe(contentObserver);
@@ -284,7 +280,6 @@ export function useCollaborativeEditing(
         const mergedContent = collaborativeService.getMergedContent(noteId);
         
         if (mergedContent.length === 0 && initialContent) {
-          // Insert initial content into first chunk
           const firstChunk = Array.from(collaborativeSession.chunkSessions.values())[0];
           if (firstChunk) {
             isApplyingYjsUpdate.current.content = true;
@@ -311,12 +306,10 @@ export function useCollaborativeEditing(
           console.log('🧹 Cleaning up chunk-based session');
           clearInterval(awarenessInterval);
           
-          // Properly unobserve title
           if (collaborativeSession.titleSession && titleObserver) {
             collaborativeSession.titleSession.contentText.unobserve(titleObserver);
           }
           
-          // Properly unobserve all chunks
           collaborativeSession.chunkSessions.forEach((chunkSession) => {
             const observer = chunkObservers.get(chunkSession.chunkId);
             if (observer) {
@@ -348,9 +341,8 @@ export function useCollaborativeEditing(
     };
   }, [noteId, user?.uid]);
 
-  // Handle title changes
   const handleTitleChange = useCallback((newTitle: string, selectionStart?: number, selectionEnd?: number) => {
-    console.log('✏️ Handling title change:', newTitle.substring(0, 50));
+    console.log('✏️ Handling title change');
     
     setTitle(newTitle);
     
@@ -358,7 +350,7 @@ export function useCollaborativeEditing(
       const changes = calculateTextChanges(previousValues.current.title, newTitle);
       
       if (changes.length > 0) {
-        console.log('📤 Applying title changes to Yjs:', changes);
+        console.log('📤 Applying title changes to Yjs');
         isApplyingYjsUpdate.current.title = true;
         applyChangesToYjs(sessionRef.current.titleSession.contentText, changes);
         isApplyingYjsUpdate.current.title = false;
@@ -368,7 +360,6 @@ export function useCollaborativeEditing(
     }
   }, [noteId]);
 
-  // Handle content changes with chunk awareness
   const handleContentChange = useCallback((newContent: string, selectionStart?: number, selectionEnd?: number) => {
     console.log('✏️ Handling content change, length:', newContent.length);
     
@@ -381,16 +372,14 @@ export function useCollaborativeEditing(
         return;
       }
       
-      console.log('📤 Applying content changes to Yjs:', changes);
+      console.log('📤 Applying content changes to Yjs chunks');
       
       const chunks = collaborativeService.getChunkSessions(noteId);
       if (chunks.length === 0) return;
       
       isApplyingYjsUpdate.current.content = true;
       
-      // Map changes to specific affected chunks
       changes.forEach(change => {
-        // Find which chunk(s) the change affects
         let globalPosition = change.index;
         let changeRemaining = change.delete;
         let insertText = change.insert;
@@ -400,29 +389,22 @@ export function useCollaborativeEditing(
           const chunkContent = chunkSession.contentText.toString();
           const chunkLength = chunkContent.length;
           
-          // Check if this change affects this chunk
           if (globalPosition < chunkLength) {
-            // Calculate local position within this chunk
             const localPosition = globalPosition;
             
-            // Handle deletions in this chunk
             if (changeRemaining > 0) {
               const deleteInThisChunk = Math.min(changeRemaining, chunkLength - localPosition);
               
               if (deleteInThisChunk > 0) {
-                console.log(`🗑️ Deleting ${deleteInThisChunk} chars at position ${localPosition} in chunk ${chunkSession.chunkId}`);
                 chunkSession.contentText.delete(localPosition, deleteInThisChunk);
                 changeRemaining -= deleteInThisChunk;
               }
             }
             
-            // Handle insertions in this chunk
             if (insertText.length > 0 && changeRemaining === 0) {
-              console.log(`➕ Inserting "${insertText.substring(0, 20)}..." at position ${localPosition} in chunk ${chunkSession.chunkId}`);
               chunkSession.contentText.insert(localPosition, insertText);
-              insertText = ''; // Mark as inserted
+              insertText = '';
               
-              // Check if this chunk now needs splitting
               const newChunkLength = chunkSession.contentText.length;
               if (newChunkLength > CHUNK_CONFIG.SPLIT_THRESHOLD) {
                 setActiveChunkId(chunkSession.chunkId);
@@ -430,27 +412,21 @@ export function useCollaborativeEditing(
               }
             }
             
-            // If we've handled all deletions and insertions, we're done
             if (changeRemaining === 0 && insertText.length === 0) {
               break;
             }
             
-            // Move to next chunk for remaining deletions
-            globalPosition = 0; // Start at beginning of next chunk
+            globalPosition = 0;
           } else {
-            // This change is beyond this chunk, adjust position
             globalPosition -= chunkLength;
           }
         }
         
-        // Handle case where insertion is at the very end (after all chunks)
         if (insertText.length > 0 && chunks.length > 0) {
           const lastChunk = chunks[chunks.length - 1];
           const lastChunkLength = lastChunk.contentText.length;
-          console.log(`➕ Appending "${insertText.substring(0, 20)}..." to last chunk ${lastChunk.chunkId}`);
           lastChunk.contentText.insert(lastChunkLength, insertText);
           
-          // Check if last chunk needs splitting
           if (lastChunk.contentText.length > CHUNK_CONFIG.SPLIT_THRESHOLD) {
             setActiveChunkId(lastChunk.chunkId);
             setTimeout(() => checkAndSplitChunk(lastChunk.chunkId), 100);
@@ -463,7 +439,6 @@ export function useCollaborativeEditing(
     }
   }, [noteId, user, checkAndSplitChunk]);
 
-  // Legacy update methods
   const updateTitle = useCallback((newTitle: string) => {
     handleTitleChange(newTitle);
   }, [handleTitleChange]);

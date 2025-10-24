@@ -103,43 +103,44 @@ export default function NoteEditor({
   const content = collaborative.content;
 
   /**
-   * FAST SYNC with improved cursor preservation
-   * - Only updates when not typing
-   * - Preserves cursor position correctly
+   * IMPROVED SYNC MECHANISM
+   * - Only syncs when not typing
+   * - Uses ref to track last synced content to prevent loops
+   * - Delays sync until typing stops
    */
   const syncTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastSyncedContent = useRef('');
   const isSyncing = useRef(false);
 
   useEffect(() => {
-    // Don't sync if already syncing or if typing
-    if (isSyncing.current || isUserTyping()) {
+    // Don't sync if already syncing, typing, or content hasn't changed
+    if (isSyncing.current || isUserTyping() || content === lastSyncedContent.current) {
       return;
     }
 
-    // Only sync if content actually changed
-    if (content !== lastSyncedContent.current && richEditorRef.current) {
-      console.log('🔄 Yjs content changed, scheduling sync');
-      
-      if (syncTimeoutRef.current) {
-        clearTimeout(syncTimeoutRef.current);
-      }
-      
-      syncTimeoutRef.current = setTimeout(async () => {
-        // Final check before applying
-        if (!isUserTyping() && richEditorRef.current && !isSyncing.current) {
-          isSyncing.current = true;
-          console.log('📥 Applying Yjs update with cursor preservation');
-          
-          try {
-            await richEditorRef.current.setContentHtml(content);
-            lastSyncedContent.current = content;
-          } finally {
-            isSyncing.current = false;
-          }
-        }
-      }, 150);
+    console.log('🔄 Yjs content changed, scheduling sync');
+    
+    if (syncTimeoutRef.current) {
+      clearTimeout(syncTimeoutRef.current);
     }
+    
+    // Wait for typing to finish before syncing
+    syncTimeoutRef.current = setTimeout(async () => {
+      // Final check before applying
+      if (!isUserTyping() && richEditorRef.current && !isSyncing.current) {
+        isSyncing.current = true;
+        console.log('📥 Applying Yjs update with cursor preservation');
+        
+        try {
+          await richEditorRef.current.setContentHtml(content);
+          lastSyncedContent.current = content;
+        } catch (error) {
+          console.error('Error syncing content:', error);
+        } finally {
+          isSyncing.current = false;
+        }
+      }
+    }, 200); // Slightly longer delay for better stability
     
     return () => {
       if (syncTimeoutRef.current) {
@@ -423,7 +424,7 @@ export default function NoteEditor({
             {collaborative.activeUsers.map((user, index) => (
               <View key={user.uid} style={styles.collaboratorItem}>
                 <View
-                style={[
+                  style={[
                     styles.collaboratorAvatar, 
                     { backgroundColor: user.color }
                   ]} 

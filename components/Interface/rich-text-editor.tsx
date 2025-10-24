@@ -1,5 +1,5 @@
-// components/RichTextEditor/RichTextEditor.tsx
-import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useRef } from 'react';
+// components/RichTextEditor/RichTextEditor.tsx (DIAGNOSTIC VERSION)
+import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { RichEditor } from 'react-native-pell-rich-editor';
 
@@ -24,16 +24,14 @@ export interface RichTextEditorRef {
   setCursorPosition: (position: number) => void;
 }
 
-/**
- * IMPROVED CURSOR-PRESERVING COLLABORATIVE EDITOR
- * 
- * Key fixes:
- * 1. Proper async cursor saving/restoring with DOM ready detection
- * 2. Text-based position calculation (not HTML length)
- * 3. Debounced updates to prevent race conditions
- * 4. Only restore cursor when user is actively editing
- * 5. Smart diffing to minimize DOM mutations
- */
+interface SerializedSelection {
+  anchorPath: number[];
+  anchorOffset: number;
+  focusPath: number[];
+  focusOffset: number;
+  textPosition?: number; // Backup text-based position
+}
+
 const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(({
   initialContent,
   onContentChange,
@@ -47,260 +45,419 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(({
   const isInitialMount = useRef(true);
   const lastContent = useRef(initialContent);
   
-  // Typing burst detection
   const isTyping = useRef(false);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   
-  // Track local vs remote changes
   const isLocalChange = useRef(false);
   const localChangeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   
-  // Cursor tracking - CRITICAL FIX: Store both position AND if cursor should be restored
   const lastCursorPosition = useRef<number>(0);
   const isFocused = useRef(false);
-  const shouldRestoreCursor = useRef(false);
   
-  // Queue for pending updates
   const pendingRemoteContent = useRef<string | null>(null);
-  
-  // Track if we're currently applying a remote update
   const isApplyingRemoteUpdate = useRef(false);
   
-  // Debounce timer for cursor restoration
-  const cursorRestoreTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const savedSelection = useRef<SerializedSelection | null>(null);
+  
+  const [pendingRequests] = useState<Map<string, {
+    resolve: (value: any) => void;
+    timeout: NodeJS.Timeout;
+  }>>(new Map());
+
+  // DIAGNOSTIC: Track if onMessage is working
+  const [onMessageWorking, setOnMessageWorking] = useState<boolean | null>(null);
 
   /**
-   * FIXED: Get text content position (not HTML position)
-   * This strips HTML tags to get the actual text cursor position
+   * DIAGNOSTIC TEST
    */
-  const getCursorPosition = useCallback(async (): Promise<number> => {
-    if (!richText.current) return 0;
+  const testWebViewMessaging = useCallback(() => {
+    if (!richText.current) return;
+
+    console.log('🧪 Testing WebView messaging...');
     
-    try {
-      const script = `
-        (function() {
-          try {
-            const selection = window.getSelection();
-            if (!selection || selection.rangeCount === 0) {
-              window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'cursorPosition', position: 0 }));
-              return 0;
-            }
-            
-            const range = selection.getRangeAt(0);
-            const preCaretRange = range.cloneRange();
-            const editor = document.querySelector('.pell-content') || document.body;
-            
-            preCaretRange.selectNodeContents(editor);
-            preCaretRange.setEnd(range.endContainer, range.endOffset);
-            
-            // CRITICAL: Get text content, not HTML
-            const textBeforeCursor = preCaretRange.cloneContents();
-            const tempDiv = document.createElement('div');
-            tempDiv.appendChild(textBeforeCursor);
-            const position = tempDiv.innerText.length;
-            
-            window.ReactNativeWebView.postMessage(JSON.stringify({ 
-              type: 'cursorPosition', 
-              position: position 
+    const testScript = `
+      (function() {
+        try {
+          if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) {
+            window.ReactNativeWebView.postMessage(JSON.stringify({
+              type: 'diagnosticTest',
+              status: 'success',
+              message: 'WebView messaging is working!'
             }));
-            return position;
-          } catch (e) {
-            window.ReactNativeWebView.postMessage(JSON.stringify({ 
-              type: 'error', 
-              message: e.toString() 
-            }));
-            return 0;
+          } else {
+            console.error('ReactNativeWebView.postMessage not available');
           }
-        })();
-      `;
-      
-      return new Promise((resolve) => {
-        const timeout = setTimeout(() => {
-          resolve(lastCursorPosition.current);
-        }, 200);
+        } catch (e) {
+          console.error('Test failed:', e);
+        }
+      })();
+    `;
+
+    richText.current.injectJavascript(testScript);
+    
+    // If we don't hear back in 1 second, messaging is broken
+    setTimeout(() => {
+      if (onMessageWorking === null) {
+        console.error('❌ WebView messaging FAILED - onMessage prop not working!');
+        console.error('💡 Solution: react-native-pell-rich-editor may not support onMessage');
+        setOnMessageWorking(false);
+      }
+    }, 1000);
+  }, [onMessageWorking]);
+
+  /**
+   * INJECT SELECTION UTILITIES
+   */
+  const injectSelectionUtilities = useCallback(() => {
+    if (!richText.current) return;
+
+    console.log('💉 Injecting selection utilities...');
+
+    const utilScript = `
+      (function() {
+        if (window.__selectionUtilsInjected) {
+          window.ReactNativeWebView.postMessage(JSON.stringify({
+            type: 'utilsInjected',
+            alreadyInjected: true
+          }));
+          return;
+        }
         
-        // Note: You'll need to set up a message handler in your WebView wrapper
-        // For now, we'll use the timeout fallback
-        richText.current?.injectJavascript(script);
-        
-        // Since we can't directly capture the message, resolve with last known position
-        // You may need to implement a proper WebView message bridge
-        setTimeout(() => {
-          clearTimeout(timeout);
-          resolve(lastCursorPosition.current);
-        }, 50);
-      });
-    } catch (error) {
-      console.warn('Failed to get cursor position:', error);
-      return lastCursorPosition.current;
-    }
+        window.__selectionUtilsInjected = true;
+        const editor = document.querySelector('.pell-content') || document.body;
+
+        window.getNodePath = function(node, root) {
+          if (node === root) return [];
+          const path = [];
+          let current = node;
+          
+          while (current && current !== root) {
+            const parent = current.parentNode;
+            if (!parent) break;
+            const index = Array.from(parent.childNodes).indexOf(current);
+            path.unshift(index);
+            current = parent;
+          }
+          
+          return path;
+        };
+
+        window.getNodeFromPath = function(root, path) {
+          let node = root;
+          for (let i = 0; i < path.length; i++) {
+            if (!node.childNodes[path[i]]) return null;
+            node = node.childNodes[path[i]];
+          }
+          return node;
+        };
+
+        window.serializeSelection = function() {
+          const selection = window.getSelection();
+          if (!selection || selection.rangeCount === 0) return null;
+          
+          const range = selection.getRangeAt(0);
+          return {
+            anchorPath: window.getNodePath(range.startContainer, editor),
+            anchorOffset: range.startOffset,
+            focusPath: window.getNodePath(range.endContainer, editor),
+            focusOffset: range.endOffset
+          };
+        };
+
+        window.deserializeSelection = function(sel) {
+          const selection = window.getSelection();
+          if (!selection) return false;
+          
+          const anchorNode = window.getNodeFromPath(editor, sel.anchorPath);
+          const focusNode = window.getNodeFromPath(editor, sel.focusPath);
+          
+          if (!anchorNode || !focusNode) return false;
+          
+          const anchorMax = anchorNode.nodeType === Node.TEXT_NODE 
+            ? anchorNode.length 
+            : anchorNode.childNodes.length;
+          const focusMax = focusNode.nodeType === Node.TEXT_NODE 
+            ? focusNode.length 
+            : focusNode.childNodes.length;
+            
+          const safeAnchor = Math.min(sel.anchorOffset, anchorMax);
+          const safeFocus = Math.min(sel.focusOffset, focusMax);
+          
+          try {
+            const range = document.createRange();
+            range.setStart(anchorNode, safeAnchor);
+            range.setEnd(focusNode, safeFocus);
+            selection.removeAllRanges();
+            selection.addRange(range);
+            
+            const tempSpan = document.createElement('span');
+            tempSpan.style.display = 'inline';
+            const cloned = range.cloneRange();
+            cloned.collapse(true);
+            cloned.insertNode(tempSpan);
+            tempSpan.scrollIntoView({ behavior: 'auto', block: 'nearest', inline: 'nearest' });
+            tempSpan.remove();
+            
+            return true;
+          } catch (e) {
+            console.error('Deserialize error:', e);
+            return false;
+          }
+        };
+
+        window.ReactNativeWebView.postMessage(JSON.stringify({
+          type: 'utilsInjected',
+          success: true,
+          alreadyInjected: false
+        }));
+      })();
+    `;
+
+    richText.current.injectJavascript(utilScript);
   }, []);
 
   /**
-   * FIXED: Set cursor position with proper DOM ready detection
-   * Waits for WebView to fully render before restoring cursor
+   * SERIALIZE SELECTION
    */
-  const setCursorPosition = useCallback((position: number) => {
-    if (!richText.current || !isFocused.current) {
-      console.log('⏭️ Skipping cursor restore - editor not focused');
-      return;
-    }
-    
-    try {
+  const serializeSelection = useCallback((): Promise<SerializedSelection | null> => {
+    return new Promise((resolve) => {
+      if (!richText.current) {
+        console.warn('⚠️ serializeSelection: richText.current is null');
+        resolve(null);
+        return;
+      }
+
+      if (!isFocused.current) {
+        console.log('⏭️ serializeSelection: editor not focused, skipping');
+        resolve(null);
+        return;
+      }
+
+      const requestId = `serialize_${Date.now()}`;
+      console.log(`📤 Requesting serialization (${requestId})...`);
+      
+      const timeout = setTimeout(() => {
+        console.error(`❌ Serialization timeout (${requestId}) - using fallback`);
+        pendingRequests.delete(requestId);
+        resolve(savedSelection.current);
+      }, 500);
+
+      pendingRequests.set(requestId, { resolve, timeout });
+
       const script = `
         (function() {
           try {
-            // Wait for DOM to be ready
-            function waitForEditor(callback, attempts = 0) {
-              const editor = document.querySelector('.pell-content') || document.body;
-              
-              if (!editor || attempts > 20) {
-                callback(false);
-                return;
-              }
-              
-              // Check if content is actually rendered
-              if (editor.childNodes.length === 0) {
-                setTimeout(() => waitForEditor(callback, attempts + 1), 50);
-                return;
-              }
-              
-              callback(true);
-            }
-            
-            waitForEditor(function(ready) {
-              if (!ready) {
-                window.ReactNativeWebView.postMessage(JSON.stringify({ 
-                  type: 'cursorError', 
-                  message: 'Editor not ready' 
-                }));
-                return;
-              }
-              
-              const editor = document.querySelector('.pell-content') || document.body;
-              const selection = window.getSelection();
-              
-              if (!selection) {
-                window.ReactNativeWebView.postMessage(JSON.stringify({ 
-                  type: 'cursorError', 
-                  message: 'No selection API' 
-                }));
-                return;
-              }
-              
-              let currentPos = 0;
-              let targetNode = null;
-              let targetOffset = 0;
-              let found = false;
-              
-              function getTextLength(node) {
-                if (node.nodeType === Node.TEXT_NODE) {
-                  return node.textContent.length;
-                } else if (node.nodeName === 'BR') {
-                  return 1;
-                } else if (node.nodeType === Node.ELEMENT_NODE) {
-                  let length = 0;
-                  for (let i = 0; i < node.childNodes.length; i++) {
-                    length += getTextLength(node.childNodes[i]);
-                  }
-                  return length;
-                }
-                return 0;
-              }
-              
-              function findPosition(node) {
-                if (found) return;
-                
-                if (node.nodeType === Node.TEXT_NODE) {
-                  const textLength = node.textContent.length;
-                  if (currentPos + textLength >= ${position}) {
-                    targetNode = node;
-                    targetOffset = Math.min(${position} - currentPos, textLength);
-                    found = true;
-                    return;
-                  }
-                  currentPos += textLength;
-                } else if (node.nodeName === 'BR') {
-                  currentPos += 1;
-                  if (currentPos >= ${position}) {
-                    targetNode = node.parentNode;
-                    targetOffset = Array.from(node.parentNode.childNodes).indexOf(node) + 1;
-                    found = true;
-                    return;
-                  }
-                } else if (node.nodeType === Node.ELEMENT_NODE) {
-                  for (let i = 0; i < node.childNodes.length; i++) {
-                    findPosition(node.childNodes[i]);
-                    if (found) return;
-                  }
-                }
-              }
-              
-              findPosition(editor);
-              
-              if (targetNode) {
-                try {
-                  const range = document.createRange();
-                  range.setStart(targetNode, targetOffset);
-                  range.collapse(true);
-                  selection.removeAllRanges();
-                  selection.addRange(range);
-                  
-                  // Scroll into view smoothly
-                  const tempSpan = document.createElement('span');
-                  tempSpan.innerHTML = '&#8203;'; // Zero-width space
-                  range.insertNode(tempSpan);
-                  tempSpan.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
-                  tempSpan.remove();
-                  
-                  window.ReactNativeWebView.postMessage(JSON.stringify({ 
-                    type: 'cursorSet', 
-                    position: ${position},
-                    success: true
-                  }));
-                } catch (e) {
-                  window.ReactNativeWebView.postMessage(JSON.stringify({ 
-                    type: 'cursorError', 
-                    message: 'Failed to set range: ' + e.toString() 
-                  }));
-                }
-              } else {
-                // Fallback: set cursor at the end
-                try {
-                  const range = document.createRange();
-                  range.selectNodeContents(editor);
-                  range.collapse(false);
-                  selection.removeAllRanges();
-                  selection.addRange(range);
-                  
-                  window.ReactNativeWebView.postMessage(JSON.stringify({ 
-                    type: 'cursorSet', 
-                    position: 'end',
-                    success: true
-                  }));
-                } catch (e) {
-                  window.ReactNativeWebView.postMessage(JSON.stringify({ 
-                    type: 'cursorError', 
-                    message: 'Failed to set end position: ' + e.toString() 
-                  }));
-                }
-              }
-            });
+            const sel = window.serializeSelection ? window.serializeSelection() : null;
+            console.log('WebView: Serialized selection:', sel);
+            window.ReactNativeWebView.postMessage(JSON.stringify({
+              type: 'serializedSelection',
+              requestId: '${requestId}',
+              selection: sel
+            }));
           } catch (e) {
-            window.ReactNativeWebView.postMessage(JSON.stringify({ 
-              type: 'cursorError', 
-              message: 'Script error: ' + e.toString() 
+            console.error('WebView: Serialization error:', e);
+            window.ReactNativeWebView.postMessage(JSON.stringify({
+              type: 'serializedSelection',
+              requestId: '${requestId}',
+              selection: null,
+              error: e.toString()
             }));
           }
         })();
       `;
-      
+
       richText.current.injectJavascript(script);
-      lastCursorPosition.current = position;
-      console.log('✅ Cursor restore initiated for position:', position);
+    });
+  }, [pendingRequests]);
+
+  /**
+   * DESERIALIZE SELECTION
+   */
+  const deserializeSelection = useCallback((selection: SerializedSelection): Promise<boolean> => {
+    return new Promise((resolve) => {
+      if (!richText.current || !isFocused.current) {
+        console.warn('⚠️ deserializeSelection: editor not ready or not focused');
+        resolve(false);
+        return;
+      }
+
+      const requestId = `deserialize_${Date.now()}`;
+      console.log(`📤 Requesting deserialization (${requestId})...`, selection);
+      
+      const timeout = setTimeout(() => {
+        console.error(`❌ Deserialization timeout (${requestId})`);
+        pendingRequests.delete(requestId);
+        resolve(false);
+      }, 500);
+
+      pendingRequests.set(requestId, { resolve, timeout });
+
+      const script = `
+        (function() {
+          try {
+            const sel = ${JSON.stringify(selection)};
+            console.log('WebView: Deserializing selection:', sel);
+            const success = window.deserializeSelection ? window.deserializeSelection(sel) : false;
+            console.log('WebView: Deserialization result:', success);
+            window.ReactNativeWebView.postMessage(JSON.stringify({
+              type: 'selectionRestored',
+              requestId: '${requestId}',
+              success: success
+            }));
+          } catch (e) {
+            console.error('WebView: Deserialization error:', e);
+            window.ReactNativeWebView.postMessage(JSON.stringify({
+              type: 'selectionRestored',
+              requestId: '${requestId}',
+              success: false,
+              error: e.toString()
+            }));
+          }
+        })();
+      `;
+
+      richText.current.injectJavascript(script);
+    });
+  }, [pendingRequests]);
+
+  /**
+   * HANDLE WEBVIEW MESSAGES
+   */
+  const handleWebViewMessage = useCallback((event: any) => {
+    try {
+      // Handle different event structures from react-native-pell-rich-editor
+      let messageData: string;
+      
+      if (typeof event === 'string') {
+        // Direct string
+        messageData = event;
+        console.log('🔔 RAW MESSAGE (string):', event);
+      } else if (event?.nativeEvent?.data) {
+        // Standard WebView format
+        messageData = event.nativeEvent.data;
+        console.log('🔔 RAW MESSAGE (nativeEvent.data):', event.nativeEvent.data);
+      } else if (event?.data) {
+        // Simplified format
+        messageData = event.data;
+        console.log('🔔 RAW MESSAGE (data):', event.data);
+      } else {
+        // Unknown format - log and try to parse anyway
+        console.log('🔔 RAW MESSAGE (unknown format):', JSON.stringify(event));
+        messageData = JSON.stringify(event);
+      }
+      
+      const message = JSON.parse(messageData);
+      const { type, requestId } = message;
+
+      console.log(`📨 Parsed message type: ${type}, requestId: ${requestId}`);
+
+      // Diagnostic test response
+      if (type === 'diagnosticTest') {
+        console.log('✅ WebView messaging IS WORKING!');
+        setOnMessageWorking(true);
+        return;
+      }
+
+      // Handle serialized selection response
+      if (type === 'serializedSelection' && requestId) {
+        const pending = pendingRequests.get(requestId);
+        if (pending) {
+          clearTimeout(pending.timeout);
+          pendingRequests.delete(requestId);
+          console.log(`✅ Serialization response received (${requestId}):`, message.selection);
+          pending.resolve(message.selection);
+          
+          if (message.selection) {
+            savedSelection.current = message.selection;
+          }
+        } else {
+          console.warn(`⚠️ No pending request for ${requestId}`);
+        }
+      }
+
+      // Handle selection restored response
+      if (type === 'selectionRestored' && requestId) {
+        const pending = pendingRequests.get(requestId);
+        if (pending) {
+          clearTimeout(pending.timeout);
+          pendingRequests.delete(requestId);
+          console.log(`✅ Deserialization response received (${requestId}): ${message.success}`);
+          pending.resolve(message.success);
+        } else {
+          console.warn(`⚠️ No pending request for ${requestId}`);
+        }
+      }
+
+      // Handle utils injection confirmation
+      if (type === 'utilsInjected') {
+        console.log('✅ Selection utilities injected', message);
+      }
     } catch (error) {
-      console.warn('Failed to set cursor position:', error);
+      console.error('❌ Failed to handle WebView message:', error);
     }
+  }, [pendingRequests]);
+
+  /**
+   * APPLY HTML WITH ACCURATE SELECTION
+   */
+  const applyHtmlWithAccurateSelection = useCallback(async (html: string) => {
+    if (!richText.current) return;
+
+    console.log('📥 applyHtmlWithAccurateSelection called, focused:', isFocused.current);
+
+    // If not focused, safe to replace directly
+    if (!isFocused.current) {
+      console.log('⏭️ Editor not focused, applying HTML directly');
+      richText.current.setContentHTML(html);
+      lastContent.current = html;
+      return;
+    }
+
+    try {
+      console.log('💾 Step 1: Serializing selection...');
+      const selection = await serializeSelection();
+      
+      if (selection) {
+        console.log('✅ Selection serialized successfully:', {
+          anchorPath: selection.anchorPath,
+          anchorOffset: selection.anchorOffset
+        });
+      } else {
+        console.warn('⚠️ Could not serialize selection');
+      }
+
+      console.log('📝 Step 2: Applying HTML update...');
+      richText.current.setContentHTML(html);
+      lastContent.current = html;
+
+      console.log('⏳ Step 3: Waiting for DOM to stabilize...');
+      await new Promise(resolve => setTimeout(resolve, 150));
+      
+      if (isFocused.current && selection) {
+        console.log('🔄 Step 4: Restoring selection...');
+        const success = await deserializeSelection(selection);
+        
+        if (success) {
+          console.log('✅✅✅ CURSOR PRESERVED SUCCESSFULLY! ✅✅✅');
+        } else {
+          console.error('❌❌❌ CURSOR RESTORATION FAILED! ❌❌❌');
+        }
+      } else {
+        console.warn('⚠️ Skipping restoration - no selection or not focused');
+      }
+    } catch (error) {
+      console.error('❌ Error in applyHtmlWithAccurateSelection:', error);
+      richText.current.setContentHTML(html);
+      lastContent.current = html;
+    }
+  }, [serializeSelection, deserializeSelection]);
+
+  const getCursorPosition = useCallback(async (): Promise<number> => {
+    return lastCursorPosition.current;
+  }, []);
+
+  const setCursorPosition = useCallback((position: number) => {
+    lastCursorPosition.current = position;
   }, []);
 
   useImperativeHandle(ref, () => ({
@@ -311,30 +468,31 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(({
       return '';
     },
     
-    /**
-     * IMPROVED: Smart content updates with cursor preservation
-     */
     setContentHtml: async (html: string) => {
-      // Skip if unchanged
       if (html === lastContent.current) {
+        console.log('⏭️ Content unchanged, skipping');
         return;
       }
 
-      // Skip self-echoes
       if (isLocalChange.current) {
         console.log('⏭️ Skipping self-echo');
         return;
       }
 
-      // Queue during typing bursts
       if (isTyping.current) {
         console.log('⏸️ Queuing update - typing burst');
         pendingRemoteContent.current = html;
         return;
       }
 
-      // Apply with improved cursor preservation
-      await applyRemoteUpdateWithCursorPreservation(html);
+      console.log('📥📥📥 REMOTE UPDATE RECEIVED 📥📥📥');
+      isApplyingRemoteUpdate.current = true;
+      
+      try {
+        await applyHtmlWithAccurateSelection(html);
+      } finally {
+        isApplyingRemoteUpdate.current = false;
+      }
     },
     
     focusEditor: () => {
@@ -345,85 +503,34 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(({
     blurEditor: () => {
       richText.current?.blurContentEditor();
       isFocused.current = false;
-      shouldRestoreCursor.current = false;
+      savedSelection.current = null;
     },
     
     getEditor: () => richText.current,
-    
     isTyping: () => isTyping.current,
-    
     getCursorPosition,
-    
     setCursorPosition,
   }));
 
-  /**
-   * IMPROVED: Apply remote update with proper cursor preservation
-   */
-  const applyRemoteUpdateWithCursorPreservation = useCallback(async (html: string) => {
-    if (!richText.current || isApplyingRemoteUpdate.current) return;
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      testWebViewMessaging();
+      injectSelectionUtilities();
+    }, 1000);
+    
+    return () => clearTimeout(timer);
+  }, [injectSelectionUtilities, testWebViewMessaging]);
 
-    isApplyingRemoteUpdate.current = true;
-
-    try {
-      // Step 1: Save cursor position ONLY if actively focused
-      let savedCursorPosition: number | null = null;
-      const wasActiveFocus = isFocused.current && document.hasFocus?.();
-      
-      if (wasActiveFocus) {
-        savedCursorPosition = await getCursorPosition();
-        shouldRestoreCursor.current = true;
-        console.log('💾 Saved cursor position:', savedCursorPosition, '(active focus)');
-      } else {
-        shouldRestoreCursor.current = false;
-        console.log('⏭️ Not saving cursor - editor not actively focused');
-      }
-
-      // Step 2: Apply update
-      richText.current.setContentHTML(html);
-      lastContent.current = html;
-
-      // Step 3: Restore cursor with proper debouncing
-      if (shouldRestoreCursor.current && savedCursorPosition !== null && savedCursorPosition >= 0) {
-        // Clear any pending restoration
-        if (cursorRestoreTimeoutRef.current) {
-          clearTimeout(cursorRestoreTimeoutRef.current);
-        }
-        
-        // CRITICAL: Wait longer for WebView DOM to fully update
-        cursorRestoreTimeoutRef.current = setTimeout(() => {
-          if (!shouldRestoreCursor.current || !isFocused.current) {
-            console.log('⏭️ Cursor restore cancelled - focus lost');
-            return;
-          }
-          
-          // Validate position against new content
-          const textContent = html.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').replace(/&lt;/g, '<').replace(/&gt;/g, '>');
-          const maxPosition = textContent.length;
-          const safePosition = Math.min(savedCursorPosition, maxPosition);
-          
-          console.log('🔄 Restoring cursor:', {
-            saved: savedCursorPosition,
-            max: maxPosition,
-            safe: safePosition
-          });
-          
-          setCursorPosition(safePosition);
-        }, 250); // Increased delay for reliable DOM updates
-      }
-    } finally {
-      isApplyingRemoteUpdate.current = false;
-    }
-  }, [getCursorPosition, setCursorPosition]);
-
-  // Editor ready callback
   useEffect(() => {
     if (richText.current && onEditorReady) {
       onEditorReady(richText.current);
+      setTimeout(() => {
+        testWebViewMessaging();
+        injectSelectionUtilities();
+      }, 500);
     }
-  }, [onEditorReady]);
+  }, [onEditorReady, injectSelectionUtilities, testWebViewMessaging]);
 
-  // Set initial content
   useEffect(() => {
     if (isInitialMount.current && richText.current && initialContent) {
       console.log('🎬 Setting initial content');
@@ -433,85 +540,72 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(({
     }
   }, [initialContent]);
 
-  /**
-   * LOCAL TYPING DETECTION
-   */
+  const handleCursorPosition = useCallback(async (position: number) => {
+    if (!isApplyingRemoteUpdate.current) {
+      lastCursorPosition.current = position;
+      onCursorPosition?.(position);
+    }
+  }, [onCursorPosition]);
+
   const handleContentChange = useCallback((html: string) => {
     if (html === lastContent.current) {
       return;
     }
     
-    // Don't process if we're applying a remote update
     if (isApplyingRemoteUpdate.current) {
       return;
     }
     
     console.log('✏️ Local typing detected');
     
-    // Flag as local change
     isLocalChange.current = true;
     if (localChangeTimeoutRef.current) {
       clearTimeout(localChangeTimeoutRef.current);
     }
     localChangeTimeoutRef.current = setTimeout(() => {
       isLocalChange.current = false;
-    }, 150);
+    }, 200);
     
-    // Mark typing burst
     isTyping.current = true;
-    shouldRestoreCursor.current = false; // Don't restore cursor during local typing
     
     if (typingTimeoutRef.current) {
       clearTimeout(typingTimeoutRef.current);
     }
     
-    // Update content
     lastContent.current = html;
     onContentChange(html);
     
-    // Reset typing flag after pause
     typingTimeoutRef.current = setTimeout(async () => {
       console.log('⏸️ Typing burst ended');
       isTyping.current = false;
       
-      // Apply queued updates
       if (pendingRemoteContent.current && richText.current) {
         console.log('📥 Applying queued remote update');
         const pendingHtml = pendingRemoteContent.current;
         pendingRemoteContent.current = null;
         
-        await applyRemoteUpdateWithCursorPreservation(pendingHtml);
+        isApplyingRemoteUpdate.current = true;
+        try {
+          await applyHtmlWithAccurateSelection(pendingHtml);
+        } finally {
+          isApplyingRemoteUpdate.current = false;
+        }
       }
-    }, 300);
-  }, [onContentChange, applyRemoteUpdateWithCursorPreservation]);
+    }, 400);
+  }, [onContentChange, applyHtmlWithAccurateSelection]);
 
-  /**
-   * Track cursor position changes
-   */
-  const handleCursorPosition = useCallback((position: number) => {
-    if (!isApplyingRemoteUpdate.current && isFocused.current) {
-      lastCursorPosition.current = position;
-      onCursorPosition?.(position);
-      console.log('📍 Cursor moved to:', position);
-    }
-  }, [onCursorPosition]);
-
-  /**
-   * Track focus state
-   */
-  const handleFocus = useCallback(() => {
+  const handleFocus = useCallback(async () => {
     isFocused.current = true;
-    shouldRestoreCursor.current = false;
     console.log('🎯 Editor focused');
-  }, []);
+    injectSelectionUtilities();
+  }, [injectSelectionUtilities]);
 
   const handleBlur = useCallback(() => {
     isFocused.current = false;
-    shouldRestoreCursor.current = false;
+    savedSelection.current = null;
     console.log('💤 Editor blurred');
   }, []);
 
-  // Cleanup
   useEffect(() => {
     return () => {
       if (typingTimeoutRef.current) {
@@ -520,11 +614,10 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(({
       if (localChangeTimeoutRef.current) {
         clearTimeout(localChangeTimeoutRef.current);
       }
-      if (cursorRestoreTimeoutRef.current) {
-        clearTimeout(cursorRestoreTimeoutRef.current);
-      }
+      pendingRequests.forEach(({ timeout }) => clearTimeout(timeout));
+      pendingRequests.clear();
     };
-  }, []);
+  }, [pendingRequests]);
 
   return (
     <View style={[styles.container, style]}>
@@ -537,6 +630,7 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(({
         placeholder={placeholder}
         disabled={!editable}
         initialContentHTML={initialContent}
+        onMessage={handleWebViewMessage}
         editorStyle={{
           backgroundColor: 'transparent',
           color: '#ffffff',
