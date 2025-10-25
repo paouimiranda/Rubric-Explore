@@ -295,7 +295,8 @@ const QuizMaker = () => {
     const quiz: Omit<Quiz, 'uid' | 'id' | 'createdAt' | 'updatedAt'> = {
       title: quizTitle,
       questions,
-      topics
+      topics,
+      isPublic: false //NEW LINE
     };
 
     const validation = QuizService.validateQuiz(quiz);

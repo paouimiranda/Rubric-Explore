@@ -17,10 +17,11 @@ import {
   SafeAreaView,
   ScrollView,
   StyleSheet,
+  Switch,
   Text,
   TextInput,
   TouchableOpacity,
-  View,
+  View
 } from 'react-native';
 
 const QuizOverview: React.FC = () => {
@@ -55,6 +56,9 @@ const QuizOverview: React.FC = () => {
   const [newTopicInput, setNewTopicInput] = useState('');
   const [editingTopic, setEditingTopic] = useState<string | null>(null);
   const [editTopicInput, setEditTopicInput] = useState('');
+
+  const [isPublic, setIsPublic] = useState(false);
+  const [showPublicWarningModal, setShowPublicWarningModal] = useState(false);
 
   // Hardcoded quiz cover images
   const defaultQuizImages = [
@@ -94,6 +98,7 @@ const QuizOverview: React.FC = () => {
           questions: quiz.questions,
           topics: quiz.topics || []
         });
+        setIsPublic(quiz.isPublic ?? false); // ADD THIS LINE
       }
     } catch (error) {
       console.error('Error loading quiz:', error);
@@ -117,7 +122,8 @@ const QuizOverview: React.FC = () => {
     const quiz: Omit<Quiz, 'uid' | 'id' | 'createdAt' | 'updatedAt'> = {
       title: quizTitle,
       questions,
-      topics // Include topics in quiz data
+      topics, // Include topics in quiz data
+      isPublic // ADD THIS LINE
     };
 
     const validation = QuizService.validateQuiz(quiz);
@@ -324,6 +330,21 @@ const QuizOverview: React.FC = () => {
     );
   };
 
+  const handlePublicToggle = (value: boolean) => {
+    if (value) {
+      // Show warning when setting to public
+      setShowPublicWarningModal(true);
+    } else {
+      // Directly set to private without warning
+      setIsPublic(false);
+    }
+  };
+
+const confirmSetPublic = () => {
+  setIsPublic(true);
+  setShowPublicWarningModal(false);
+};
+
   // Topic Management Functions
   const handleAddTopic = () => {
     const trimmedTopic = newTopicInput.trim();
@@ -516,6 +537,45 @@ const QuizOverview: React.FC = () => {
             onChangeText={setQuizTitle}
             multiline
           />
+
+          {/* Privacy Section */}
+          <View style={styles.privacySection}>
+            <View style={styles.privacySectionHeader}>
+              <View style={styles.privacyIconContainer}>
+                <Ionicons 
+                  name={isPublic ? "globe" : "lock-closed"} 
+                  size={20} 
+                  color={isPublic ? "#10b981" : "#64748b"} 
+                />
+              </View>
+              <View style={styles.privacyTextContainer}>
+                <Text style={styles.privacySectionTitle}>
+                  {isPublic ? "Public Quiz" : "Private Quiz"}
+                </Text>
+                <Text style={styles.privacySectionDescription}>
+                  {isPublic 
+                    ? "Anyone can view and take this quiz" 
+                    : "Only you can access this quiz"}
+                </Text>
+              </View>
+              <Switch
+                value={isPublic}
+                onValueChange={handlePublicToggle}
+                trackColor={{ false: "#334155", true: "#10b981" }}
+                thumbColor={isPublic ? "#ffffff" : "#94a3b8"}
+                ios_backgroundColor="#334155"
+              />
+            </View>
+            
+            {isPublic && (
+              <View style={styles.publicBadge}>
+                <Ionicons name="globe-outline" size={14} color="#10b981" />
+                <Text style={styles.publicBadgeText}>
+                  This quiz is visible on your profile
+                </Text>
+              </View>
+            )}
+          </View>
 
           {/* Topics Section */}
           <View style={styles.topicsSection}>
@@ -725,6 +785,44 @@ const QuizOverview: React.FC = () => {
           onClose={() => setShowTopicModal(false)}
           onTopicSelected={handleTopicSelected}
         />
+      {/* Public Warning Modal */}
+        <Modal
+          visible={showPublicWarningModal}
+          transparent={true}
+          animationType="fade"
+          onRequestClose={() => setShowPublicWarningModal(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.warningModalContent}>
+              <View style={styles.warningIconContainer}>
+                <Ionicons name="alert-circle" size={48} color="#f59e0b" />
+              </View>
+              
+              <Text style={styles.warningModalTitle}>Make Quiz Public?</Text>
+              
+              <Text style={styles.warningModalText}>
+                This quiz will be visible on your profile and anyone will be able to view and take it.
+              </Text>
+              
+              <View style={styles.warningModalActions}>
+                <TouchableOpacity
+                  style={styles.warningModalCancelBtn}
+                  onPress={() => setShowPublicWarningModal(false)}
+                >
+                  <Text style={styles.warningModalCancelText}>Cancel</Text>
+                </TouchableOpacity>
+                
+                <TouchableOpacity
+                  style={styles.warningModalConfirmBtn}
+                  onPress={confirmSetPublic}
+                >
+                  <Ionicons name="globe-outline" size={18} color="#ffffff" />
+                  <Text style={styles.warningModalConfirmText}>Make Public</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>  
       </SafeAreaView>
     </LinearGradient>
   );
@@ -1164,7 +1262,117 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
-  
+  privacySection: {
+    marginBottom: 24,
+    backgroundColor: '#1e293b',
+    borderRadius: 12,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#334155',
+  },
+  privacySectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  privacyIconContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: '#0f172a',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  privacyTextContainer: {
+    flex: 1,
+  },
+  privacySectionTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#ffffff',
+    marginBottom: 2,
+  },
+  privacySectionDescription: {
+    fontSize: 13,
+    color: '#94a3b8',
+    lineHeight: 18,
+  },
+  publicBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(16, 185, 129, 0.1)',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    marginTop: 12,
+    gap: 6,
+    borderWidth: 1,
+    borderColor: 'rgba(16, 185, 129, 0.3)',
+  },
+  publicBadgeText: {
+    fontSize: 13,
+    color: '#10b981',
+    fontWeight: '500',
+  },
+  warningModalContent: {
+    backgroundColor: '#1e293b',
+    borderRadius: 20,
+    padding: 24,
+    width: '90%',
+    maxWidth: 400,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#334155',
+  },
+  warningIconContainer: {
+    marginBottom: 16,
+  },
+  warningModalTitle: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    color: '#ffffff',
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  warningModalText: {
+    fontSize: 15,
+    color: '#94a3b8',
+    textAlign: 'center',
+    lineHeight: 22,
+    marginBottom: 24,
+  },
+  warningModalActions: {
+    flexDirection: 'row',
+    gap: 12,
+    width: '100%',
+  },
+  warningModalCancelBtn: {
+    flex: 1,
+    backgroundColor: '#334155',
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  warningModalCancelText: {
+    color: '#94a3b8',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  warningModalConfirmBtn: {
+    flex: 1,
+    backgroundColor: '#10b981',
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  warningModalConfirmText: {
+    color: '#ffffff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
 
 });
 

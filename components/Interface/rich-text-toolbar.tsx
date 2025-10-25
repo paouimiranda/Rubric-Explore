@@ -1,5 +1,5 @@
-  // components/RichTextEditor/RichTextToolbar.tsx
-  import { pickImage, takePhoto, uploadNoteImage } from '@/services/image-service';
+// components/RichTextEditor/RichTextToolbar.tsx
+import { pickImage, takePhoto, uploadNoteImage } from '@/services/image-service';
 import { Ionicons } from '@expo/vector-icons';
 import React, { useCallback, useState } from 'react';
 import { Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';

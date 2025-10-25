@@ -5,16 +5,16 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
-    ActivityIndicator,
-    Dimensions,
-    SafeAreaView,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Dimensions,
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native';
-import { BarChart, LineChart } from 'react-native-gifted-charts';
+import { BarChart, LineChart, yAxisSides } from 'react-native-gifted-charts';
 
 const { width: screenWidth } = Dimensions.get('window');
 const CHART_WIDTH = screenWidth - 80;
@@ -162,7 +162,7 @@ const QuizPerformanceDetail = () => {
             yAxisColor="rgba(255, 255, 255, 0.2)"
             yAxisTextStyle={styles.chartAxisText}
             xAxisLabelTextStyle={styles.chartAxisText}
-            yAxisSide="right"
+            yAxisSide={yAxisSides.RIGHT}
           />
         </View>
         <Text style={styles.chartXLabel}>Attempt Number</Text>
@@ -263,7 +263,7 @@ const QuizPerformanceDetail = () => {
             yAxisColor="rgba(255, 255, 255, 0.2)"
             yAxisTextStyle={styles.chartAxisText}
             xAxisLabelTextStyle={styles.chartAxisText}
-            yAxisSide="right"
+            yAxisSide={yAxisSides.RIGHT}
           />
         </View>
         <Text style={styles.chartXLabel}>Attempt Number (seconds per question)</Text>

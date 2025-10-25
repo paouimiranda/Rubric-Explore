@@ -123,6 +123,8 @@ export class QuizService {
         questions: quiz.questions,
         category: quiz.category || '',
         tags: quiz.tags || [],
+        topics: quiz.topics || [], // ADD THIS LINE
+        isPublic: quiz.isPublic ?? false, // ADD THIS LINE (default to false)
         uid,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
@@ -172,7 +174,8 @@ export class QuizService {
         return {
           id: docSnap.id,
           ...quizData,
-          questions: questionsWithAllProperties
+          questions: questionsWithAllProperties,
+          isPublic: quizData.isPublic ?? false, // ADD THIS LINE
         } as Quiz;
       } else {
         return null;
@@ -276,7 +279,8 @@ export class QuizService {
         return {
           id: doc.id,
           ...quizData,
-          questions: questionsWithAllProperties
+          questions: questionsWithAllProperties,
+          isPublic: quizData.isPublic ?? false, // ADD THIS LINE
         } as Quiz;
       });
     } catch (error) {

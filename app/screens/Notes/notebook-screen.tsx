@@ -185,6 +185,7 @@ export default function NotebookScreen() {
         notebookId: notebookId as string,
         title: "Untitled Note",
         content: "",
+        isPublic: false, // NEW LINE
       };
       const docId = await createNote(noteData, uid);
       router.push({

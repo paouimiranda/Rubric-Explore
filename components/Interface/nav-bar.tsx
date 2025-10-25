@@ -21,7 +21,7 @@ const BottomNavigation = () => {
         </TouchableOpacity>
         
         <TouchableOpacity style={styles.navButton} onPress={() => safeNavigate(`/screens/Quiz/Analytics/quiz-performance-overview`)}>
-          <Image source={require('@/assets/images/discover_icon.png')} style={styles.navIcon} />
+          <Image source={require('@/assets/images/analytics_icon.png')} style={styles.navIcon} />
         </TouchableOpacity>
         
         {/* Empty space placeholder - same size as other buttons */}
@@ -85,8 +85,9 @@ const styles = StyleSheet.create({
     alignItems: 'center', // Center the icons within each space
   },
   navIcon: {
-    width: 45,
-    height: 45,
+    //formerly 45
+    width: 40,
+    height: 40,
     tintColor: '#2D425E',
   },
   middleButtonContainer: {
