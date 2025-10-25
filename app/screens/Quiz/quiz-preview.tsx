@@ -37,6 +37,7 @@ const QuizPreview = () => {
   const loadQuiz = async (id: string) => {
     try {
       setLoading(true);
+      // Use getQuizById which now supports public quiz access
       const quizData = await QuizService.getQuizById(id);
       if (quizData) {
         setQuiz(quizData);
@@ -44,10 +45,23 @@ const QuizPreview = () => {
         Alert.alert('Error', 'Quiz not found');
         router.back();
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error loading quiz:', error);
-      Alert.alert('Error', 'Failed to load quiz');
-      router.back();
+      
+      // Better error handling for permission issues
+      if (error.message?.includes('permission')) {
+        Alert.alert(
+          'Access Denied', 
+          'This quiz is private and you do not have permission to view it.',
+          [{ text: 'OK', onPress: () => router.back() }]
+        );
+      } else {
+        Alert.alert(
+          'Error', 
+          'Failed to load quiz. Please try again.',
+          [{ text: 'OK', onPress: () => router.back() }]
+        );
+      }
     } finally {
       setLoading(false);
     }
@@ -64,56 +78,56 @@ const QuizPreview = () => {
 
 
   const handleHostMultiplayer = async () => {
-  if (!quiz?.id) return;
+    if (!quiz?.id) return;
 
-  try {
-    // Get current user before showing confirmation
-    const user = await getCurrentUserData();
-    if (!user) {
-      Alert.alert('Error', 'Please login to host a multiplayer session');
-      return;
-    }
+    try {
+      // Get current user before showing confirmation
+      const user = await getCurrentUserData();
+      if (!user) {
+        Alert.alert('Error', 'Please login to host a multiplayer session');
+        return;
+      }
 
-    Alert.alert(
-      'Host Multiplayer Quiz',
-      'Would you like to create a multiplayer lobby for this quiz?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Create Lobby',
-          onPress: async () => {
-            try {
-              // createMultiplayerSession returns { sessionId, sessionCode }
-              const result: { sessionId: string; sessionCode: string } = await createMultiplayerSession(
-                quiz,
-                user.uid,
-                user.displayName || 'Anonymous'
-              );
-              const { sessionId, sessionCode } = result;
+      Alert.alert(
+        'Host Multiplayer Quiz',
+        'Would you like to create a multiplayer lobby for this quiz?',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Create Lobby',
+            onPress: async () => {
+              try {
+                // createMultiplayerSession returns { sessionId, sessionCode }
+                const result: { sessionId: string; sessionCode: string } = await createMultiplayerSession(
+                  quiz,
+                  user.uid,
+                  user.displayName || 'Anonymous'
+                );
+                const { sessionId, sessionCode } = result;
 
-              console.log('Session created:', sessionId, sessionCode);
+                console.log('Session created:', sessionId, sessionCode);
 
-              // Navigate to multiplayer lobby with both quizId and sessionId
-              router.push({
-                pathname: './multiplayer-lobby',
-                params: { 
-                  quizId: quiz.id,
-                  sessionId: sessionId 
-                },
-              });
-            } catch (error) {
-              console.error('Error creating session:', error);
-              Alert.alert('Error', 'Failed to create multiplayer session. Please try again.');
-            }
+                // Navigate to multiplayer lobby with both quizId and sessionId
+                router.push({
+                  pathname: './multiplayer-lobby',
+                  params: { 
+                    quizId: quiz.id,
+                    sessionId: sessionId 
+                  },
+                });
+              } catch (error) {
+                console.error('Error creating session:', error);
+                Alert.alert('Error', 'Failed to create multiplayer session. Please try again.');
+              }
+            },
           },
-        },
-      ]
-    );
-  } catch (error) {
-    console.error('Error getting user data:', error);
-    Alert.alert('Error', 'Failed to authenticate user. Please login again.');
-  }
-};
+        ]
+      );
+    } catch (error) {
+      console.error('Error getting user data:', error);
+      Alert.alert('Error', 'Failed to authenticate user. Please login again.');
+    }
+  };
 
 
 
@@ -376,6 +390,7 @@ const QuizPreview = () => {
     </LinearGradient>
   );
 };
+
 
 export default QuizPreview;
 

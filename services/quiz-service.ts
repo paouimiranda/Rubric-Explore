@@ -139,7 +139,10 @@ export class QuizService {
   }
 
   /**
-   * Get a quiz by ID (only if user owns it)
+   * Get a quiz by ID
+   * - If user owns it: full access
+   * - If quiz is public: read-only access
+   * - Otherwise: no access
    */
   static async getQuizById(quizId: string, skipOwnershipCheck: boolean = false): Promise<Quiz | null> {
     try {
@@ -150,8 +153,12 @@ export class QuizService {
       if (docSnap.exists()) {
         const quizData = docSnap.data() as Omit<Quiz, 'id'>;
         
-        // Check if user owns this quiz (unless ownership check is skipped)
-        if (!skipOwnershipCheck && quizData.uid !== uid) {
+        // Check access permissions
+        const isOwner = quizData.uid === uid;
+        const isPublic = quizData.isPublic ?? false;
+        
+        // Allow access if: user owns it, quiz is public, or ownership check is skipped
+        if (!skipOwnershipCheck && !isOwner && !isPublic) {
           throw new Error('You do not have permission to access this quiz.');
         }
         
@@ -175,7 +182,7 @@ export class QuizService {
           id: docSnap.id,
           ...quizData,
           questions: questionsWithAllProperties,
-          isPublic: quizData.isPublic ?? false, // ADD THIS LINE
+          isPublic: isPublic,
         } as Quiz;
       } else {
         return null;
@@ -185,7 +192,6 @@ export class QuizService {
       throw error;
     }
   }
-
   /**
    * Update an existing quiz (only if user owns it)
    */

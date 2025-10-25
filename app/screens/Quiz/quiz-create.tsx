@@ -1,4 +1,4 @@
-// File: app/Quiz/quiz-create.tsx - Complete Zustand Version with Topic Selector
+// File: app/Quiz/quiz-create.tsx - Complete Refactored Version with Modern UI
 import { convertAPIQuestionToInternalFormat, generateQuizFromAI } from '@/api/quizApi';
 import { TopicSelectionModal } from '@/components/Interface/ai-quiz-modal';
 import { QuizService, type Question, type Quiz } from '@/services/quiz-service';
@@ -51,6 +51,7 @@ const QuizMaker = () => {
   const [showQuestionTypeModal, setShowQuestionTypeModal] = useState(false);
   const [showTopicModal, setShowTopicModal] = useState(false);
   const [showTopicSelectorModal, setShowTopicSelectorModal] = useState(false);
+  const [showEllipsisMenu, setShowEllipsisMenu] = useState(false);
   const [customTimeLimit, setCustomTimeLimit] = useState('');
   const [newTopicInput, setNewTopicInput] = useState('');
 
@@ -68,9 +69,9 @@ const QuizMaker = () => {
 
   // Question type options
   const questionTypes = [
-    { key: 'multiple_choice', label: 'Multiple Choice', icon: '☑️' },
-    { key: 'fill_blank', label: 'Fill in the Blank', icon: '✏️' },
-    { key: 'matching', label: 'Matching', icon: '🔗' }
+    { key: 'multiple_choice', label: 'Multiple Choice', icon: 'checkmark-circle-outline' },
+    { key: 'fill_blank', label: 'Fill in the Blank', icon: 'create-outline' },
+    { key: 'matching', label: 'Matching', icon: 'git-compare-outline' }
   ];
 
   // Time limit presets (in seconds)
@@ -234,7 +235,6 @@ const QuizMaker = () => {
     const success = addTopic(trimmedTopic);
     
     if (success) {
-      // Assign the new topic to current question
       const updated = { ...questions[currentQuestionIndex] };
       updated.topic = trimmedTopic;
       updateQuestion(currentQuestionIndex, updated);
@@ -296,7 +296,7 @@ const QuizMaker = () => {
       title: quizTitle,
       questions,
       topics,
-      isPublic: false //NEW LINE
+      isPublic: false
     };
 
     const validation = QuizService.validateQuiz(quiz);
@@ -422,7 +422,7 @@ const QuizMaker = () => {
                   </View>
                   <TextInput
                     placeholder={`Answer ${oIndex + 1}`}
-                    placeholderTextColor="#fff"
+                    placeholderTextColor="rgba(255, 255, 255, 0.6)"
                     value={opt}
                     onChangeText={(text) => handleOptionChange(oIndex, text)}
                     style={styles.answerInput}
@@ -439,13 +439,13 @@ const QuizMaker = () => {
             <Text style={styles.fillBlankLabel}>Correct Answer:</Text>
             <TextInput
               placeholder="Enter the correct answer"
-              placeholderTextColor="#fff"
+              placeholderTextColor="rgba(255, 255, 255, 0.5)"
               value={currentQuestion.correctAnswer}
               onChangeText={handleFillBlankAnswerChange}
               style={styles.fillBlankInput}
             />
             <Text style={styles.fillBlankHint}>
-              💡 Tip: Use underscores (_____) in your question to show where the blank should be
+              Tip: Use underscores (_____) in your question to show where the blank should be
             </Text>
           </View>
         );
@@ -458,15 +458,15 @@ const QuizMaker = () => {
               <View key={pIndex} style={styles.matchPair}>
                 <TextInput
                   placeholder={`Left ${pIndex + 1}`}
-                  placeholderTextColor="#fff"
+                  placeholderTextColor="rgba(255, 255, 255, 0.5)"
                   value={pair.left}
                   onChangeText={(text) => handleMatchPairChange(pIndex, 'left', text)}
                   style={[styles.matchInput, styles.matchInputLeft]}
                 />
-                <Text style={styles.matchConnector}>↔</Text>
+                <Ionicons name="swap-horizontal" size={20} color="#fff" />
                 <TextInput
                   placeholder={`Right ${pIndex + 1}`}
-                  placeholderTextColor="#fff"
+                  placeholderTextColor="rgba(255, 255, 255, 0.5)"
                   value={pair.right}
                   onChangeText={(text) => handleMatchPairChange(pIndex, 'right', text)}
                   style={[styles.matchInput, styles.matchInputRight]}
@@ -476,7 +476,7 @@ const QuizMaker = () => {
                     onPress={() => handleRemoveMatchPair(pIndex)}
                     style={styles.removePairBtn}
                   >
-                    <Text style={styles.removePairText}>✕</Text>
+                    <Ionicons name="close" size={18} color="#fff" />
                   </TouchableOpacity>
                 )}
               </View>
@@ -485,7 +485,8 @@ const QuizMaker = () => {
               onPress={handleAddMatchPair}
               style={styles.addPairBtn}
             >
-              <Text style={styles.addPairText}>+ Add Pair</Text>
+              <Ionicons name="add" size={20} color="#fff" />
+              <Text style={styles.addPairText}>Add Pair</Text>
             </TouchableOpacity>
           </View>
         );
@@ -510,8 +511,8 @@ const QuizMaker = () => {
         <SafeAreaView style={styles.safeArea}>
           <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
             <Text style={{ color: '#fff', fontSize: 18 }}>No question selected</Text>
-            <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-              <Text style={styles.backBtnText}>Go Back</Text>
+            <TouchableOpacity onPress={() => router.back()} style={styles.saveBtn}>
+              <Text style={styles.btnText}>Go Back</Text>
             </TouchableOpacity>
           </View>
         </SafeAreaView>
@@ -527,107 +528,99 @@ const QuizMaker = () => {
       style={{ flex: 1 }}
     >
       <SafeAreaView style={styles.safeArea}>
-        {/* Header with Quiz Title */}
+        {/* Header */}
         <View style={styles.header}>
-          {isFromOverview && (
-            <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-              <Text style={styles.backBtnText}>← Back</Text>
-            </TouchableOpacity>
-          )}
-          
-          <TouchableOpacity onPress={handleSaveQuiz} style={styles.saveBtn}>
-            <Text style={styles.btnText}>
-              {isFromOverview ? 'Done' : 'Save & Preview'}
-            </Text>
-          </TouchableOpacity>
-
-          {!isFromOverview && (
-            <TouchableOpacity onPress={handleGenerateQuizAI} style={styles.generateBtn}>
-              <Text style={styles.btnText}>Generate with AI</Text>
-            </TouchableOpacity>
-          )}
-        </View>
-
-        {/* Main Content - Single Question View */}
-        <ScrollView style={styles.mainContent} showsVerticalScrollIndicator={false}>
-          <View style={styles.questionHeader}>
-            <Text style={styles.questionNumber}>Question {currentQuestionIndex + 1}</Text>
-            {questions.length > 1 && (
-              <TouchableOpacity onPress={handleDeleteQuestion} style={styles.deleteBtn}>
-                <Text style={styles.deleteText}>Delete</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-
-          {/* Question Type Selector */}
+          {/* Question Type Dropdown */}
           <TouchableOpacity
             onPress={() => setShowQuestionTypeModal(true)}
-            style={styles.questionTypeBtn}
+            style={styles.questionTypeDropdown}
           >
-            <Text style={styles.questionTypeText}>
-              {currentQuestionType?.icon} {currentQuestionType?.label}
+            <Ionicons name={currentQuestionType?.icon as any} size={20} color="#fff" />
+            <Text style={styles.questionTypeDropdownText}>
+              {currentQuestionType?.label}
             </Text>
-            <Text style={styles.questionTypeArrow}>▼</Text>
+            <Ionicons name="chevron-down" size={16} color="#fff" />
           </TouchableOpacity>
 
-          <TextInput
-            placeholder="QUESTION"
-            placeholderTextColor="#fff"
-            value={currentQuestion.question}
-            onChangeText={handleQuestionChange}
-            style={styles.questionInput}
-            multiline={currentQuestion.type === 'fill_blank'}
-          />
+          <View style={styles.headerActions}>
+            {/* Ellipsis Menu */}
+            <TouchableOpacity 
+              onPress={() => setShowEllipsisMenu(true)} 
+              style={styles.ellipsisBtn}
+            >
+              <Ionicons name="ellipsis-horizontal" size={24} color="#fff" />
+            </TouchableOpacity>
 
-          {/* Topic Selector Button */}
-          <TouchableOpacity
-            onPress={() => setShowTopicSelectorModal(true)}
-            style={styles.topicSelectorBtn}
-          >
-            <View style={styles.topicSelectorContent}>
-              <Ionicons name="pricetag" size={16} color="#fff" />
-              <Text style={styles.topicSelectorText}>
-                {currentQuestion.topic ? currentQuestion.topic : 'Select Topic (Optional)'}
+            {/* Save/Done Button */}
+            <TouchableOpacity onPress={handleSaveQuiz} style={styles.saveBtn}>
+              <Text style={styles.btnText}>
+                {isFromOverview ? 'Done' : 'Save & Preview'}
               </Text>
-            </View>
-            {currentQuestion.topic ? (
-              <TouchableOpacity
-                onPress={handleClearTopic}
-                style={styles.clearTopicBtn}
-                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-              >
-                <Ionicons name="close-circle" size={20} color="#ef4444" />
-              </TouchableOpacity>
-            ) : (
-              <Text style={styles.topicSelectorArrow}>▼</Text>
-            )}
-          </TouchableOpacity>
+            </TouchableOpacity>
+          </View>
+        </View>
 
-          {/* Time Limit Button */}
-          <TouchableOpacity
-            onPress={() => setShowTimeLimitModal(true)}
-            style={styles.timeLimitBtn}
-          >
-            <Text style={styles.timeLimitBtnText}>
-              ⏱️ Time Limit: {formatTime(currentQuestion.timeLimit)}
-            </Text>
-            <Text style={styles.timeLimitArrow}>▼</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.imageBox}
-            onPress={handleSelectImage}
-          >
-            {currentQuestion.image ? (
-              <Image 
-                source={{ uri: currentQuestion.image }}
-                style={styles.image}
-                resizeMode="cover"
+        {/* Main Content */}
+        <ScrollView style={styles.mainContent} showsVerticalScrollIndicator={false}>
+          {/* Question Input with Topic Button */}
+          <View style={styles.questionInputContainer}>
+            <TextInput
+              placeholder="Enter your question"
+              placeholderTextColor="rgba(255, 255, 255, 0.5)"
+              value={currentQuestion.question}
+              onChangeText={handleQuestionChange}
+              style={styles.questionInput}
+              multiline={currentQuestion.type === 'fill_blank'}
+            />
+            <TouchableOpacity
+              onPress={() => setShowTopicSelectorModal(true)}
+              style={[
+                styles.topicIconBtn,
+                currentQuestion.topic && styles.topicIconBtnActive
+              ]}
+            >
+              <Ionicons 
+                name={currentQuestion.topic ? "pricetag" : "pricetag-outline"} 
+                size={20} 
+                color={currentQuestion.topic ? "#8b5cf6" : "#fff"} 
               />
-            ) : (
-              <Text style={styles.imagePlaceholder}>Add Image</Text>
-            )}
-          </TouchableOpacity>
+              {currentQuestion.topic && (
+                <View style={styles.topicIndicatorDot} />
+              )}
+            </TouchableOpacity>
+          </View>
+
+          {/* Image with Time Limit Pill */}
+          <View style={styles.imageContainer}>
+            <TouchableOpacity
+              style={styles.imageBox}
+              onPress={handleSelectImage}
+            >
+              {currentQuestion.image ? (
+                <Image 
+                  source={{ uri: currentQuestion.image }}
+                  style={styles.image}
+                  resizeMode="cover"
+                />
+              ) : (
+                <View style={styles.imagePlaceholderContent}>
+                  <Ionicons name="image-outline" size={48} color="rgba(255, 255, 255, 0.3)" />
+                  <Text style={styles.imagePlaceholder}>Add Image</Text>
+                </View>
+              )}
+            </TouchableOpacity>
+            
+            {/* Floating Time Limit Pill */}
+            <TouchableOpacity
+              onPress={() => setShowTimeLimitModal(true)}
+              style={styles.timeLimitPill}
+            >
+              <Ionicons name="time-outline" size={16} color="#fff" />
+              <Text style={styles.timeLimitPillText}>
+                {formatTime(currentQuestion.timeLimit)}
+              </Text>
+            </TouchableOpacity>
+          </View>
 
           {renderQuestionContent()}
         </ScrollView>
@@ -667,10 +660,54 @@ const QuizMaker = () => {
               style={styles.addQuestionBtn}
               onPress={handleAddQuestion}
             >
-              <Text style={styles.addQuestionText}>+</Text>
+              <Ionicons name="add" size={24} color="#fff" />
             </TouchableOpacity>
           )}
         </View>
+
+        {/* Ellipsis Menu Modal */}
+        <Modal
+          visible={showEllipsisMenu}
+          transparent={true}
+          animationType="fade"
+          onRequestClose={() => setShowEllipsisMenu(false)}
+        >
+          <TouchableOpacity 
+            style={styles.ellipsisOverlay}
+            activeOpacity={1}
+            onPress={() => setShowEllipsisMenu(false)}
+          >
+            <View style={styles.ellipsisMenu}>
+              {!isFromOverview && (
+                <TouchableOpacity
+                  style={styles.ellipsisMenuItem}
+                  onPress={() => {
+                    setShowEllipsisMenu(false);
+                    handleGenerateQuizAI();
+                  }}
+                >
+                  <Ionicons name="bulb-outline" size={20} color="#fff" />
+                  <Text style={styles.ellipsisMenuText}>Generate with AI</Text>
+                </TouchableOpacity>
+              )}
+              
+              {questions.length > 1 && (
+                <TouchableOpacity
+                  style={[styles.ellipsisMenuItem, styles.ellipsisMenuItemDanger]}
+                  onPress={() => {
+                    setShowEllipsisMenu(false);
+                    handleDeleteQuestion();
+                  }}
+                >
+                  <Ionicons name="trash-outline" size={20} color="#ef4444" />
+                  <Text style={[styles.ellipsisMenuText, styles.ellipsisMenuTextDanger]}>
+                    Delete Question
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          </TouchableOpacity>
+        </Modal>
 
         {/* Topic Selector Modal */}
         <Modal
@@ -779,7 +816,15 @@ const QuizMaker = () => {
         >
           <View style={styles.modalOverlay}>
             <View style={styles.modalContent}>
-              <Text style={styles.modalTitle}>Set Time Limit</Text>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Set Time Limit</Text>
+                <TouchableOpacity
+                  onPress={() => setShowTimeLimitModal(false)}
+                  style={styles.modalCloseIcon}
+                >
+                  <Ionicons name="close" size={24} color="#94a3b8" />
+                </TouchableOpacity>
+              </View>
               
               <View style={styles.presetTimesContainer}>
                 <Text style={styles.presetTimesLabel}>Presets:</Text>
@@ -809,6 +854,7 @@ const QuizMaker = () => {
                 <View style={styles.customTimeRow}>
                   <TextInput
                     placeholder="Enter seconds"
+                    placeholderTextColor="#64748b"
                     value={customTimeLimit}
                     onChangeText={setCustomTimeLimit}
                     keyboardType="numeric"
@@ -822,13 +868,6 @@ const QuizMaker = () => {
                   </TouchableOpacity>
                 </View>
               </View>
-
-              <TouchableOpacity
-                onPress={() => setShowTimeLimitModal(false)}
-                style={styles.modalCloseBtn}
-              >
-                <Text style={styles.modalCloseBtnText}>Close</Text>
-              </TouchableOpacity>
             </View>
           </View>
         </Modal>
@@ -842,7 +881,15 @@ const QuizMaker = () => {
         >
           <View style={styles.modalOverlay}>
             <View style={styles.modalContent}>
-              <Text style={styles.modalTitle}>Select Question Type</Text>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Select Question Type</Text>
+                <TouchableOpacity
+                  onPress={() => setShowQuestionTypeModal(false)}
+                  style={styles.modalCloseIcon}
+                >
+                  <Ionicons name="close" size={24} color="#94a3b8" />
+                </TouchableOpacity>
+              </View>
               
               {questionTypes.map((type) => (
                 <TouchableOpacity
@@ -853,22 +900,18 @@ const QuizMaker = () => {
                   ]}
                   onPress={() => handleQuestionTypeChange(type.key as Question['type'])}
                 >
-                  <Text style={styles.questionTypeOptionIcon}>{type.icon}</Text>
+                  <Ionicons name={type.icon as any} size={24} color="#fff" />
                   <Text style={[
                     styles.questionTypeOptionText,
                     currentQuestion.type === type.key && styles.questionTypeOptionTextActive
                   ]}>
                     {type.label}
                   </Text>
+                  {currentQuestion.type === type.key && (
+                    <Ionicons name="checkmark-circle" size={20} color="#10b981" style={{ marginLeft: 'auto' }} />
+                  )}
                 </TouchableOpacity>
               ))}
-
-              <TouchableOpacity
-                onPress={() => setShowQuestionTypeModal(false)}
-                style={styles.modalCloseBtn}
-              >
-                <Text style={styles.modalCloseBtnText}>Cancel</Text>
-              </TouchableOpacity>
             </View>
           </View>
         </Modal>
@@ -903,40 +946,384 @@ const QuizMaker = () => {
 
 export default QuizMaker;
 
-// Add these new styles to your existing StyleSheet (keeping all existing styles)
 const styles = StyleSheet.create({
-  // ... keep all existing styles from the original file ...
+  safeArea: { 
+    flex: 1 
+  },
   
-  // New styles for topic selector
-  topicSelectorBtn: {
-    backgroundColor: 'rgba(139, 92, 246, 0.2)',
-    borderRadius: 10,
-    padding: 12,
-    marginBottom: 10,
+  // Header styles
+  header: {
     flexDirection: 'row',
+    padding: 16,
+    alignItems: 'center',
     justifyContent: 'space-between',
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  questionTypeDropdown: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 12,
+    gap: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+  },
+  questionTypeDropdownText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  ellipsisBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  saveBtn: {
+    backgroundColor: '#8b5cf6',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 12,
+  },
+  btnText: {
+    color: '#fff',
+    fontWeight: '600',
+    fontSize: 14,
+  },
+  
+  // Main content
+  mainContent: {
+    flex: 1,
+    paddingHorizontal: 16,
+    paddingTop: 20,
+  },
+  questionInputContainer: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: 20,
+    gap: 12,
+  },
+  questionInput: {
+    flex: 1,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    borderRadius: 16,
+    padding: 18,
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '500',
+    minHeight: 60,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.15)',
+  },
+  topicIconBtn: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(139, 92, 246, 0.4)',
+    borderColor: 'rgba(255, 255, 255, 0.15)',
+    position: 'relative',
   },
-  topicSelectorContent: {
+  topicIconBtnActive: {
+    backgroundColor: 'rgba(139, 92, 246, 0.2)',
+    borderColor: 'rgba(139, 92, 246, 0.5)',
+  },
+  topicIndicatorDot: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#8b5cf6',
+  },
+  
+  // Image container with floating time pill
+  imageContainer: {
+    position: 'relative',
+    marginBottom: 24,
+  },
+  imageBox: {
+    height: 220,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+    borderStyle: 'dashed',
+    overflow: 'hidden',
+  },
+  image: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 18,
+  },
+  imagePlaceholderContent: {
+    alignItems: 'center',
+    gap: 12,
+  },
+  imagePlaceholder: {
+    color: 'rgba(255, 255, 255, 0.4)',
+    fontWeight: '600',
+    fontSize: 15,
+  },
+  timeLimitPill: {
+    position: 'absolute',
+    bottom: 16,
+    left: 16,
     flexDirection: 'row',
     alignItems: 'center',
+    backgroundColor: 'rgba(20, 25, 45, 0.95)',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    gap: 6,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  timeLimitPillText: {
+    color: '#fff',
+    fontWeight: '600',
+    fontSize: 13,
+  },
+  
+  // Ellipsis menu styles
+  ellipsisOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.4)',
+    justifyContent: 'flex-start',
+    alignItems: 'flex-end',
+    paddingTop: 60,
+    paddingRight: 16,
+  },
+  ellipsisMenu: {
+    backgroundColor: '#1e293b',
+    borderRadius: 12,
+    minWidth: 200,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 5,
+    overflow: 'hidden',
+  },
+  ellipsisMenuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    gap: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  ellipsisMenuItemDanger: {
+    borderBottomWidth: 0,
+  },
+  ellipsisMenuText: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '500',
+  },
+  ellipsisMenuTextDanger: {
+    color: '#ef4444',
+  },
+  
+  // Answer styles
+  answerGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    marginBottom: 20,
+    gap: 12,
+  },
+  answerBtn: {
+    width: '48%',
+    minHeight: 80,
+    padding: 16,
+    borderRadius: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  selectedAnswer: {
+    borderWidth: 3,
+    borderColor: '#fff',
+    shadowOpacity: 0.4,
+  },
+  answerInput: {
+    color: '#fff',
+    textAlign: 'center',
+    flex: 1,
+    fontWeight: '600',
+    fontSize: 15,
+  },
+  color0: { backgroundColor: '#ef4444' },
+  color1: { backgroundColor: '#f59e0b' },
+  color2: { backgroundColor: '#10b981' },
+  color3: { backgroundColor: '#3b82f6' },
+  radioRow: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  radioCircleOuter: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 2,
+    borderColor: '#fff',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 10,
+  },
+  radioCircleInner: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: '#fff',
+  },
+  
+  // Fill blank styles
+  fillBlankContainer: {
+    marginBottom: 20,
+  },
+  fillBlankLabel: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '600',
+    marginBottom: 10,
+  },
+  fillBlankInput: {
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    borderRadius: 12,
+    padding: 16,
+    color: '#fff',
+    fontSize: 15,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.15)',
+  },
+  fillBlankHint: {
+    color: 'rgba(255, 255, 255, 0.5)',
+    fontSize: 12,
+    marginTop: 8,
+    fontStyle: 'italic',
+  },
+  
+  // Matching styles
+  matchingContainer: {
+    marginBottom: 20,
+  },
+  matchingLabel: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '600',
+    marginBottom: 12,
+  },
+  matchPair: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
     gap: 8,
+  },
+  matchInput: {
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    borderRadius: 10,
+    padding: 12,
+    color: '#fff',
+    fontSize: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.15)',
+  },
+  matchInputLeft: {
     flex: 1,
   },
-  topicSelectorText: {
+  matchInputRight: {
+    flex: 1,
+  },
+  removePairBtn: {
+    backgroundColor: '#ef4444',
+    borderRadius: 20,
+    width: 32,
+    height: 32,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  addPairBtn: {
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    borderRadius: 10,
+    padding: 12,
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 8,
+    marginTop: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.15)',
+    borderStyle: 'dashed',
+  },
+  addPairText: {
+    color: '#fff',
+    fontWeight: '600',
+    fontSize: 14,
+  },
+  
+  // Bottom navigation
+  bottomBar: {
+    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+    paddingVertical: 12,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255, 255, 255, 0.1)',
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  questionNavBar: {
+    flex: 1,
+    marginRight: 10,
+  },
+  questionNavContent: {
+    paddingHorizontal: 16,
+    alignItems: 'center',
+  },
+  questionNavItem: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+    position: 'relative',
+  },
+  questionNavItemActive: {
+    backgroundColor: '#8b5cf6',
+  },
+  questionNavText: {
     color: '#fff',
     fontWeight: 'bold',
-    fontSize: 14,
-    flex: 1,
+    fontSize: 16,
   },
-  topicSelectorArrow: {
+  questionNavTextActive: {
     color: '#fff',
-    fontSize: 12,
-  },
-  clearTopicBtn: {
-    padding: 4,
   },
   navTopicIndicator: {
     position: 'absolute',
@@ -945,24 +1332,75 @@ const styles = StyleSheet.create({
     width: 6,
     height: 6,
     borderRadius: 3,
+    backgroundColor: '#10b981',
+  },
+  addQuestionBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     backgroundColor: '#8b5cf6',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 16,
   },
   
-  // Topic selector modal styles
+  // Modal styles
+  loadingOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 999,
+  },
+  loadingText: {
+    color: 'white',
+    marginTop: 12,
+    fontSize: 16,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContent: {
+    backgroundColor: '#1e293b',
+    borderRadius: 20,
+    padding: 24,
+    width: '90%',
+    maxWidth: 400,
+    maxHeight: '80%',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 5,
+  },
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 20,
   },
+  modalTitle: {
+    color: '#fff',
+    fontSize: 20,
+    fontWeight: 'bold',
+  },
   modalCloseIcon: {
     padding: 4,
   },
+  
+  // Topic selector modal
   addTopicInModalSection: {
     marginBottom: 20,
     padding: 12,
     backgroundColor: 'rgba(139, 92, 246, 0.1)',
-    borderRadius: 8,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: 'rgba(139, 92, 246, 0.3)',
   },
@@ -979,8 +1417,8 @@ const styles = StyleSheet.create({
   newTopicInModalInput: {
     flex: 1,
     backgroundColor: '#0f172a',
-    borderRadius: 8,
-    padding: 10,
+    borderRadius: 10,
+    padding: 12,
     color: '#ffffff',
     fontSize: 14,
     borderWidth: 1,
@@ -988,7 +1426,7 @@ const styles = StyleSheet.create({
   },
   addTopicInModalBtn: {
     backgroundColor: '#8b5cf6',
-    borderRadius: 8,
+    borderRadius: 10,
     width: 44,
     height: 44,
     justifyContent: 'center',
@@ -1019,7 +1457,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     backgroundColor: '#0f172a',
-    borderRadius: 8,
+    borderRadius: 10,
     padding: 14,
     marginBottom: 8,
     borderWidth: 1,
@@ -1052,7 +1490,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'rgba(239, 68, 68, 0.1)',
-    borderRadius: 8,
+    borderRadius: 10,
     padding: 12,
     gap: 6,
     borderWidth: 1,
@@ -1064,380 +1502,15 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   
-  // Keep all other existing styles...
-  safeArea: { flex: 1 },
-  header: {
-    flexDirection: 'row',
-    padding: 16,
-    alignItems: 'center',
-    gap: 12,
-  },
-  backBtn: {
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    borderRadius: 6,
-    marginRight: 12,
-  },
-  backBtnText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '500',
-  },
-  saveBtn: {
-    backgroundColor: '#F5B3D7',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 10,
-  },
-  btnText: {
-    color: '#fff',
-    fontWeight: 'bold',
-    fontSize: 12,
-  },
-  generateBtn: {
-    backgroundColor: '#4CAF50',
-    paddingVertical: 10,
-    paddingHorizontal: 15,
-    borderRadius: 6,
-    marginLeft: 10
-  },
-  mainContent: {
-    flex: 1,
-    paddingHorizontal: 16,
-  },
-  questionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  questionNumber: {
-    color: '#fff',
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  deleteBtn: {
-    backgroundColor: '#FF6B6B',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
-  },
-  deleteText: {
-    color: '#fff',
-    fontWeight: 'bold',
-    fontSize: 12,
-  },
-  questionTypeBtn: {
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    borderRadius: 10,
-    padding: 12,
-    marginBottom: 10,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.2)',
-  },
-  questionTypeText: {
-    color: '#fff',
-    fontWeight: 'bold',
-    fontSize: 16,
-  },
-  questionTypeArrow: {
-    color: '#fff',
-    fontSize: 12,
-  },
-  questionInput: {
-    backgroundColor: '#5aa7b4',
-    borderRadius: 10,
-    padding: 14,
-    color: '#fff',
-    marginBottom: 10,
-    fontWeight: 'bold',
-    textAlign: 'center',
-    minHeight: 50,
-  },
-  timeLimitBtn: {
-    backgroundColor: 'rgba(90, 167, 180, 0.8)',
-    borderRadius: 10,
-    padding: 12,
-    marginBottom: 16,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.3)',
-  },
-  timeLimitBtnText: {
-    color: '#fff',
-    fontWeight: 'bold',
-    fontSize: 16,
-  },
-  timeLimitArrow: {
-    color: '#fff',
-    fontSize: 12,
-  },
-  imageBox: {
-    height: 200,
-    backgroundColor: '#ccc',
-    borderRadius: 10,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  image: {
-    width: '100%',
-    height: '100%',
-    borderRadius: 10,
-  },
-  imagePlaceholder: {
-    color: '#555',
-    fontWeight: 'bold',
-  },
-  answerGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
-    marginBottom: 20,
-  },
-  answerBtn: {
-    width: '48%',
-    height: 80,
-    padding: 12,
-    borderRadius: 20,
-    marginBottom: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 3,
-    elevation: 4,
-  },
-  selectedAnswer: {
-    borderWidth: 3,
-    borderColor: '#fff',
-  },
-  answerInput: {
-    color: '#fff',
-    textAlign: 'center',
-    flex: 1,
-    fontWeight: 'bold',
-    fontSize: 16,
-    textShadowColor: 'rgba(179, 179, 179, 0.6)',
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 2,
-  },
-  color0: { backgroundColor: '#FF999A' },
-  color1: { backgroundColor: '#F9D976' },
-  color2: { backgroundColor: '#90EE90' },
-  color3: { backgroundColor: '#87E3E3' },
-  radioRow: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  radioCircleOuter: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    borderWidth: 2,
-    borderColor: '#fff',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 8,
-  },
-  radioCircleInner: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: '#fff',
-  },
-  fillBlankContainer: {
-    marginBottom: 20,
-  },
-  fillBlankLabel: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: 'bold',
-    marginBottom: 8,
-  },
-  fillBlankInput: {
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    borderRadius: 10,
-    padding: 14,
-    color: '#fff',
-    fontSize: 16,
-    borderWidth: 2,
-    borderColor: 'rgba(255, 255, 255, 0.3)',
-  },
-  fillBlankHint: {
-    color: 'rgba(255, 255, 255, 0.7)',
-    fontSize: 12,
-    marginTop: 8,
-    fontStyle: 'italic',
-  },
-  matchingContainer: {
-    marginBottom: 20,
-  },
-  matchingLabel: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: 'bold',
-    marginBottom: 12,
-  },
-  matchPair: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  matchInput: {
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    borderRadius: 8,
-    padding: 10,
-    color: '#fff',
-    fontSize: 14,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.3)',
-  },
-  matchInputLeft: {
-    flex: 1,
-    marginRight: 8,
-  },
-  matchInputRight: {
-    flex: 1,
-    marginLeft: 8,
-  },
-  matchConnector: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  removePairBtn: {
-    backgroundColor: '#FF6B6B',
-    borderRadius: 15,
-    width: 30,
-    height: 30,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginLeft: 8,
-  },
-  removePairText: {
-    color: '#fff',
-    fontWeight: 'bold',
-    fontSize: 16,
-  },
-  addPairBtn: {
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    borderRadius: 8,
-    padding: 12,
-    alignItems: 'center',
-    marginTop: 8,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.3)',
-    borderStyle: 'dashed',
-  },
-  addPairText: {
-    color: '#fff',
-    fontWeight: 'bold',
-    fontSize: 14,
-  },
-  bottomBar: {
-    backgroundColor: 'rgba(0, 0, 0, 0.3)',
-    paddingVertical: 12,
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(255, 255, 255, 0.1)',
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  questionNavBar: {
-    flex: 1,
-    marginRight: 10,
-  },
-  questionNavContent: {
-    paddingHorizontal: 16,
-    alignItems: 'center',
-  },
-  questionNavItem: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-    position: 'relative',
-  },
-  questionNavItemActive: {
-    backgroundColor: '#5aa7b4',
-  },
-  questionNavText: {
-    color: '#fff',
-    fontWeight: 'bold',
-    fontSize: 16,
-  },
-  questionNavTextActive: {
-    color: '#fff',
-  },
-  addQuestionBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#308394',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 16,
-  },
-  addQuestionText: {
-    color: '#fff',
-    fontWeight: 'bold',
-    fontSize: 20,
-  },
-  loadingOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    zIndex: 999,
-  },
-  loadingText: {
-    color: 'white',
-    marginTop: 12,
-    fontSize: 16,
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  modalContent: {
-    backgroundColor: '#1e3a5f',
-    borderRadius: 16,
-    padding: 24,
-    width: '90%',
-    maxWidth: 400,
-    maxHeight: '80%',
-  },
-  modalTitle: {
-    color: '#fff',
-    fontSize: 20,
-    fontWeight: 'bold',
-    textAlign: 'center',
-    marginBottom: 20,
-  },
+  // Time limit modal
   presetTimesContainer: {
     marginBottom: 20,
   },
   presetTimesLabel: {
     color: '#fff',
     fontSize: 16,
-    fontWeight: 'bold',
-    marginBottom: 10,
+    fontWeight: '600',
+    marginBottom: 12,
   },
   presetTimesGrid: {
     flexDirection: 'row',
@@ -1445,21 +1518,20 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   presetTimeBtn: {
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    borderRadius: 8,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    borderRadius: 10,
     paddingHorizontal: 16,
     paddingVertical: 10,
-    marginBottom: 8,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.2)',
+    borderColor: 'rgba(255, 255, 255, 0.15)',
   },
   presetTimeBtnActive: {
-    backgroundColor: '#5aa7b4',
-    borderColor: '#fff',
+    backgroundColor: '#8b5cf6',
+    borderColor: '#8b5cf6',
   },
   presetTimeText: {
     color: '#fff',
-    fontWeight: 'bold',
+    fontWeight: '600',
     fontSize: 14,
   },
   presetTimeTextActive: {
@@ -1471,68 +1543,57 @@ const styles = StyleSheet.create({
   customTimeLabel: {
     color: '#fff',
     fontSize: 16,
-    fontWeight: 'bold',
-    marginBottom: 10,
+    fontWeight: '600',
+    marginBottom: 12,
   },
   customTimeRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 12,
   },
   customTimeInput: {
     flex: 1,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    borderRadius: 8,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    borderRadius: 10,
     padding: 12,
     color: '#fff',
     fontSize: 16,
-    marginRight: 12,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.2)',
+    borderColor: 'rgba(255, 255, 255, 0.15)',
   },
   customTimeBtn: {
-    backgroundColor: '#4CAF50',
-    borderRadius: 8,
-    paddingHorizontal: 16,
+    backgroundColor: '#8b5cf6',
+    borderRadius: 10,
+    paddingHorizontal: 20,
     paddingVertical: 12,
   },
   customTimeBtnText: {
     color: '#fff',
-    fontWeight: 'bold',
+    fontWeight: '600',
     fontSize: 14,
   },
-  modalCloseBtn: {
-    backgroundColor: '#FF6B6B',
-    borderRadius: 8,
-    padding: 12,
-    alignItems: 'center',
-  },
-  modalCloseBtnText: {
-    color: '#fff',
-    fontWeight: 'bold',
-    fontSize: 16,
-  },
+  
+  // Question type modal
   questionTypeOption: {
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    borderRadius: 8,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    borderRadius: 12,
     padding: 16,
     marginBottom: 12,
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 12,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.2)',
+    borderColor: 'rgba(255, 255, 255, 0.15)',
   },
   questionTypeOptionActive: {
-    backgroundColor: '#5aa7b4',
-    borderColor: '#fff',
-  },
-  questionTypeOptionIcon: {
-    fontSize: 24,
-    marginRight: 12,
+    backgroundColor: 'rgba(139, 92, 246, 0.2)',
+    borderColor: '#8b5cf6',
   },
   questionTypeOptionText: {
     color: '#fff',
     fontSize: 16,
-    fontWeight: 'bold',
+    fontWeight: '600',
+    flex: 1,
   },
   questionTypeOptionTextActive: {
     color: '#fff',

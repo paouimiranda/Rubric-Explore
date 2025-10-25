@@ -1,4 +1,4 @@
-// components/Interface/friend-card.tsx (Polished)
+// components/Interface/friend-card.tsx (Updated with Profile Navigation)
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import React from 'react';
@@ -9,9 +9,10 @@ interface FriendCardProps {
   status: 'online' | 'offline' | 'busy';
   onChatPress?: () => void;
   username?: string;
+  onProfilePress?: () => void;
 }
 
-export default function FriendCard({ name, status, onChatPress, username }: FriendCardProps) {
+export default function FriendCard({ name, status, onChatPress, username, onProfilePress }: FriendCardProps) {
   const getStatusColor = () => {
     switch (status) {
       case 'online':
@@ -63,7 +64,12 @@ export default function FriendCard({ name, status, onChatPress, username }: Frie
   };
 
   return (
-    <View style={styles.card}>
+    <TouchableOpacity 
+      style={styles.card}
+      onPress={onProfilePress}
+      activeOpacity={0.7}
+      disabled={!onProfilePress}
+    >
       <View style={styles.leftSection}>
         <View style={styles.avatarContainer}>
           <LinearGradient
@@ -97,7 +103,10 @@ export default function FriendCard({ name, status, onChatPress, username }: Frie
         {onChatPress && (
           <TouchableOpacity 
             style={styles.chatButton}
-            onPress={onChatPress}
+            onPress={(e) => {
+              e.stopPropagation();
+              onChatPress();
+            }}
             activeOpacity={0.7}
           >
             <LinearGradient
@@ -111,12 +120,16 @@ export default function FriendCard({ name, status, onChatPress, username }: Frie
         
         <TouchableOpacity 
           style={styles.moreButton}
+          onPress={(e) => {
+            e.stopPropagation();
+            // Add more options menu here if needed
+          }}
           activeOpacity={0.7}
         >
           <Ionicons name="ellipsis-vertical" size={18} color="#94A3B8" />
         </TouchableOpacity>
       </View>
-    </View>
+    </TouchableOpacity>
   );
 }
 

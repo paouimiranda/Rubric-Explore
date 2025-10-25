@@ -1,4 +1,4 @@
-// Updated friends.tsx 
+// Updated friends.tsx with profile navigation
 
 import ChatList from '@/components/Interface/chat-list';
 import FriendCard from '@/components/Interface/friend-card';
@@ -45,9 +45,8 @@ interface FriendRequest extends ServiceFriendRequest {}
 
 interface SearchResult extends SearchUser {}
 
-const router = useRouter();
-
 export default function Friendlist() {
+  const router = useRouter();
   const [activeTab, setActiveTab] = useState<TabType>('friends');
   const [search, setSearch] = useState('');
   const [friends, setFriends] = useState<Friend[]>([]);
@@ -184,6 +183,14 @@ export default function Friendlist() {
     router.push('./search-screen/');
   };
 
+  const navigateToProfile = (userId: string) => {
+    router.push({
+      pathname: '/screens/User/profile',
+      params: { userId }
+    });
+    console.log('pressed!');
+  };
+
   const startChatWithFriend = async (friend: Friend) => {
     if (!currentUser) return;
     
@@ -242,6 +249,7 @@ export default function Friendlist() {
                       key={user.uid}
                       user={user}
                       onSendRequest={handleSendFriendRequest}
+                      onViewProfile={() => navigateToProfile(user.uid)}
                     />
                   ))}
                 </View>
@@ -268,6 +276,7 @@ export default function Friendlist() {
                     username={friend.username}
                     status={friend.isOnline ? 'online' : 'offline'}
                     onChatPress={() => startChatWithFriend(friend)}
+                    onProfilePress={() => navigateToProfile(friend.uid)}
                   />
                 ))
               ) : (
@@ -311,6 +320,7 @@ export default function Friendlist() {
                     request={request}
                     onAccept={handleAcceptRequest}
                     onReject={handleRejectRequest}
+                    onViewProfile={() => navigateToProfile(request.fromUserId)}
                   />
                 ))}
               </>
@@ -474,11 +484,16 @@ export default function Friendlist() {
 }
 
 // Search Result Card Component
-const SearchResultCard = ({ user, onSendRequest }: { 
+const SearchResultCard = ({ user, onSendRequest, onViewProfile }: { 
   user: SearchResult; 
   onSendRequest: (userId: string, username: string) => void;
+  onViewProfile: () => void;
 }) => (
-  <View style={styles.searchResultCard}>
+  <TouchableOpacity 
+    style={styles.searchResultCard}
+    onPress={onViewProfile}
+    activeOpacity={0.7}
+  >
     <View style={styles.searchResultLeft}>
       <View style={styles.searchResultAvatar}>
         <Text style={styles.searchResultAvatarText}>
@@ -492,7 +507,10 @@ const SearchResultCard = ({ user, onSendRequest }: {
     </View>
     <TouchableOpacity 
       style={styles.addButton}
-      onPress={() => onSendRequest(user.uid, user.username)}
+      onPress={(e) => {
+        e.stopPropagation();
+        onSendRequest(user.uid, user.username);
+      }}
       activeOpacity={0.7}
     >
       <LinearGradient
@@ -503,17 +521,22 @@ const SearchResultCard = ({ user, onSendRequest }: {
         <Text style={styles.addButtonText}>Add</Text>
       </LinearGradient>
     </TouchableOpacity>
-  </View>
+  </TouchableOpacity>
 );
 
 // Friend Request Card Component
-const FriendRequestCard = ({ request, onAccept, onReject }: {
+const FriendRequestCard = ({ request, onAccept, onReject, onViewProfile }: {
   request: FriendRequest;
   onAccept: (request: FriendRequest) => void;
   onReject: (request: FriendRequest) => void;
+  onViewProfile: () => void;
 }) => (
   <View style={styles.requestCard}>
-    <View style={styles.requestLeft}>
+    <TouchableOpacity 
+      style={styles.requestLeft}
+      onPress={onViewProfile}
+      activeOpacity={0.7}
+    >
       <View style={styles.requestAvatar}>
         <Text style={styles.requestAvatarText}>
           {request.senderInfo.displayName.charAt(0).toUpperCase()}
@@ -526,7 +549,7 @@ const FriendRequestCard = ({ request, onAccept, onReject }: {
         <Text style={styles.requestName}>{request.senderInfo.displayName}</Text>
         <Text style={styles.requestUsername}>@{request.senderInfo.username}</Text>
       </View>
-    </View>
+    </TouchableOpacity>
     <View style={styles.requestActions}>
       <TouchableOpacity 
         style={styles.acceptButton}
