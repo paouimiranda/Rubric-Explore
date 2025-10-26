@@ -8,7 +8,511 @@ import nodemailer from "nodemailer";
 admin.initializeApp();
 const db = admin.firestore();
 
-// ⚙️ Setup Express app
+// ========================================
+// INTERFACES FOR QUIZ GENERATION
+// ========================================
+
+interface QuizGenerationRequest {
+  topic: string;
+  num_questions: number;
+  content?: string;
+  question_types?: string[];
+}
+
+interface QuizQuestion {
+  id: string;
+  type: 'multiple_choice' | 'fill_blank' | 'matching';
+  question: string;
+  image?: string;
+  options: string[];
+  correctAnswers: number[];
+  timeLimit: number;
+  matchPairs: Array<{ left: string; right: string }>;
+  correctAnswer: string;
+  topic: string;
+  points?: number;
+}
+
+// ========================================
+// SHARED GEMINI API INITIALIZATION
+// ========================================
+
+/**
+ * Get Gemini API Key from environment
+ * Tries process.env first, then falls back to Firebase config
+ */
+function getGeminiApiKey(): string {
+  // Try environment variable first (used by Cloud Functions v1)
+  let apiKey = process.env.GEMINI_API_KEY;
+  
+  // Fallback to Firebase config (if using firebase functions:config:set)
+  if (!apiKey) {
+    try {
+      apiKey = functions.config().gemini?.api_key;
+    } catch (e) {
+      // Config might not be available in all environments
+    }
+  }
+  
+  if (!apiKey) {
+    throw new Error('Gemini API key not configured. Set GEMINI_API_KEY environment variable or use firebase functions:config:set gemini.api_key="your-key"');
+  }
+  
+  return apiKey;
+}
+
+// ========================================
+// QUIZ GENERATION HELPER FUNCTIONS
+// ========================================
+
+/**
+ * Generate Multiple Choice Questions
+ */
+async function generateMultipleChoiceQuestions(
+  genAI: GoogleGenerativeAI,
+  content: string,
+  numQuestions: number,
+  topic: string
+): Promise<QuizQuestion[]> {
+  console.log(`\n=== Generating ${numQuestions} Multiple Choice Questions ===`);
+  console.log(`Content length: ${content.length}`);
+  console.log(`Content preview: ${content.slice(0, 200)}`);
+
+  const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+
+  const prompt = `You are a quiz generator. Create multiple choice questions with EXACTLY 4 choices.
+Use this EXACT format for each question:
+
+Question: <question text>
+A) <choice A>
+B) <choice B>
+C) <choice C>
+D) <choice D>
+Answer: <letter(s)>
+Topic: <specific topic category>
+
+IMPORTANT: 
+- Use 'A)' format with parenthesis, not 'A.' with period.
+- Always include 'Answer:' line with the correct letter(s).
+- REQUIRED: Add a 'Topic:' line with a specific category for analytics (e.g., "Variables", "Allied Powers", "Photosynthesis").
+- The topic should be a concise, specific category (2-4 words max) that describes what the question tests.
+- If content is provided, analyze it and assign relevant topic categories based on the subject matter.
+- If no content is provided, generate diverse topic categories within the main subject.
+
+Generate EXACTLY ${numQuestions} multiple choice questions about: ${content}`;
+
+  const result = await model.generateContent(prompt);
+  const response = await result.response;
+  const quizText = response.text();
+
+  console.log('\n=== AI Response ===');
+  console.log(quizText);
+  console.log('='.repeat(50));
+
+  const questions: QuizQuestion[] = [];
+  
+  // Split by double newlines or "Question:" markers
+  const questionBlocks = quizText.trim().split(/\n\s*\n|(?=Question\s*\d*:)/);
+
+  for (let i = 0; i < questionBlocks.length; i++) {
+    const block = questionBlocks[i];
+    if (!block.trim()) continue;
+
+    const lines = block.split('\n').map(line => line.trim()).filter(line => line);
+    if (lines.length < 6) continue; // Need question + 4 options + answer
+
+    // Extract question
+    let questionText = '';
+    for (const line of lines) {
+      if (/^question\s*\d*[:.]\s*/i.test(line) || 
+          (!questionText && !line.startsWith('A') && !line.startsWith('B') && 
+           !line.startsWith('C') && !line.startsWith('D') && !line.startsWith('Answer') && !line.startsWith('Topic'))) {
+        questionText = line.replace(/^question\s*\d*[:.]\s*/i, '');
+        break;
+      }
+    }
+
+    if (!questionText) continue;
+
+    // Extract options
+    const options: string[] = [];
+    const correctAnswers: number[] = [];
+    let questionTopic = topic; // Default to main topic
+
+    for (const line of lines) {
+      // Match A), A., A:, etc.
+      const match = line.match(/^([A-D])[\).\:]\s*(.+)$/);
+      if (match) {
+        const letter = match[1];
+        const text = match[2].trim();
+
+        if (letter === 'A') {
+          options.length = 0; // Start fresh
+          options.push(text);
+        } else if (letter === 'B' && options.length === 1) {
+          options.push(text);
+        } else if (letter === 'C' && options.length === 2) {
+          options.push(text);
+        } else if (letter === 'D' && options.length === 3) {
+          options.push(text);
+        }
+      }
+
+      // Extract answer
+      if (/^(correct\s*)?answer[s]?[:\s]/i.test(line)) {
+        const answerPart = line.replace(/^(correct\s*)?answer[s]?[:\s]+/i, '').toUpperCase();
+        ['A', 'B', 'C', 'D'].forEach((letter) => {
+          if (answerPart.includes(letter)) {
+            correctAnswers.push(letter.charCodeAt(0) - 'A'.charCodeAt(0));
+          }
+        });
+      }
+
+      // Extract topic
+      if (/^topic[:\s]/i.test(line)) {
+        const extractedTopic = line.replace(/^topic[:\s]+/i, '').trim();
+        if (extractedTopic) {
+          questionTopic = extractedTopic;
+        }
+      }
+    }
+
+    if (options.length === 4 && correctAnswers.length > 0) {
+      questions.push({
+        id: `mc_${i + 1}_${Date.now()}`,
+        type: 'multiple_choice',
+        question: questionText,
+        image: '',
+        options,
+        correctAnswers,
+        timeLimit: 30,
+        matchPairs: [],
+        correctAnswer: '',
+        topic: questionTopic,
+        points: 1
+      });
+      console.log(`✅ Parsed question ${i + 1}: ${questionText.slice(0, 50)}... | Topic: ${questionTopic}`);
+    } else {
+      console.log(`⚠️ Failed to parse question block ${i + 1}: options=${options.length}, answers=${correctAnswers.length}`);
+    }
+  }
+
+  console.log(`\n✅ Successfully generated ${questions.length} multiple choice questions`);
+  return questions;
+}
+
+/**
+ * Generate Fill in the Blank Questions
+ */
+async function generateFillBlankQuestions(
+  genAI: GoogleGenerativeAI,
+  content: string,
+  numQuestions: number,
+  topic: string
+): Promise<QuizQuestion[]> {
+  console.log(`\n=== Generating ${numQuestions} Fill Blank Questions ===`);
+
+  const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+
+  const prompt = `You are a quiz generator. Create fill-in-the-blank questions.
+Use this EXACT format for each question:
+
+Question: <sentence with _____ for the blank>
+Answer: <correct word or phrase>
+Topic: <specific topic category>
+
+IMPORTANT:
+- Use 5 underscores (_____ ) to indicate the blank.
+- Keep answers concise (1-3 words).
+- REQUIRED: Add a 'Topic:' line with a specific category for analytics (e.g., "Variables", "Vocabulary", "Dates").
+- The topic should be a concise, specific category (2-4 words max) that describes what the question tests.
+- If content is provided, analyze it and assign relevant topic categories based on the subject matter.
+- If no content is provided, generate diverse topic categories within the main subject.
+
+Generate EXACTLY ${numQuestions} fill-in-the-blank questions about: ${content}`;
+
+  const result = await model.generateContent(prompt);
+  const response = await result.response;
+  const quizText = response.text();
+
+  console.log('\n=== AI Response ===');
+  console.log(quizText);
+  console.log('='.repeat(50));
+
+  const questions: QuizQuestion[] = [];
+  const questionBlocks = quizText.trim().split(/\n\s*\n|(?=Question\s*\d*:)/);
+
+  for (let i = 0; i < questionBlocks.length; i++) {
+    const block = questionBlocks[i];
+    if (!block.trim()) continue;
+
+    const lines = block.split('\n').map(line => line.trim()).filter(line => line);
+    if (lines.length < 2) continue;
+
+    let questionText = '';
+    let correctAnswer = '';
+    let questionTopic = topic; // Default to main topic
+
+    for (const line of lines) {
+      if (/^question\s*\d*[:.]\s*/i.test(line)) {
+        questionText = line.replace(/^question\s*\d*[:.]\s*/i, '');
+      } else if (/^(correct\s*)?answer[s]?[:\s]/i.test(line)) {
+        correctAnswer = line.replace(/^(correct\s*)?answer[s]?[:\s]+/i, '').trim();
+      } else if (/^topic[:\s]/i.test(line)) {
+        const extractedTopic = line.replace(/^topic[:\s]+/i, '').trim();
+        if (extractedTopic) {
+          questionTopic = extractedTopic;
+        }
+      }
+    }
+
+    if (questionText && correctAnswer && questionText.includes('_')) {
+      questions.push({
+        id: `fb_${i + 1}_${Date.now()}`,
+        type: 'fill_blank',
+        question: questionText,
+        image: '',
+        options: [],
+        correctAnswers: [],
+        timeLimit: 30,
+        matchPairs: [],
+        correctAnswer,
+        topic: questionTopic,
+        points: 1
+      });
+      console.log(`✅ Parsed question ${i + 1}: ${questionText.slice(0, 50)}... | Topic: ${questionTopic}`);
+    } else {
+      console.log(`⚠️ Failed to parse question block ${i + 1}`);
+    }
+  }
+
+  console.log(`\n✅ Successfully generated ${questions.length} fill blank questions`);
+  return questions;
+}
+
+/**
+ * Generate Matching Questions
+ */
+async function generateMatchingQuestions(
+  genAI: GoogleGenerativeAI,
+  content: string,
+  numQuestions: number,
+  topic: string
+): Promise<QuizQuestion[]> {
+  console.log(`\n=== Generating ${numQuestions} Matching Questions ===`);
+
+  const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+
+  const prompt = `You are a quiz generator. Create matching questions with 4-6 pairs.
+Use this EXACT format:
+
+Question: Match the following items
+1. <left item 1> -> <right item 1>
+2. <left item 2> -> <right item 2>
+3. <left item 3> -> <right item 3>
+(etc.)
+Topic: <specific topic category>
+
+IMPORTANT:
+- Each pair should be numbered. Use ' -> ' to separate left and right items.
+- REQUIRED: Add a 'Topic:' line with a specific category for analytics (e.g., "Key Terms", "Historical Figures", "Functions").
+- The topic should be a concise, specific category (2-4 words max) that describes what the question tests.
+- If content is provided, analyze it and assign relevant topic categories based on the subject matter.
+- If no content is provided, generate diverse topic categories within the main subject.
+
+Generate ${numQuestions} matching question(s) about: ${content}`;
+
+  const result = await model.generateContent(prompt);
+  const response = await result.response;
+  const quizText = response.text();
+
+  console.log('\n=== AI Response ===');
+  console.log(quizText);
+  console.log('='.repeat(50));
+
+  const questions: QuizQuestion[] = [];
+  const questionBlocks = quizText.trim().split(/\n\s*\n|(?=Question\s*\d*:)/);
+
+  for (let i = 0; i < questionBlocks.length; i++) {
+    const block = questionBlocks[i];
+    if (!block.trim()) continue;
+
+    const lines = block.split('\n').map(line => line.trim()).filter(line => line);
+    if (lines.length < 4) continue;
+
+    let questionText = 'Match the following items';
+    const matchPairs: Array<{ left: string; right: string }> = [];
+    let questionTopic = topic; // Default to main topic
+
+    for (const line of lines) {
+      if (/^question\s*\d*[:.]\s*/i.test(line)) {
+        questionText = line.replace(/^question\s*\d*[:.]\s*/i, '');
+      } else if (/^topic[:\s]/i.test(line)) {
+        const extractedTopic = line.replace(/^topic[:\s]+/i, '').trim();
+        if (extractedTopic) {
+          questionTopic = extractedTopic;
+        }
+      } else if (line.includes('->') || line.includes('→')) {
+        // Parse pair (handle both -> and →)
+        const separator = line.includes('->') ? '->' : '→';
+        const parts = line.split(separator, 2);
+        
+        if (parts.length === 2) {
+          let left = parts[0].trim();
+          const right = parts[1].trim();
+          
+          // Remove leading numbers/bullets
+          left = left.replace(/^\d+[\).\:]\s*/, '');
+          
+          matchPairs.push({ left, right });
+        }
+      }
+    }
+
+    if (matchPairs.length >= 3) {
+      questions.push({
+        id: `match_${i + 1}_${Date.now()}`,
+        type: 'matching',
+        question: questionText,
+        image: '',
+        options: [],
+        correctAnswers: [],
+        timeLimit: 45,
+        matchPairs,
+        correctAnswer: '',
+        topic: questionTopic,
+        points: 1
+      });
+      console.log(`✅ Parsed question ${i + 1} with ${matchPairs.length} pairs | Topic: ${questionTopic}`);
+    } else {
+      console.log(`⚠️ Failed to parse question block ${i + 1}: only ${matchPairs.length} pairs`);
+    }
+  }
+
+  console.log(`\n✅ Successfully generated ${questions.length} matching questions`);
+  return questions;
+}
+
+// ========================================
+// FIREBASE CALLABLE FUNCTION: GENERATE QUIZ
+// ========================================
+
+/**
+ * Main Firebase Function - Generate Quiz
+ */
+export const generateQuiz = functions.https.onCall(async (request) => {
+  console.log('\n' + '='.repeat(60));
+  console.log('🎯 NEW QUIZ REQUEST');
+  console.log('='.repeat(60));
+  
+  // Optional: Require authentication
+  if (!request.auth) {
+    throw new functions.https.HttpsError(
+      'unauthenticated',
+      'User must be authenticated to generate quizzes'
+    );
+  }
+
+  const data = request.data as QuizGenerationRequest;
+  const { topic, num_questions, content, question_types = ['multiple_choice'] } = data;
+
+  console.log(`Topic: ${topic}`);
+  console.log(`Num Questions: ${num_questions}`);
+  console.log(`Content provided: ${!!content}`);
+  console.log(`Content length: ${content?.length || 0}`);
+  console.log(`Question types: ${question_types}`);
+
+  // Validation
+  if (num_questions < 1 || num_questions > 20) {
+    throw new functions.https.HttpsError(
+      'invalid-argument',
+      'Number of questions must be between 1 and 20'
+    );
+  }
+
+  // Use provided content or topic
+  const sourceContent = content || topic;
+
+  if (!sourceContent || sourceContent.trim().length === 0) {
+    console.log('❌ ERROR: No content or topic provided');
+    throw new functions.https.HttpsError(
+      'invalid-argument',
+      'Either topic or content must be provided'
+    );
+  }
+
+  try {
+    // Initialize Gemini API using shared function
+    const apiKey = getGeminiApiKey();
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const allQuestions: QuizQuestion[] = [];
+
+    // If only one type requested, generate all questions of that type
+    if (question_types.length === 1) {
+      const questionType = question_types[0];
+      console.log(`\n📝 Generating ${num_questions} questions of type: ${questionType}`);
+
+      if (questionType === 'multiple_choice') {
+        const questions = await generateMultipleChoiceQuestions(genAI, sourceContent, num_questions, topic);
+        allQuestions.push(...questions);
+      } else if (questionType === 'fill_blank') {
+        const questions = await generateFillBlankQuestions(genAI, sourceContent, num_questions, topic);
+        allQuestions.push(...questions);
+      } else if (questionType === 'matching') {
+        const questions = await generateMatchingQuestions(genAI, sourceContent, num_questions, topic);
+        allQuestions.push(...questions);
+      }
+    } else {
+      // Distribute questions across types
+      const questionsPerType = Math.max(1, Math.floor(num_questions / question_types.length));
+      const remaining = num_questions % question_types.length;
+
+      for (let idx = 0; idx < question_types.length; idx++) {
+        const qType = question_types[idx];
+        const count = questionsPerType + (idx < remaining ? 1 : 0);
+        console.log(`\n📝 Generating ${count} questions of type: ${qType}`);
+
+        if (qType === 'multiple_choice') {
+          const questions = await generateMultipleChoiceQuestions(genAI, sourceContent, count, topic);
+          allQuestions.push(...questions);
+        } else if (qType === 'fill_blank') {
+          const questions = await generateFillBlankQuestions(genAI, sourceContent, count, topic);
+          allQuestions.push(...questions);
+        } else if (qType === 'matching') {
+          const questions = await generateMatchingQuestions(genAI, sourceContent, count, topic);
+          allQuestions.push(...questions);
+        }
+      }
+    }
+
+    console.log('\n' + '='.repeat(60));
+    console.log(`✅ TOTAL QUESTIONS GENERATED: ${allQuestions.length}`);
+    console.log('='.repeat(60) + '\n');
+
+    return {
+      quiz: allQuestions,
+      success: true
+    };
+
+  } catch (error: any) {
+    console.error('\n❌ ERROR generating quiz:', error);
+    console.error(error.stack);
+
+    if (error instanceof functions.https.HttpsError) {
+      throw error;
+    }
+
+    throw new functions.https.HttpsError(
+      'internal',
+      `Failed to generate quiz: ${error.message}`
+    );
+  }
+});
+
+// ========================================
+// EXPRESS APP FOR EMAIL & OCR ENDPOINTS
+// ========================================
+
 const app = express();
 app.use(cors({ origin: true }));
 app.use(express.json());
@@ -28,7 +532,7 @@ app.post("/sendOtp", async (req, res) => {
     const { email } = req.body;
     if (!email) return res.status(400).send({ error: "Missing email" });
 
-    const otp = Math.floor(100000 + Math.random() + 900000).toString();
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
 
     await db.collection("otp_codes").doc(email).set({
       otp,
@@ -243,7 +747,7 @@ app.get("/debugUsers", async (req, res) => {
   res.send(emails);
 });
 
-// ✨ Gemini OCR Endpoint
+// ✨ Gemini OCR Endpoint - Now uses shared API key function
 app.post("/extractTextFromImage", async (req, res) => {
   try {
     console.log('🔍 extractTextFromImage called');
@@ -254,13 +758,8 @@ app.post("/extractTextFromImage", async (req, res) => {
       return res.status(400).send({ error: 'Image data is required' });
     }
 
-    // Get API key from environment variable
-    const apiKey = process.env.GEMINI_API_KEY;
-    
-    if (!apiKey) {
-      console.error('❌ API key is empty or undefined');
-      return res.status(500).send({ error: 'API key not configured' });
-    }
+    // Use shared API key function
+    const apiKey = getGeminiApiKey();
 
     console.log('✅ Initializing Gemini AI');
     const genAI = new GoogleGenerativeAI(apiKey);

@@ -1,5 +1,7 @@
 // File: api/quizApi.ts
-// Updated quiz API integration with topic field for analytics
+// Updated to use Firebase Functions with Gemini API
+
+import { getFunctions, httpsCallable } from 'firebase/functions';
 
 export interface QuizQuestion {
   id: string;
@@ -7,92 +9,113 @@ export interface QuizQuestion {
   question: string;
   image?: string;
   options: string[];
-  correctAnswers: number[];  // For multiple choice - indices of correct options
+  correctAnswers: number[];
   timeLimit: number;
-  matchPairs: Array<{ left: string; right: string }>;  // For matching questions
-  correctAnswer: string;  // For fill in the blank
-  
-  // Analytics field
-  topic: string;  // Required: Main category for performance tracking
-  points?: number;  // Optional: custom point value for the question
+  matchPairs: Array<{ left: string; right: string }>;
+  correctAnswer: string;
+  topic: string;
+  points?: number;
 }
 
 interface QuizResponse {
   quiz: QuizQuestion[];
+  success: boolean;
   error?: string;
 }
 
 interface QuizGenerationRequest {
   topic: string;
   num_questions: number;
-  content?: string;  // Optional note content
-  question_types?: string[];  // Types to generate
+  content?: string;
+  question_types?: string[];
 }
 
+/**
+ * Generate quiz using Firebase Functions + Gemini API
+ */
 export async function generateQuizFromAI(
   topic: string, 
   numQuestions: number, 
   content?: string,
   questionTypes?: string[]
 ): Promise<QuizQuestion[]> {
-  // Debug logging
-  console.log('=== generateQuizFromAI Debug ===');
+  console.log('=== generateQuizFromAI (Firebase Functions) ===');
   console.log('Topic:', topic);
   console.log('Num Questions:', numQuestions);
   console.log('Content provided:', !!content);
   console.log('Content length:', content?.length || 0);
   console.log('Content preview:', content?.slice(0, 200));
   console.log('Question Types:', questionTypes);
-  
-  const requestBody: QuizGenerationRequest = {
-    topic,
-    num_questions: numQuestions,
-    content,
-    question_types: questionTypes || ['multiple_choice', 'fill_blank', 'matching']
-  };
 
-  console.log('Request Body:', JSON.stringify(requestBody, null, 2).slice(0, 500));
+  try {
+    // Get Firebase Functions instance
+    const functions = getFunctions();
+    
+    // Optional: Use emulator for local development
+    // Uncomment if you're testing locally with Firebase emulator
+    // connectFunctionsEmulator(functions, 'localhost', 5001);
 
-  const response = await fetch("http://192.168.254.117:8000/generate-quiz", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" }, 
-    body: JSON.stringify(requestBody)
-  });
+    // Get the callable function
+    const generateQuiz = httpsCallable<QuizGenerationRequest, QuizResponse>(
+      functions, 
+      'generateQuiz'
+    );
 
-  console.log('Response status:', response.status);
-  console.log('Response OK:', response.ok);
+    // Call the function
+    const result = await generateQuiz({
+      topic,
+      num_questions: numQuestions,
+      content,
+      question_types: questionTypes || ['multiple_choice', 'fill_blank', 'matching']
+    });
 
-  if (!response.ok) {
-    const errorText = await response.text();
-    console.error('Error response:', errorText);
-    throw new Error(`Server error: ${response.status} - ${errorText}`);
+    console.log('Function result:', result.data);
+
+    if (!result.data.success) {
+      throw new Error(result.data.error || 'Failed to generate quiz');
+    }
+
+    if (!result.data.quiz || result.data.quiz.length === 0) {
+      console.warn('⚠️ Function returned 0 questions!');
+      throw new Error('No questions were generated. Please try again with different content or topic.');
+    }
+
+    // Ensure each question has required fields
+    const questionsWithDefaults = result.data.quiz.map((q) => ({
+      ...q,
+      topic: q.topic || topic || 'General',
+      points: q.points || 1
+    }));
+
+    console.log(`✅ Successfully generated ${questionsWithDefaults.length} questions`);
+    return questionsWithDefaults;
+
+  } catch (error: any) {
+    console.error('❌ Quiz generation error:', error);
+    
+    // Handle Firebase Functions errors
+    if (error.code) {
+      switch (error.code) {
+        case 'unauthenticated':
+          throw new Error('You must be signed in to generate quizzes');
+        case 'permission-denied':
+          throw new Error('You do not have permission to generate quizzes');
+        case 'invalid-argument':
+          throw new Error(error.message || 'Invalid quiz parameters');
+        case 'failed-precondition':
+          throw new Error('Quiz generation service is not configured properly');
+        default:
+          throw new Error(error.message || 'Failed to generate quiz');
+      }
+    }
+    
+    throw new Error(error.message || 'Failed to generate quiz. Please try again.');
   }
-
-  const data = (await response.json()) as QuizResponse;
-  console.log('Response data:', JSON.stringify(data, null, 2).slice(0, 500));
-  console.log('Number of questions returned:', data.quiz?.length || 0);
-  
-  if (data.error) {
-    console.error('API returned error:', data.error);
-    throw new Error(`Error: ${data.error}`);
-  }
-
-  if (!data.quiz || data.quiz.length === 0) {
-    console.warn('⚠️ API returned 0 questions!');
-    console.warn('This usually means the backend couldn\'t generate questions from the content');
-  }
-
-  // Ensure each question has a topic field (fallback to main topic if not provided by API)
-  const questionsWithTopic = data.quiz.map((q) => ({
-    ...q,
-    topic: q.topic || topic || 'General',  // Fallback to main topic if not provided
-    points: q.points || 1  // Default points if not provided
-  }));
-
-  return questionsWithTopic;
 }
 
-// Utility function to convert API response to internal Question format
+/**
+ * Utility function to convert API response to internal Question format
+ */
 export function convertAPIQuestionToInternalFormat(apiQuestion: QuizQuestion): any {
   return {
     id: apiQuestion.id,
@@ -104,14 +127,14 @@ export function convertAPIQuestionToInternalFormat(apiQuestion: QuizQuestion): a
     timeLimit: apiQuestion.timeLimit,
     matchPairs: apiQuestion.matchPairs,
     correctAnswer: apiQuestion.correctAnswer,
-    
-    // Analytics fields
     topic: apiQuestion.topic || 'Uncategorized',
     points: apiQuestion.points || 1
   };
 }
 
-// Utility function to validate API question has required analytics fields
+/**
+ * Utility function to validate API question has required analytics fields
+ */
 export function validateAPIQuestion(apiQuestion: QuizQuestion): { isValid: boolean; error?: string } {
   if (!apiQuestion.topic || !apiQuestion.topic.trim()) {
     return { 

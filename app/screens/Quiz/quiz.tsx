@@ -161,9 +161,9 @@ const QuizHome = () => {
               <Text style={styles.quizTitle} numberOfLines={2}>
                 {item.title}
               </Text>
-              <View style={styles.questionBadge}>
+              {/* <View style={styles.questionBadge}>
                 <Text style={styles.questionBadgeText}>{item.questions.length}</Text>
-              </View>
+              </View> */}
             </View>
 
             <View style={styles.actionButtons}>
