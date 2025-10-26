@@ -3,6 +3,7 @@ import { BebasNeue_400Regular, useFonts } from '@expo-google-fonts/bebas-neue';
 import { Montserrat_300Light } from '@expo-google-fonts/montserrat';
 import { Picker } from '@react-native-picker/picker';
 import { LinearGradient } from 'expo-linear-gradient';
+import * as Linking from 'expo-linking';
 import React, { useState } from 'react';
 import { SafeAreaView, ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
 
@@ -124,9 +125,53 @@ const SettingsScreen = () => {
           </TouchableOpacity>
           {expanded.privacy && (
             <View style={styles.sectionContent}>
-              <Text style={{ color: textColor }}>[Privacy Options Placeholder]</Text>
+              {/* Account Management */}
+              <TouchableOpacity style={styles.privacyButton}>
+                <Text style={{ color: textColor }}>✉️ Change Email</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity style={styles.privacyButton}>
+                <Text style={{ color: textColor }}>🔑 Change Password</Text>
+              </TouchableOpacity>
+
+              {/* App Security */}
+              <TouchableOpacity style={styles.privacyButton}>
+                <Text style={{ color: textColor }}>🔐 Enable App Lock / Biometric Login</Text>
+              </TouchableOpacity>
+
+               {/* Manage Permissions */}
+               <TouchableOpacity
+                 style={styles.privacyButton}
+                 onPress={() => Linking.openSettings()}
+               >
+                 <Text style={{ color: textColor }}>📱 Manage App Permissions</Text>
+               </TouchableOpacity>
+
+              <TouchableOpacity style={styles.privacyButton}>
+                <Text style={{ color: textColor }}>🧹 Clear App Data</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity style={styles.privacyButton}>
+                <Text style={{ color: textColor }}>📄 View Privacy Policy</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity style={styles.privacyButton}>
+                <Text style={{ color: textColor }}>🔒 Two-Factor Authentication</Text>
+              </TouchableOpacity>
+
+              <View style={styles.row}>
+                <Text style={{ color: textColor }}>📊 Allow Data Sharing</Text>
+                <Switch
+                  value={true}
+                  onValueChange={() => {}}
+                  trackColor={{ false: '#888', true: '#81b0ff' }}
+                  thumbColor={'#0d47a1'}
+                />
+              </View>
             </View>
           )}
+
+
 
           {/* Support */}
           <TouchableOpacity onPress={() => toggleSection('support')} style={[styles.section, { borderColor: dividerColor }]}>
@@ -206,4 +251,11 @@ const styles = StyleSheet.create({
     height: 40,
     width: '100%',
   },
+  privacyButton: {
+  paddingVertical: 10,
+  borderBottomWidth: 1,
+  borderColor: '#555',
+  marginBottom: 5,
+},
+
 });
