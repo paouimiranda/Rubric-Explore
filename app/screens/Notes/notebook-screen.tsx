@@ -382,7 +382,7 @@ export default function NotebookScreen() {
             <View style={styles.tagsSection}>
               <View style={styles.tagsSectionHeader}>
                 <Ionicons name="pricetags-outline" size={14} color="#9ca3af" />
-                <Text style={styles.sectionLabel}>Tagay</Text>
+                <Text style={styles.sectionLabel}>Tags</Text>
               </View>
               <View style={styles.tagsContainer}>
                 {notebook.tags.map((tag, index) => (

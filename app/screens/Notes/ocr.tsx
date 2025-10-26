@@ -1,6 +1,8 @@
 // components/OCRModal.tsx
+import { Montserrat_400Regular, Montserrat_600SemiBold, Montserrat_700Bold, useFonts } from '@expo-google-fonts/montserrat';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
+import { LinearGradient } from 'expo-linear-gradient';
 import React, { useState } from 'react';
 import {
   ActivityIndicator,
@@ -14,24 +16,20 @@ import {
   StyleSheet,
   Text,
   TouchableOpacity,
-  View,
+  View
 } from 'react-native';
 
 // Types
-interface OCRResponse {
-  success: boolean;
-  text: string;
-  word_count: number;
-  language: string;
-  error?: string;
-}
-
 interface OCRState {
   isVisible: boolean;
   isProcessing: boolean;
   extractedText: string;
   wordCount: number;
-  selectedImage: string | null;
+  selectedImage: {
+    uri: string;
+    base64?: string;
+    mimeType?: string;
+  } | null;
   error: string | null;
 }
 
@@ -41,8 +39,11 @@ interface OCRModalProps {
   onInsertText: (text: string) => void;
 }
 
-// Constants
-const API_BASE_URL = 'http://192.168.254.111:8000';
+interface ExtractTextResponse {
+  success: boolean;
+  text: string;
+  wordCount: number;
+}
 
 // Custom hook for OCR functionality
 function useOCR() {
@@ -86,28 +87,35 @@ function useOCR() {
         result = await ImagePicker.launchCameraAsync({
           mediaTypes: ImagePicker.MediaTypeOptions.Images,
           allowsEditing: true,
-          quality: 0.8,
+          quality: 0.7,
+          base64: true,
         });
       } else {
         result = await ImagePicker.launchImageLibraryAsync({
           mediaTypes: ImagePicker.MediaTypeOptions.Images,
           allowsEditing: true,
-          quality: 0.8,
+          quality: 0.7,
+          base64: true,
         });
       }
 
       if (!result.canceled && result.assets[0]) {
-        const imageUri = result.assets[0].uri;
+        const asset = result.assets[0];
+        const imageData = {
+          uri: asset.uri,
+          base64: asset.base64 ?? undefined,
+          mimeType: asset.mimeType || 'image/jpeg',
+        };
+        
         setOcrState(prev => ({
           ...prev,
-          selectedImage: imageUri,
+          selectedImage: imageData,
           extractedText: '',
           wordCount: 0,
           error: null,
         }));
         
-        // Automatically process the image after selection
-        await processImage(imageUri);
+        await processImage(imageData);
       }
     } catch (error) {
       console.error('Error picking image:', error);
@@ -118,11 +126,11 @@ function useOCR() {
     }
   };
 
-  const processImage = async (imageUri: string) => {
-    if (!imageUri) {
+  const processImage = async (imageData: { uri: string; base64?: string; mimeType?: string }) => {
+    if (!imageData || !imageData.base64) {
       setOcrState(prev => ({
         ...prev,
-        error: 'Please select an image first.',
+        error: 'Image data is missing. Please try again.',
       }));
       return;
     }
@@ -134,47 +142,39 @@ function useOCR() {
     }));
     
     try {
-      // Create FormData for file upload
-      const formData = new FormData();
-      
-      // Add the image file
-      formData.append('file', {
-        uri: imageUri,
-        type: 'image/jpeg',
-        name: 'image.jpg',
-      } as any);
-      
-      // Add default parameters
-      formData.append('lang', 'en');
-      formData.append('confidence', '0.5');
-      formData.append('format', 'simple');
-
-      const response = await fetch(`${API_BASE_URL}/api/ocr`, {
+      const response = await fetch('https://api-m2tvqc6zqq-uc.a.run.app/extractTextFromImage', {
         method: 'POST',
-        body: formData as any,
         headers: {
-          'Content-Type': 'multipart/form-data',
+          'Content-Type': 'application/json',
         },
+        body: JSON.stringify({
+          base64Image: imageData.base64,
+          mimeType: imageData.mimeType || 'image/jpeg',
+        }),
       });
 
-      const data = await response.json() as OCRResponse;
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
 
       if (data.success) {
         setOcrState(prev => ({
           ...prev,
           isProcessing: false,
           extractedText: data.text,
-          wordCount: data.word_count,
+          wordCount: data.wordCount,
         }));
       } else {
-        throw new Error(data.error || 'OCR processing failed');
+        throw new Error('Failed to extract text');
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('OCR Error:', error);
       setOcrState(prev => ({
         ...prev,
         isProcessing: false,
-        error: `Failed to process image: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        error: `Failed to process image: ${error.message || 'Unknown error'}`,
         extractedText: '',
         wordCount: 0,
       }));
@@ -223,6 +223,12 @@ function useOCR() {
 
 // Main OCRModal Component
 export default function OCRModal({ isVisible, onClose, onInsertText }: OCRModalProps) {
+  const [fontsLoaded] = useFonts({
+    Montserrat_400Regular,
+    Montserrat_600SemiBold,
+    Montserrat_700Bold,
+  });
+
   const {
     ocrState,
     showImagePickerOptions,
@@ -233,7 +239,6 @@ export default function OCRModal({ isVisible, onClose, onInsertText }: OCRModalP
   const insertOCRText = () => {
     if (ocrState.extractedText) {
       onInsertText(ocrState.extractedText);
-      // Clear OCR text after insertion
       clearOCRData();
       onClose();
     }
@@ -247,139 +252,224 @@ export default function OCRModal({ isVisible, onClose, onInsertText }: OCRModalP
       onRequestClose={onClose}
     >
       <View style={styles.ocrModalOverlay}>
-        <View style={styles.ocrModalContent}>
-          {/* OCR Header */}
+        <LinearGradient
+          colors={['#0A1C3C', '#324762']}
+          style={styles.ocrModalContent}
+        >
+          {/* Header */}
           <View style={styles.ocrHeader}>
-            <Text style={styles.ocrTitle}>OCR Text Extraction</Text>
+            <View style={styles.headerLeft}>
+              <LinearGradient
+                colors={['#667eea', '#764ba2']}
+                style={styles.headerIconBadge}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+              >
+                <Ionicons name="scan" size={24} color="#ffffff" />
+              </LinearGradient>
+              <Text style={styles.ocrTitle}>Text Extraction</Text>
+            </View>
             <TouchableOpacity style={styles.ocrCloseButton} onPress={onClose}>
-              <Ionicons name="close" size={24} color="#fff" />
+              <Ionicons name="close-circle" size={32} color="rgba(255,255,255,0.8)" />
             </TouchableOpacity>
           </View>
 
-          {/* OCR Content */}
+          {/* Content */}
           <ScrollView style={styles.ocrScrollView} showsVerticalScrollIndicator={false}>
-            {/* Image Selection Section */}
-            <View style={styles.ocrSection}>
+            {/* Image Selection Card */}
+            <View style={styles.card}>
               <TouchableOpacity
-                style={[styles.ocrUploadButton, ocrState.isProcessing && styles.ocrUploadButtonDisabled]}
                 onPress={showImagePickerOptions}
                 disabled={ocrState.isProcessing}
+                activeOpacity={0.8}
               >
-                <Ionicons 
-                  name={ocrState.selectedImage ? "images-outline" : "camera-outline"} 
-                  size={24} 
-                  color="#fff" 
-                />
-                <Text style={styles.ocrUploadText}>
-                  {ocrState.selectedImage ? 'Change Image' : 'Select Image'}
-                </Text>
+                <LinearGradient
+                  colors={ocrState.isProcessing ? ['#475569', '#64748b'] : ['#667eea', '#764ba2']}
+                  style={styles.uploadButton}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                >
+                  <Ionicons 
+                    name={ocrState.selectedImage ? "images" : "camera"} 
+                    size={24} 
+                    color="#fff" 
+                  />
+                  <Text style={styles.uploadText}>
+                    {ocrState.selectedImage ? 'Change Image' : 'Select Image'}
+                  </Text>
+                </LinearGradient>
               </TouchableOpacity>
               
               {ocrState.selectedImage && (
-                <View style={styles.ocrImageContainer}>
-                  <Image source={{ uri: ocrState.selectedImage }} style={styles.ocrPreviewImage} />
+                <View style={styles.imagePreviewContainer}>
+                  <Image 
+                    source={{ uri: ocrState.selectedImage.uri }} 
+                    style={styles.previewImage} 
+                  />
+                  <View style={styles.imageOverlay}>
+                    <LinearGradient
+                      colors={['transparent', 'rgba(0,0,0,0.6)']}
+                      style={styles.imageGradient}
+                    />
+                  </View>
                 </View>
               )}
             </View>
 
             {/* Processing Indicator */}
             {ocrState.isProcessing && (
-              <View style={styles.ocrLoadingContainer}>
-                <ActivityIndicator size="large" color="#3b82f6" />
-                <Text style={styles.ocrLoadingText}>Processing image...</Text>
+              <View style={styles.loadingCard}>
+                <LinearGradient
+                  colors={['#667eea', '#764ba2']}
+                  style={styles.loadingIconBadge}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                >
+                  <ActivityIndicator size="large" color="#ffffff" />
+                </LinearGradient>
+                <Text style={styles.loadingTitle}>Extracting Text</Text>
+                <Text style={styles.loadingText}>AI is analyzing your image...</Text>
               </View>
             )}
 
             {/* Error Display */}
             {ocrState.error && (
-              <View style={styles.ocrErrorContainer}>
-                <Ionicons name="alert-circle" size={20} color="#ef4444" />
-                <Text style={styles.ocrErrorText}>{ocrState.error}</Text>
+              <View style={styles.errorCard}>
+                <LinearGradient
+                  colors={['#ef4444', '#dc2626']}
+                  style={styles.errorIconBadge}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                >
+                  <Ionicons name="alert-circle" size={24} color="#ffffff" />
+                </LinearGradient>
+                <Text style={styles.errorText}>{ocrState.error}</Text>
               </View>
             )}
 
             {/* Results Section */}
             {ocrState.extractedText && !ocrState.isProcessing && (
-              <View style={styles.ocrSection}>
-                <View style={styles.ocrResultHeader}>
-                  <Text style={styles.ocrSectionTitle}>Extracted Text</Text>
-                  <View style={styles.ocrHeaderActions}>
-                    <TouchableOpacity
-                      style={styles.ocrCopyButton}
-                      onPress={copyToClipboard}
+              <View style={styles.card}>
+                {/* Result Header */}
+                <View style={styles.resultHeader}>
+                  <View style={styles.resultHeaderLeft}>
+                    <LinearGradient
+                      colors={['#10b981', '#059669']}
+                      style={styles.successBadge}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 1 }}
                     >
-                      <Ionicons name="copy-outline" size={16} color="#fff" />
-                      <Text style={styles.ocrCopyButtonText}>Copy</Text>
-                    </TouchableOpacity>
-                    <Text style={styles.ocrWordCount}>{ocrState.wordCount} words</Text>
+                      <Ionicons name="checkmark-circle" size={20} color="#ffffff" />
+                    </LinearGradient>
+                    <View>
+                      <Text style={styles.resultTitle}>Text Extracted</Text>
+                      <Text style={styles.wordCount}>{ocrState.wordCount} words</Text>
+                    </View>
                   </View>
+                  <TouchableOpacity
+                    style={styles.copyButton}
+                    onPress={copyToClipboard}
+                  >
+                    <Ionicons name="copy" size={18} color="#667eea" />
+                  </TouchableOpacity>
                 </View>
                 
-                <View style={styles.ocrTextContainer}>
-                  <ScrollView style={styles.ocrTextScrollView}>
-                    <Text style={styles.ocrText} selectable>
+                {/* Extracted Text */}
+                <View style={styles.textContainer}>
+                  <ScrollView style={styles.textScrollView}>
+                    <Text style={styles.extractedText} selectable>
                       {ocrState.extractedText}
                     </Text>
                   </ScrollView>
                 </View>
 
-                <View style={styles.ocrTextActions}>
+                {/* Action Buttons */}
+                <View style={styles.actionButtons}>
                   <TouchableOpacity
-                    style={styles.ocrActionButton}
+                    style={styles.clearButton}
                     onPress={clearOCRData}
                   >
-                    <Ionicons name="trash-outline" size={18} color="#ef4444" />
-                    <Text style={styles.ocrActionButtonTextDelete}>Clear All</Text>
+                    <Ionicons name="trash" size={18} color="#ef4444" />
+                    <Text style={styles.clearButtonText}>Clear</Text>
                   </TouchableOpacity>
                   
                   <TouchableOpacity
-                    style={[styles.ocrActionButton, styles.ocrInsertButton]}
                     onPress={insertOCRText}
+                    activeOpacity={0.8}
+                    style={styles.insertButtonWrapper}
                   >
-                    <Ionicons name="add-outline" size={18} color="#fff" />
-                    <Text style={styles.ocrActionButtonText}>Insert to Note</Text>
+                    <LinearGradient
+                      colors={['#10b981', '#059669']}
+                      style={styles.insertButton}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 0 }}
+                    >
+                      <Ionicons name="add-circle" size={18} color="#ffffff" />
+                      <Text style={styles.insertButtonText}>Insert to Note</Text>
+                    </LinearGradient>
                   </TouchableOpacity>
                 </View>
               </View>
             )}
             
-            {/* Instructions */}
+            {/* Empty State */}
             {!ocrState.extractedText && !ocrState.isProcessing && !ocrState.error && !ocrState.selectedImage && (
-              <View style={styles.ocrInstructions}>
-                <Text style={styles.ocrInstructionsText}>
-                  Select an image to extract text using OCR technology.
+              <View style={styles.emptyState}>
+                <LinearGradient
+                  colors={['rgba(102, 126, 234, 0.2)', 'rgba(118, 75, 162, 0.2)']}
+                  style={styles.emptyIconBadge}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                >
+                  <Ionicons name="document-text" size={48} color="#667eea" />
+                </LinearGradient>
+                <Text style={styles.emptyTitle}>Extract Text from Images</Text>
+                <Text style={styles.emptyText}>
+                  Select an image to extract text using AI-powered OCR technology
                 </Text>
               </View>
             )}
 
-            {/* Info Section */}
-            <View style={styles.ocrInfoSection}>
-              <Text style={styles.ocrInfoText}>• Language: English (en)</Text>
-              <Text style={styles.ocrInfoText}>• Confidence: 0.5</Text>
-              <Text style={styles.ocrInfoText}>• Supports JPG, PNG images</Text>
+            {/* Info Card */}
+            <View style={styles.infoCard}>
+              <View style={styles.infoHeader}>
+                <Ionicons name="information-circle" size={20} color="#667eea" />
+                <Text style={styles.infoHeaderText}>Powered by AI</Text>
+              </View>
+              <View style={styles.infoList}>
+                <View style={styles.infoItem}>
+                  <Ionicons name="checkmark" size={16} color="#10b981" />
+                  <Text style={styles.infoItemText}>Google Gemini AI technology</Text>
+                </View>
+                <View style={styles.infoItem}>
+                  <Ionicons name="checkmark" size={16} color="#10b981" />
+                  <Text style={styles.infoItemText}>Handwritten & printed text</Text>
+                </View>
+                <View style={styles.infoItem}>
+                  <Ionicons name="checkmark" size={16} color="#10b981" />
+                  <Text style={styles.infoItemText}>JPG, PNG image formats</Text>
+                </View>
+              </View>
             </View>
           </ScrollView>
-        </View>
+        </LinearGradient>
       </View>
     </Modal>
   );
 }
 
-// Styles
 const { width } = Dimensions.get('window');
 
 const styles = StyleSheet.create({
-  // OCR Modal Styles
   ocrModalOverlay: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.8)",
+    backgroundColor: "rgba(0,0,0,0.9)",
   },
   ocrModalContent: {
     flex: 1,
-    backgroundColor: "#1e293b",
     marginTop: 60,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
   },
   ocrHeader: {
     flexDirection: "row",
@@ -390,180 +480,283 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: "rgba(255,255,255,0.1)",
   },
+  headerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  headerIconBadge: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   ocrTitle: {
     fontSize: 20,
-    fontWeight: "bold",
+    fontFamily: 'Montserrat_700Bold',
     color: "#fff",
   },
   ocrCloseButton: {
     padding: 4,
   },
-
   ocrScrollView: {
     flex: 1,
-    padding: 20,
+    padding: 16,
   },
-  ocrSection: {
-    marginBottom: 24,
+  card: {
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
   },
-  ocrUploadButton: {
+  uploadButton: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#3b82f6",
     borderRadius: 12,
     paddingVertical: 16,
     paddingHorizontal: 24,
-    gap: 8,
+    gap: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
   },
-  ocrUploadButtonDisabled: {
-    backgroundColor: "#475569",
-  },
-  ocrUploadText: {
+  uploadText: {
     color: "#fff",
     fontSize: 16,
-    fontWeight: "600",
+    fontFamily: 'Montserrat_600SemiBold',
   },
-
-  ocrImageContainer: {
+  imagePreviewContainer: {
     marginTop: 16,
-    alignItems: "center",
-  },
-  ocrPreviewImage: {
-    width: width - 80,
-    height: 200,
     borderRadius: 12,
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  previewImage: {
+    width: '100%',
+    height: 200,
     resizeMode: "cover",
   },
-
-  ocrLoadingContainer: {
-    alignItems: "center",
-    paddingVertical: 32,
+  imageOverlay: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 60,
   },
-  ocrLoadingText: {
-    color: "#d1d5db",
-    fontSize: 16,
-    marginTop: 12,
-  },
-
-  ocrErrorContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "rgba(239, 68, 68, 0.1)",
-    borderWidth: 1,
-    borderColor: "rgba(239, 68, 68, 0.3)",
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 16,
-    gap: 8,
-  },
-  ocrErrorText: {
-    color: "#ef4444",
-    fontSize: 14,
+  imageGradient: {
     flex: 1,
   },
-
-  ocrResultHeader: {
+  loadingCard: {
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    borderRadius: 16,
+    padding: 32,
+    marginBottom: 16,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  loadingIconBadge: {
+    width: 80,
+    height: 80,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  loadingTitle: {
+    color: '#fff',
+    fontSize: 18,
+    fontFamily: 'Montserrat_700Bold',
+    marginBottom: 8,
+  },
+  loadingText: {
+    color: "#aaa",
+    fontSize: 14,
+    fontFamily: 'Montserrat_400Regular',
+  },
+  errorCard: {
+    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.3)',
+  },
+  errorIconBadge: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  errorText: {
+    color: "#ef4444",
+    fontSize: 14,
+    fontFamily: 'Montserrat_400Regular',
+    flex: 1,
+  },
+  resultHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 12,
+    marginBottom: 16,
   },
-  ocrSectionTitle: {
-    fontSize: 18,
-    fontWeight: "600",
-    color: "#fff",
-  },
-  ocrHeaderActions: {
-    flexDirection: "row",
-    alignItems: "center",
+  resultHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: 12,
   },
-  ocrCopyButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#475569",
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    gap: 4,
+  successBadge: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  ocrCopyButtonText: {
+  resultTitle: {
+    fontSize: 16,
+    fontFamily: 'Montserrat_600SemiBold',
     color: "#fff",
-    fontSize: 12,
-    fontWeight: "500",
   },
-  ocrWordCount: {
-    color: "#9ca3af",
+  wordCount: {
+    color: "#aaa",
     fontSize: 12,
-    fontWeight: "500",
+    fontFamily: 'Montserrat_400Regular',
+    marginTop: 2,
   },
-
-  ocrTextContainer: {
-    backgroundColor: "#334155",
+  copyButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    backgroundColor: 'rgba(102, 126, 234, 0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  textContainer: {
+    backgroundColor: "rgba(0, 0, 0, 0.3)",
     borderRadius: 12,
     maxHeight: 200,
     marginBottom: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
   },
-  ocrTextScrollView: {
+  textScrollView: {
     padding: 16,
   },
-  ocrText: {
+  extractedText: {
     color: "#fff",
     fontSize: 14,
-    lineHeight: 20,
+    fontFamily: 'Montserrat_400Regular',
+    lineHeight: 22,
   },
-
-  ocrTextActions: {
+  actionButtons: {
     flexDirection: "row",
-    justifyContent: "space-between",
     gap: 12,
   },
-  ocrActionButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
+  clearButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
     flex: 1,
-    paddingVertical: 12,
-    borderRadius: 8,
+    paddingVertical: 14,
+    borderRadius: 10,
     gap: 6,
+    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.3)',
   },
-  ocrInsertButton: {
-    backgroundColor: "#10b981",
-  },
-  ocrActionButtonText: {
-    color: "#fff",
-    fontSize: 14,
-    fontWeight: "600",
-  },
-  ocrActionButtonTextDelete: {
+  clearButtonText: {
     color: "#ef4444",
     fontSize: 14,
-    fontWeight: "600",
+    fontFamily: 'Montserrat_600SemiBold',
   },
-
-  ocrInstructions: {
-    alignItems: "center",
-    paddingVertical: 40,
+  insertButtonWrapper: {
+    flex: 2,
   },
-  ocrInstructionsText: {
-    color: "#9ca3af",
-    fontSize: 16,
+  insertButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
+    borderRadius: 10,
+    gap: 6,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  insertButtonText: {
+    color: "#fff",
+    fontSize: 14,
+    fontFamily: 'Montserrat_600SemiBold',
+  },
+  emptyState: {
+    alignItems: 'center',
+    paddingVertical: 60,
+    paddingHorizontal: 20,
+  },
+  emptyIconBadge: {
+    width: 100,
+    height: 100,
+    borderRadius: 25,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  emptyTitle: {
+    color: '#fff',
+    fontSize: 20,
+    fontFamily: 'Montserrat_700Bold',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  emptyText: {
+    color: "#aaa",
+    fontSize: 14,
+    fontFamily: 'Montserrat_400Regular',
     textAlign: "center",
-    lineHeight: 24,
+    lineHeight: 22,
   },
-
-  ocrInfoSection: {
-    backgroundColor: "rgba(59, 130, 246, 0.1)",
-    borderWidth: 1,
-    borderColor: "rgba(59, 130, 246, 0.3)",
-    borderRadius: 8,
+  infoCard: {
+    backgroundColor: 'rgba(102, 126, 234, 0.1)',
+    borderRadius: 16,
     padding: 16,
-    marginTop: 16,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(102, 126, 234, 0.3)',
   },
-  ocrInfoText: {
-    color: "#93c5fd",
-    fontSize: 12,
-    marginBottom: 4,
+  infoHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 12,
+  },
+  infoHeaderText: {
+    color: '#667eea',
+    fontSize: 14,
+    fontFamily: 'Montserrat_600SemiBold',
+  },
+  infoList: {
+    gap: 8,
+  },
+  infoItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  infoItemText: {
+    color: "#aaa",
+    fontSize: 13,
+    fontFamily: 'Montserrat_400Regular',
   },
 });

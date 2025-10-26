@@ -1,9 +1,13 @@
+import { Montserrat_400Regular, Montserrat_600SemiBold, Montserrat_700Bold, useFonts } from '@expo-google-fonts/montserrat';
+import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from "expo-router";
 import { getAuth } from "firebase/auth";
 import React, { useEffect, useState } from "react";
 import {
     ActivityIndicator,
     Alert,
+    Animated,
     StyleSheet,
     Text,
     TextInput,
@@ -12,15 +16,31 @@ import {
 } from "react-native";
 
 export default function ChangeEmail() {
+  const [fontsLoaded] = useFonts({
+    Montserrat_400Regular,
+    Montserrat_600SemiBold,
+    Montserrat_700Bold,
+  });
+
   const [otp, setOtp] = useState("");
   const [newEmail, setNewEmail] = useState("");
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [isLoading, setIsLoading] = useState(false);
+  const [fadeAnim] = useState(new Animated.Value(0));
   const router = useRouter();
   const auth = getAuth();
   const currentEmail = auth.currentUser?.email;
 
   const API_URL = "https://api-m2tvqc6zqq-uc.a.run.app";
+
+  // Fade in animation when step changes
+  useEffect(() => {
+    Animated.timing(fadeAnim, {
+      toValue: 1,
+      duration: 400,
+      useNativeDriver: true,
+    }).start();
+  }, [step]);
 
   // Check if user is authenticated
   useEffect(() => {
@@ -194,189 +214,363 @@ export default function ChangeEmail() {
     }
   };
 
+  const getStepIcon = () => {
+    switch (step) {
+      case 1:
+        return "mail";
+      case 2:
+        return "key";
+      case 3:
+        return "mail-open";
+      default:
+        return "mail";
+    }
+  };
+
+  const getStepGradient = (): [string, string] => {
+    switch (step) {
+      case 1:
+        return ['#667eea', '#764ba2'];
+      case 2:
+        return ['#f093fb', '#f5576c'];
+      case 3:
+        return ['#4facfe', '#00f2fe'];
+      default:
+        return ['#667eea', '#764ba2'];
+    }
+  };
+
   return (
-    <View style={styles.container}>
-      <TouchableOpacity 
-        style={styles.backButton} 
-        onPress={handleBack}
-        disabled={isLoading}
-      >
-        <Text style={styles.backButtonText}>← Back</Text>
-      </TouchableOpacity>
+    <LinearGradient
+      colors={['#0A1C3C', '#324762']}
+      style={styles.gradient}
+    >
+      <View style={styles.container}>
+        <TouchableOpacity 
+          style={styles.backButton} 
+          onPress={handleBack}
+          disabled={isLoading}
+        >
+          <Ionicons name="arrow-back" size={24} color="#ffffff" />
+        </TouchableOpacity>
 
-      <Text style={styles.title}>Change Email</Text>
-      <Text style={styles.subtitle}>
-        {step === 1 && "We'll send a verification code to your current email"}
-        {step === 2 && "Enter the code sent to your email"}
-        {step === 3 && "Enter your new email address"}
-      </Text>
+        {/* Progress Indicator */}
+        <View style={styles.progressContainer}>
+          {[1, 2, 3].map((s) => (
+            <View
+              key={s}
+              style={[
+                styles.progressDot,
+                s === step && styles.progressDotActive,
+                s < step && styles.progressDotComplete,
+              ]}
+            />
+          ))}
+        </View>
 
-      {/* STEP 1: Send OTP */}
-      {step === 1 && (
-        <>
-          <View style={styles.infoContainer}>
-            <Text style={styles.infoLabel}>Current Email:</Text>
-            <Text style={styles.infoValue}>{currentEmail || "Not logged in"}</Text>
-          </View>
-          <TouchableOpacity 
-            style={[styles.button, isLoading && styles.buttonDisabled]} 
-            onPress={handleSendOtp}
-            disabled={isLoading}
+        <Animated.View style={[styles.content, { opacity: fadeAnim }]}>
+          {/* Icon Badge */}
+          <LinearGradient
+            colors={getStepGradient()}
+            style={styles.iconBadge}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
           >
-            {isLoading ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <Text style={styles.buttonText}>Send OTP</Text>
-            )}
-          </TouchableOpacity>
-        </>
-      )}
+            <Ionicons name={getStepIcon()} size={40} color="#ffffff" />
+          </LinearGradient>
 
-      {/* STEP 2: Verify OTP */}
-      {step === 2 && (
-        <>
-          <TextInput
-            style={styles.input}
-            placeholder="Enter 6-digit OTP"
-            placeholderTextColor="#999"
-            keyboardType="number-pad"
-            maxLength={6}
-            value={otp}
-            onChangeText={setOtp}
-            editable={!isLoading}
-          />
-          <TouchableOpacity 
-            style={[styles.button, isLoading && styles.buttonDisabled]} 
-            onPress={handleVerifyOtp}
-            disabled={isLoading}
-          >
-            {isLoading ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <Text style={styles.buttonText}>Verify OTP</Text>
-            )}
-          </TouchableOpacity>
-          
-          <TouchableOpacity 
-            style={styles.resendButton}
-            onPress={handleSendOtp}
-            disabled={isLoading}
-          >
-            <Text style={styles.resendText}>Resend OTP</Text>
-          </TouchableOpacity>
-        </>
-      )}
+          <Text style={styles.title}>Change Email</Text>
+          <Text style={styles.subtitle}>
+            {step === 1 && "We'll send a verification code to your current email"}
+            {step === 2 && "Enter the code sent to your email"}
+            {step === 3 && "Enter your new email address"}
+          </Text>
 
-      {/* STEP 3: Input new email */}
-      {step === 3 && (
-        <>
-          <TextInput
-            style={styles.input}
-            placeholder="Enter new email address"
-            placeholderTextColor="#999"
-            keyboardType="email-address"
-            autoCapitalize="none"
-            value={newEmail}
-            onChangeText={setNewEmail}
-            editable={!isLoading}
-          />
-          <TouchableOpacity 
-            style={[styles.button, isLoading && styles.buttonDisabled]} 
-            onPress={handleSubmitNewEmail}
-            disabled={isLoading}
-          >
-            {isLoading ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <Text style={styles.buttonText}>Send Verification Link</Text>
-            )}
-          </TouchableOpacity>
-        </>
-      )}
-    </View>
+          {/* STEP 1: Send OTP */}
+          {step === 1 && (
+            <View style={styles.formContainer}>
+              <View style={styles.infoCard}>
+                <View style={styles.infoHeader}>
+                  <Ionicons name="mail" size={20} color="#667eea" />
+                  <Text style={styles.infoLabel}>Current Email</Text>
+                </View>
+                <Text style={styles.infoValue}>{currentEmail || "Not logged in"}</Text>
+              </View>
+
+              <TouchableOpacity 
+                onPress={handleSendOtp}
+                disabled={isLoading}
+                activeOpacity={0.8}
+              >
+                <LinearGradient
+                  colors={['#667eea', '#764ba2']}
+                  style={[styles.button, isLoading && styles.buttonDisabled]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                >
+                  {isLoading ? (
+                    <ActivityIndicator color="#fff" />
+                  ) : (
+                    <>
+                      <Ionicons name="paper-plane" size={20} color="#ffffff" style={{ marginRight: 8 }} />
+                      <Text style={styles.buttonText}>Send OTP</Text>
+                    </>
+                  )}
+                </LinearGradient>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {/* STEP 2: Verify OTP */}
+          {step === 2 && (
+            <View style={styles.formContainer}>
+              <View style={styles.inputContainer}>
+                <Ionicons name="key" size={20} color="#667eea" style={styles.inputIcon} />
+                <TextInput
+                  style={styles.input}
+                  placeholder="Enter 6-digit OTP"
+                  placeholderTextColor="#666"
+                  keyboardType="number-pad"
+                  maxLength={6}
+                  value={otp}
+                  onChangeText={setOtp}
+                  editable={!isLoading}
+                />
+              </View>
+
+              <TouchableOpacity 
+                onPress={handleVerifyOtp}
+                disabled={isLoading}
+                activeOpacity={0.8}
+              >
+                <LinearGradient
+                  colors={['#f093fb', '#f5576c']}
+                  style={[styles.button, isLoading && styles.buttonDisabled]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                >
+                  {isLoading ? (
+                    <ActivityIndicator color="#fff" />
+                  ) : (
+                    <>
+                      <Ionicons name="checkmark-circle" size={20} color="#ffffff" style={{ marginRight: 8 }} />
+                      <Text style={styles.buttonText}>Verify OTP</Text>
+                    </>
+                  )}
+                </LinearGradient>
+              </TouchableOpacity>
+              
+              <TouchableOpacity 
+                style={styles.resendButton}
+                onPress={handleSendOtp}
+                disabled={isLoading}
+              >
+                <Ionicons name="refresh" size={16} color="#667eea" style={{ marginRight: 6 }} />
+                <Text style={styles.resendText}>Resend OTP</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {/* STEP 3: Input new email */}
+          {step === 3 && (
+            <View style={styles.formContainer}>
+              <View style={styles.inputContainer}>
+                <Ionicons name="mail-open" size={20} color="#4facfe" style={styles.inputIcon} />
+                <TextInput
+                  style={styles.input}
+                  placeholder="Enter new email address"
+                  placeholderTextColor="#666"
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  value={newEmail}
+                  onChangeText={setNewEmail}
+                  editable={!isLoading}
+                />
+              </View>
+
+              <TouchableOpacity 
+                onPress={handleSubmitNewEmail}
+                disabled={isLoading}
+                activeOpacity={0.8}
+              >
+                <LinearGradient
+                  colors={['#4facfe', '#00f2fe']}
+                  style={[styles.button, isLoading && styles.buttonDisabled]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                >
+                  {isLoading ? (
+                    <ActivityIndicator color="#fff" />
+                  ) : (
+                    <>
+                      <Ionicons name="send" size={20} color="#ffffff" style={{ marginRight: 8 }} />
+                      <Text style={styles.buttonText}>Send Verification Link</Text>
+                    </>
+                  )}
+                </LinearGradient>
+              </TouchableOpacity>
+            </View>
+          )}
+        </Animated.View>
+      </View>
+    </LinearGradient>
   );
 }
 
 const styles = StyleSheet.create({
+  gradient: {
+    flex: 1,
+  },
   container: {
     flex: 1,
-    backgroundColor: "#0a0a0a",
     justifyContent: "center",
     alignItems: "center",
-    paddingHorizontal: 20,
+    paddingHorizontal: 24,
   },
   backButton: {
     position: "absolute",
     top: 60,
     left: 20,
     zIndex: 10,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  backButtonText: {
-    color: "#5a3dff",
-    fontSize: 16,
-    fontWeight: "600",
+  progressContainer: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 40,
+  },
+  progressDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+  },
+  progressDotActive: {
+    width: 24,
+    backgroundColor: '#667eea',
+  },
+  progressDotComplete: {
+    backgroundColor: '#4caf50',
+  },
+  content: {
+    width: '100%',
+    alignItems: 'center',
+  },
+  iconBadge: {
+    width: 80,
+    height: 80,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
   },
   title: {
     color: "#fff",
-    fontSize: 28,
-    fontWeight: "bold",
-    marginBottom: 10,
+    fontSize: 32,
+    fontFamily: 'Montserrat_700Bold',
+    marginBottom: 12,
+    textAlign: 'center',
   },
   subtitle: {
-    color: "#999",
-    fontSize: 14,
+    color: "#aaa",
+    fontSize: 15,
+    fontFamily: 'Montserrat_400Regular',
     textAlign: "center",
-    marginBottom: 30,
+    marginBottom: 40,
     paddingHorizontal: 20,
+    lineHeight: 22,
   },
-  infoContainer: {
+  formContainer: {
+    width: '100%',
+  },
+  infoCard: {
     width: "100%",
-    backgroundColor: "#1e1e1e",
-    padding: 15,
-    borderRadius: 10,
-    marginBottom: 30,
+    backgroundColor: "rgba(255, 255, 255, 0.08)",
+    padding: 20,
+    borderRadius: 16,
+    marginBottom: 24,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  infoHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+    gap: 8,
   },
   infoLabel: {
-    color: "#999",
-    fontSize: 12,
-    marginBottom: 5,
+    color: "#aaa",
+    fontSize: 13,
+    fontFamily: 'Montserrat_600SemiBold',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
   infoValue: {
     color: "#fff",
     fontSize: 16,
+    fontFamily: 'Montserrat_600SemiBold',
+  },
+  inputContainer: {
+    width: "100%",
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: "rgba(255, 255, 255, 0.08)",
+    borderRadius: 12,
+    marginBottom: 20,
+    paddingHorizontal: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  inputIcon: {
+    marginRight: 12,
   },
   input: {
-    width: "100%",
-    height: 50,
-    backgroundColor: "#1e1e1e",
+    flex: 1,
+    height: 56,
     color: "#fff",
-    borderRadius: 10,
-    paddingHorizontal: 15,
-    marginBottom: 15,
     fontSize: 16,
+    fontFamily: 'Montserrat_400Regular',
   },
   button: {
     width: "100%",
-    height: 50,
-    backgroundColor: "#5a3dff",
+    height: 56,
+    flexDirection: 'row',
     justifyContent: "center",
     alignItems: "center",
-    borderRadius: 10,
-    marginTop: 10,
+    borderRadius: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
   },
   buttonDisabled: {
     opacity: 0.6,
   },
   buttonText: {
     color: "#fff",
-    fontSize: 18,
-    fontWeight: "bold",
+    fontSize: 16,
+    fontFamily: 'Montserrat_700Bold',
   },
   resendButton: {
     marginTop: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   resendText: {
-    color: "#5a3dff",
-    fontSize: 14,
+    color: "#667eea",
+    fontSize: 15,
+    fontFamily: 'Montserrat_600SemiBold',
   },
 });

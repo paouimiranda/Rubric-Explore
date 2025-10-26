@@ -1,4 +1,4 @@
-// components/RichTextEditor/RichTextEditor.tsx (DIAGNOSTIC VERSION)
+// components/RichTextEditor/RichTextEditor.tsx (PRODUCTION)
 import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { RichEditor } from 'react-native-pell-rich-editor';
@@ -29,7 +29,7 @@ interface SerializedSelection {
   anchorOffset: number;
   focusPath: number[];
   focusOffset: number;
-  textPosition?: number; // Backup text-based position
+  textPosition?: number;
 }
 
 const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(({
@@ -58,22 +58,56 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(({
   const isApplyingRemoteUpdate = useRef(false);
   
   const savedSelection = useRef<SerializedSelection | null>(null);
+
+  const extractPlainTextFromHtml = (html: string): string => {
+    if (!html) return '';
+    
+    // Remove script and style tags completely
+    let text = html.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '');
+    text = text.replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, '');
+    
+    // Remove images, videos, iframes, and other media elements
+    text = text.replace(/<img[^>]*>/gi, '');
+    text = text.replace(/<video[^>]*>.*?<\/video>/gi, '');
+    text = text.replace(/<audio[^>]*>.*?<\/audio>/gi, '');
+    text = text.replace(/<iframe[^>]*>.*?<\/iframe>/gi, '');
+    text = text.replace(/<svg[^>]*>.*?<\/svg>/gi, '');
+    text = text.replace(/<canvas[^>]*>.*?<\/canvas>/gi, '');
+    
+    // Replace block-level elements with newlines
+    text = text.replace(/<\/?(div|p|br|h[1-6]|li|tr)[^>]*>/gi, '\n');
+    text = text.replace(/<\/?(ul|ol|table|tbody|thead)[^>]*>/gi, '\n\n');
+    
+    // Remove all other HTML tags
+    text = text.replace(/<[^>]+>/g, '');
+    
+    // Decode HTML entities
+    text = text.replace(/&nbsp;/g, ' ');
+    text = text.replace(/&amp;/g, '&');
+    text = text.replace(/&lt;/g, '<');
+    text = text.replace(/&gt;/g, '>');
+    text = text.replace(/&quot;/g, '"');
+    text = text.replace(/&#039;/g, "'");
+    text = text.replace(/&apos;/g, "'");
+    
+    // Clean up whitespace
+    text = text.replace(/\n\s*\n\s*\n/g, '\n\n'); // Multiple newlines to double
+    text = text.replace(/[ \t]+/g, ' '); // Multiple spaces to single
+    text = text.trim();
+    
+    return text;
+  };
+  
   
   const [pendingRequests] = useState<Map<string, {
     resolve: (value: any) => void;
     timeout: NodeJS.Timeout;
   }>>(new Map());
 
-  // DIAGNOSTIC: Track if onMessage is working
   const [onMessageWorking, setOnMessageWorking] = useState<boolean | null>(null);
 
-  /**
-   * DIAGNOSTIC TEST
-   */
   const testWebViewMessaging = useCallback(() => {
     if (!richText.current) return;
-
-    console.log('🧪 Testing WebView messaging...');
     
     const testScript = `
       (function() {
@@ -84,34 +118,22 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(({
               status: 'success',
               message: 'WebView messaging is working!'
             }));
-          } else {
-            console.error('ReactNativeWebView.postMessage not available');
           }
-        } catch (e) {
-          console.error('Test failed:', e);
-        }
+        } catch (e) {}
       })();
     `;
 
     richText.current.injectJavascript(testScript);
     
-    // If we don't hear back in 1 second, messaging is broken
     setTimeout(() => {
       if (onMessageWorking === null) {
-        console.error('❌ WebView messaging FAILED - onMessage prop not working!');
-        console.error('💡 Solution: react-native-pell-rich-editor may not support onMessage');
         setOnMessageWorking(false);
       }
     }, 1000);
   }, [onMessageWorking]);
 
-  /**
-   * INJECT SELECTION UTILITIES
-   */
   const injectSelectionUtilities = useCallback(() => {
     if (!richText.current) return;
-
-    console.log('💉 Injecting selection utilities...');
 
     const utilScript = `
       (function() {
@@ -200,7 +222,6 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(({
             
             return true;
           } catch (e) {
-            console.error('Deserialize error:', e);
             return false;
           }
         };
@@ -216,28 +237,16 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(({
     richText.current.injectJavascript(utilScript);
   }, []);
 
-  /**
-   * SERIALIZE SELECTION
-   */
   const serializeSelection = useCallback((): Promise<SerializedSelection | null> => {
     return new Promise((resolve) => {
-      if (!richText.current) {
-        console.warn('⚠️ serializeSelection: richText.current is null');
-        resolve(null);
-        return;
-      }
-
-      if (!isFocused.current) {
-        console.log('⏭️ serializeSelection: editor not focused, skipping');
+      if (!richText.current || !isFocused.current) {
         resolve(null);
         return;
       }
 
       const requestId = `serialize_${Date.now()}`;
-      console.log(`📤 Requesting serialization (${requestId})...`);
       
       const timeout = setTimeout(() => {
-        console.error(`❌ Serialization timeout (${requestId}) - using fallback`);
         pendingRequests.delete(requestId);
         resolve(savedSelection.current);
       }, 500);
@@ -248,14 +257,12 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(({
         (function() {
           try {
             const sel = window.serializeSelection ? window.serializeSelection() : null;
-            console.log('WebView: Serialized selection:', sel);
             window.ReactNativeWebView.postMessage(JSON.stringify({
               type: 'serializedSelection',
               requestId: '${requestId}',
               selection: sel
             }));
           } catch (e) {
-            console.error('WebView: Serialization error:', e);
             window.ReactNativeWebView.postMessage(JSON.stringify({
               type: 'serializedSelection',
               requestId: '${requestId}',
@@ -270,42 +277,33 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(({
     });
   }, [pendingRequests]);
 
-  /**
-   * DESERIALIZE SELECTION
-   */
   const deserializeSelection = useCallback((selection: SerializedSelection): Promise<boolean> => {
     return new Promise((resolve) => {
       if (!richText.current || !isFocused.current) {
-        console.warn('⚠️ deserializeSelection: editor not ready or not focused');
         resolve(false);
         return;
       }
 
       const requestId = `deserialize_${Date.now()}`;
-      console.log(`📤 Requesting deserialization (${requestId})...`, selection);
       
       const timeout = setTimeout(() => {
-        console.error(`❌ Deserialization timeout (${requestId})`);
         pendingRequests.delete(requestId);
         resolve(false);
       }, 500);
 
-      pendingRequests.set(requestId, { resolve, timeout });
+      pendingRequests.set(requestId, { resolve, timeout});
 
       const script = `
         (function() {
           try {
             const sel = ${JSON.stringify(selection)};
-            console.log('WebView: Deserializing selection:', sel);
             const success = window.deserializeSelection ? window.deserializeSelection(sel) : false;
-            console.log('WebView: Deserialization result:', success);
             window.ReactNativeWebView.postMessage(JSON.stringify({
               type: 'selectionRestored',
               requestId: '${requestId}',
               success: success
             }));
           } catch (e) {
-            console.error('WebView: Deserialization error:', e);
             window.ReactNativeWebView.postMessage(JSON.stringify({
               type: 'selectionRestored',
               requestId: '${requestId}',
@@ -320,133 +318,75 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(({
     });
   }, [pendingRequests]);
 
-  /**
-   * HANDLE WEBVIEW MESSAGES
-   */
   const handleWebViewMessage = useCallback((event: any) => {
     try {
-      // Handle different event structures from react-native-pell-rich-editor
       let messageData: string;
       
       if (typeof event === 'string') {
-        // Direct string
         messageData = event;
-        console.log('🔔 RAW MESSAGE (string):', event);
       } else if (event?.nativeEvent?.data) {
-        // Standard WebView format
         messageData = event.nativeEvent.data;
-        console.log('🔔 RAW MESSAGE (nativeEvent.data):', event.nativeEvent.data);
       } else if (event?.data) {
-        // Simplified format
         messageData = event.data;
-        console.log('🔔 RAW MESSAGE (data):', event.data);
       } else {
-        // Unknown format - log and try to parse anyway
-        console.log('🔔 RAW MESSAGE (unknown format):', JSON.stringify(event));
         messageData = JSON.stringify(event);
       }
       
       const message = JSON.parse(messageData);
       const { type, requestId } = message;
 
-      console.log(`📨 Parsed message type: ${type}, requestId: ${requestId}`);
-
-      // Diagnostic test response
       if (type === 'diagnosticTest') {
-        console.log('✅ WebView messaging IS WORKING!');
         setOnMessageWorking(true);
         return;
       }
 
-      // Handle serialized selection response
       if (type === 'serializedSelection' && requestId) {
         const pending = pendingRequests.get(requestId);
         if (pending) {
           clearTimeout(pending.timeout);
           pendingRequests.delete(requestId);
-          console.log(`✅ Serialization response received (${requestId}):`, message.selection);
           pending.resolve(message.selection);
           
           if (message.selection) {
             savedSelection.current = message.selection;
           }
-        } else {
-          console.warn(`⚠️ No pending request for ${requestId}`);
         }
       }
 
-      // Handle selection restored response
       if (type === 'selectionRestored' && requestId) {
         const pending = pendingRequests.get(requestId);
         if (pending) {
           clearTimeout(pending.timeout);
           pendingRequests.delete(requestId);
-          console.log(`✅ Deserialization response received (${requestId}): ${message.success}`);
           pending.resolve(message.success);
-        } else {
-          console.warn(`⚠️ No pending request for ${requestId}`);
         }
       }
-
-      // Handle utils injection confirmation
-      if (type === 'utilsInjected') {
-        console.log('✅ Selection utilities injected', message);
-      }
     } catch (error) {
-      console.error('❌ Failed to handle WebView message:', error);
+      // Silently handle errors in production
     }
   }, [pendingRequests]);
 
-  /**
-   * APPLY HTML WITH ACCURATE SELECTION
-   */
   const applyHtmlWithAccurateSelection = useCallback(async (html: string) => {
     if (!richText.current) return;
 
-    console.log('📥 applyHtmlWithAccurateSelection called, focused:', isFocused.current);
-
-    // If not focused, safe to replace directly
     if (!isFocused.current) {
-      console.log('⏭️ Editor not focused, applying HTML directly');
       richText.current.setContentHTML(html);
       lastContent.current = html;
       return;
     }
 
     try {
-      console.log('💾 Step 1: Serializing selection...');
       const selection = await serializeSelection();
       
-      if (selection) {
-        console.log('✅ Selection serialized successfully:', {
-          anchorPath: selection.anchorPath,
-          anchorOffset: selection.anchorOffset
-        });
-      } else {
-        console.warn('⚠️ Could not serialize selection');
-      }
-
-      console.log('📝 Step 2: Applying HTML update...');
       richText.current.setContentHTML(html);
       lastContent.current = html;
 
-      console.log('⏳ Step 3: Waiting for DOM to stabilize...');
       await new Promise(resolve => setTimeout(resolve, 150));
       
       if (isFocused.current && selection) {
-        console.log('🔄 Step 4: Restoring selection...');
-        const success = await deserializeSelection(selection);
-        
-        if (success) {
-          console.log('✅✅✅ CURSOR PRESERVED SUCCESSFULLY! ✅✅✅');
-        } else {
-          console.error('❌❌❌ CURSOR RESTORATION FAILED! ❌❌❌');
-        }
-      } else {
-        console.warn('⚠️ Skipping restoration - no selection or not focused');
+        await deserializeSelection(selection);
       }
     } catch (error) {
-      console.error('❌ Error in applyHtmlWithAccurateSelection:', error);
       richText.current.setContentHTML(html);
       lastContent.current = html;
     }
@@ -470,22 +410,18 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(({
     
     setContentHtml: async (html: string) => {
       if (html === lastContent.current) {
-        console.log('⏭️ Content unchanged, skipping');
         return;
       }
 
       if (isLocalChange.current) {
-        console.log('⏭️ Skipping self-echo');
         return;
       }
 
       if (isTyping.current) {
-        console.log('⏸️ Queuing update - typing burst');
         pendingRemoteContent.current = html;
         return;
       }
 
-      console.log('📥📥📥 REMOTE UPDATE RECEIVED 📥📥📥');
       isApplyingRemoteUpdate.current = true;
       
       try {
@@ -494,6 +430,15 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(({
         isApplyingRemoteUpdate.current = false;
       }
     },
+    
+    getPlainText: async () => {
+      if (richText.current) {
+        const html = await richText.current.getContentHtml();
+        return extractPlainTextFromHtml(html);
+      }
+      return '';
+    },
+
     
     focusEditor: () => {
       richText.current?.focusContentEditor();
@@ -533,7 +478,6 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(({
 
   useEffect(() => {
     if (isInitialMount.current && richText.current && initialContent) {
-      console.log('🎬 Setting initial content');
       richText.current.setContentHTML(initialContent);
       lastContent.current = initialContent;
       isInitialMount.current = false;
@@ -556,8 +500,6 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(({
       return;
     }
     
-    console.log('✏️ Local typing detected');
-    
     isLocalChange.current = true;
     if (localChangeTimeoutRef.current) {
       clearTimeout(localChangeTimeoutRef.current);
@@ -576,11 +518,9 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(({
     onContentChange(html);
     
     typingTimeoutRef.current = setTimeout(async () => {
-      console.log('⏸️ Typing burst ended');
       isTyping.current = false;
       
       if (pendingRemoteContent.current && richText.current) {
-        console.log('📥 Applying queued remote update');
         const pendingHtml = pendingRemoteContent.current;
         pendingRemoteContent.current = null;
         
@@ -596,14 +536,12 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(({
 
   const handleFocus = useCallback(async () => {
     isFocused.current = true;
-    console.log('🎯 Editor focused');
     injectSelectionUtilities();
   }, [injectSelectionUtilities]);
 
   const handleBlur = useCallback(() => {
     isFocused.current = false;
     savedSelection.current = null;
-    console.log('💤 Editor blurred');
   }, []);
 
   useEffect(() => {

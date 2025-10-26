@@ -490,7 +490,7 @@ export default function NoteEditor({
               onCursorPosition={handleContentCursorPosition}
               style={styles.richEditor}
               onEditorReady={(editor) => {
-                console.log('✅ Rich text editor ready');
+                // console.log('✅ Rich text editor ready');
               }}
             />
           </View>

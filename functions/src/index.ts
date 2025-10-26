@@ -1,3 +1,4 @@
+import { GoogleGenerativeAI } from '@google/generative-ai';
 import cors from "cors";
 import express from "express";
 import * as admin from "firebase-admin";
@@ -27,7 +28,7 @@ app.post("/sendOtp", async (req, res) => {
     const { email } = req.body;
     if (!email) return res.status(400).send({ error: "Missing email" });
 
-    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    const otp = Math.floor(100000 + Math.random() + 900000).toString();
 
     await db.collection("otp_codes").doc(email).set({
       otp,
@@ -137,7 +138,6 @@ app.post("/sendVerificationLink", async (req, res) => {
   }
 });
 
-
 // ✅ STEP 1: Send OTP for Change Email (no `newEmail` required)
 app.post("/sendChangeEmailOtp", async (req, res) => {
   try {
@@ -166,7 +166,6 @@ app.post("/sendChangeEmailOtp", async (req, res) => {
   }
 });
 
-
 // ✅ STEP 2: Verify OTP & optionally send verification link to new email
 app.post("/verifyChangeEmailOtp", async (req, res) => {
   try {
@@ -193,22 +192,8 @@ app.post("/verifyChangeEmailOtp", async (req, res) => {
     if (emailExists)
       return res.status(400).send({ error: "Email already in use." });
 
-    // ✅ Instead of Firebase's verification link, generate your own frontend link
     const link = `https://api-m2tvqc6zqq-uc.a.run.app/verifyNewEmail?old=${encodeURIComponent(currentEmail)}&new=${encodeURIComponent(newEmail)}`;
 
-
-    // // Send the verification email manually
-    // await transporter.sendMail({
-    //   from: '"Rubric" <rubric.capstone@gmail.com>',
-    //   to: newEmail,
-    //   subject: "Verify your new email address",
-    //   html: `
-    //     <p>Hello,</p>
-    //     <p>You requested to change your Rubric account email.</p>
-    //     <p>Click below to verify your new email:</p>
-    //     <a href="${link}" style="display:inline-block;padding:10px 20px;background-color:#5a3dff;color:white;text-decoration:none;border-radius:5px;">Verify New Email</a>
-    //   `,
-    // });
     await transporter.sendMail({
       from: '"Rubric" <rubric.capstone@gmail.com>',
       to: newEmail,
@@ -258,5 +243,61 @@ app.get("/debugUsers", async (req, res) => {
   res.send(emails);
 });
 
+// ✨ Gemini OCR Endpoint
+app.post("/extractTextFromImage", async (req, res) => {
+  try {
+    console.log('🔍 extractTextFromImage called');
+    const { base64Image, mimeType } = req.body;
 
+    if (!base64Image) {
+      console.error('❌ No base64Image provided');
+      return res.status(400).send({ error: 'Image data is required' });
+    }
+
+    // Get API key from environment variable
+    const apiKey = process.env.GEMINI_API_KEY;
+    
+    if (!apiKey) {
+      console.error('❌ API key is empty or undefined');
+      return res.status(500).send({ error: 'API key not configured' });
+    }
+
+    console.log('✅ Initializing Gemini AI');
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
+
+    const prompt = 'Extract all the text from this image. Return only the text content, preserving line breaks and formatting where possible. If the text is handwritten, do your best to transcribe it accurately.';
+
+    const imagePart = {
+      inlineData: {
+        data: base64Image,
+        mimeType: mimeType || 'image/jpeg',
+      },
+    };
+
+    console.log('✅ Calling Gemini API');
+    const result = await model.generateContent([prompt, imagePart]);
+    const response = await result.response;
+    const text = response.text();
+
+    console.log('✅ Text extracted successfully, length:', text.length);
+
+    const wordCount = text.trim().split(/\s+/).filter((word: string) => word.length > 0).length;
+
+    return res.status(200).send({
+      success: true,
+      text,
+      wordCount,
+    });
+  } catch (error: any) {
+    console.error('❌ Error in extractTextFromImage:', error);
+    return res.status(500).send({ 
+      error: error.message || 'Failed to extract text from image' 
+    });
+  }
+});
+
+// ========================================
+// EXPORT THE EXPRESS API (v1 function)
+// ========================================
 export const api = functions.https.onRequest(app);

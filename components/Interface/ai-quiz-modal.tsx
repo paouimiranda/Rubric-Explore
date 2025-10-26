@@ -67,6 +67,45 @@ export const TopicSelectionModal: React.FC<TopicSelectionModalProps> = ({
   const [questionCount, setQuestionCount] = useState(10);
   const [showQuestionTypeDropdown, setShowQuestionTypeDropdown] = useState(false);
 
+  const extractPlainTextFromHtml = (html: string): string => {
+    if (!html) return '';
+    
+    // Remove script and style tags completely
+    let text = html.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '');
+    text = text.replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, '');
+    
+    // Remove images, videos, iframes, and other media elements
+    text = text.replace(/<img[^>]*>/gi, '');
+    text = text.replace(/<video[^>]*>.*?<\/video>/gi, '');
+    text = text.replace(/<audio[^>]*>.*?<\/audio>/gi, '');
+    text = text.replace(/<iframe[^>]*>.*?<\/iframe>/gi, '');
+    text = text.replace(/<svg[^>]*>.*?<\/svg>/gi, '');
+    text = text.replace(/<canvas[^>]*>.*?<\/canvas>/gi, '');
+    
+    // Replace block-level elements with newlines
+    text = text.replace(/<\/?(div|p|br|h[1-6]|li|tr)[^>]*>/gi, '\n');
+    text = text.replace(/<\/?(ul|ol|table|tbody|thead)[^>]*>/gi, '\n\n');
+    
+    // Remove all other HTML tags
+    text = text.replace(/<[^>]+>/g, '');
+    
+    // Decode HTML entities
+    text = text.replace(/&nbsp;/g, ' ');
+    text = text.replace(/&amp;/g, '&');
+    text = text.replace(/&lt;/g, '<');
+    text = text.replace(/&gt;/g, '>');
+    text = text.replace(/&quot;/g, '"');
+    text = text.replace(/&#039;/g, "'");
+    text = text.replace(/&apos;/g, "'");
+    
+    // Clean up whitespace
+    text = text.replace(/\n\s*\n\s*\n/g, '\n\n');
+    text = text.replace(/[ \t]+/g, ' ');
+    text = text.trim();
+    
+    return text;
+  };
+
   const questionTypeOptions = [
     { key: 'multiple_choice', label: 'Multiple Choice', icon: 'checkmark-circle-outline' },
     { key: 'fill_blank', label: 'Fill in the Blank', icon: 'create-outline' },
@@ -143,14 +182,31 @@ export const TopicSelectionModal: React.FC<TopicSelectionModalProps> = ({
 
   const handleNoteSelect = async (note: Note) => {
     try {
-      const content = await getMergedNoteContent(note.id);
+      // Get the HTML content from the note
+      const htmlContent = await getMergedNoteContent(note.id);
 
-      if (!content || content.trim().length === 0) {
+      if (!htmlContent || htmlContent.trim().length === 0) {
         Alert.alert("Empty Note", "This note has no content to generate questions from.");
         return;
       }
 
-      onTopicSelected(note.title, selectedQuestionType, questionCount, content);
+      // 🎯 EXTRACT PLAIN TEXT - Remove images and formatting
+      const plainText = extractPlainTextFromHtml(htmlContent);
+
+      // Validate plain text has actual content
+      if (!plainText || plainText.trim().length === 0) {
+        Alert.alert(
+          "No Text Content", 
+          "This note only contains images or other non-text elements. Please add some text to generate questions."
+        );
+        return;
+      }
+
+      console.log('📝 Extracted plain text length:', plainText.length);
+      console.log('📝 Plain text preview:', plainText.slice(0, 200));
+
+      // Pass plain text instead of HTML
+      onTopicSelected(note.title, selectedQuestionType, questionCount, plainText);
       handleClose();
     } catch (error) {
       console.error("Error loading note content:", error);

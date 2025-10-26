@@ -1,8 +1,12 @@
+import { Montserrat_400Regular, Montserrat_600SemiBold, Montserrat_700Bold, useFonts } from '@expo-google-fonts/montserrat';
+import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from "expo-router";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
     ActivityIndicator,
     Alert,
+    Animated,
     StyleSheet,
     Text,
     TextInput,
@@ -13,13 +17,32 @@ import {
 const BASE_URL = "https://api-m2tvqc6zqq-uc.a.run.app";
 
 export default function ChangePasswordScreen() {
+  const [fontsLoaded] = useFonts({
+    Montserrat_400Regular,
+    Montserrat_600SemiBold,
+    Montserrat_700Bold,
+  });
+
   const [email, setEmail] = useState("");
   const [otp, setOtp] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [step, setStep] = useState(1);
   const [isLoading, setIsLoading] = useState(false);
+  const [fadeAnim] = useState(new Animated.Value(0));
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const router = useRouter();
+
+  // Fade in animation when step changes
+  useEffect(() => {
+    fadeAnim.setValue(0);
+    Animated.timing(fadeAnim, {
+      toValue: 1,
+      duration: 400,
+      useNativeDriver: true,
+    }).start();
+  }, [step]);
 
   const handleSendOtp = async () => {
     if (!email.trim()) {
@@ -146,169 +169,329 @@ export default function ChangePasswordScreen() {
     }
   };
 
+  const getStepIcon = () => {
+    return step === 1 ? "mail" : "lock-closed";
+  };
+
+  const getStepGradient = (): [string, string] => {
+    return step === 1 ? ['#667eea', '#764ba2'] : ['#fa709a', '#fee140'];
+  };
+
   return (
-    <View style={styles.container}>
-      <TouchableOpacity 
-        style={styles.backButton} 
-        onPress={handleBack}
-        disabled={isLoading}
-      >
-        <Text style={styles.backButtonText}>← Back</Text>
-      </TouchableOpacity>
+    <LinearGradient
+      colors={['#0A1C3C', '#324762']}
+      style={styles.gradient}
+    >
+      <View style={styles.container}>
+        <TouchableOpacity 
+          style={styles.backButton} 
+          onPress={handleBack}
+          disabled={isLoading}
+        >
+          <Ionicons name="arrow-back" size={24} color="#ffffff" />
+        </TouchableOpacity>
 
-      <Text style={styles.title}>Change Password</Text>
-      <Text style={styles.subtitle}>
-        {step === 1 
-          ? "Enter your email to receive a verification code" 
-          : "Enter the code and your new password"}
-      </Text>
+        {/* Progress Indicator */}
+        <View style={styles.progressContainer}>
+          {[1, 2].map((s) => (
+            <View
+              key={s}
+              style={[
+                styles.progressDot,
+                s === step && styles.progressDotActive,
+                s < step && styles.progressDotComplete,
+              ]}
+            />
+          ))}
+        </View>
 
-      {step === 1 ? (
-        <>
-          <TextInput
-            style={styles.input}
-            placeholder="Enter your email"
-            placeholderTextColor="#999"
-            value={email}
-            onChangeText={setEmail}
-            keyboardType="email-address"
-            autoCapitalize="none"
-            editable={!isLoading}
-          />
-          <TouchableOpacity 
-            style={[styles.button, isLoading && styles.buttonDisabled]} 
-            onPress={handleSendOtp}
-            disabled={isLoading}
+        <Animated.View style={[styles.content, { opacity: fadeAnim }]}>
+          {/* Icon Badge */}
+          <LinearGradient
+            colors={getStepGradient()}
+            style={styles.iconBadge}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
           >
-            {isLoading ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <Text style={styles.buttonText}>Send OTP</Text>
-            )}
-          </TouchableOpacity>
-        </>
-      ) : (
-        <>
-          <TextInput
-            style={styles.input}
-            placeholder="Enter 6-digit OTP"
-            placeholderTextColor="#999"
-            value={otp}
-            onChangeText={setOtp}
-            keyboardType="number-pad"
-            maxLength={6}
-            editable={!isLoading}
-          />
+            <Ionicons name={getStepIcon()} size={40} color="#ffffff" />
+          </LinearGradient>
 
-          <TextInput
-            style={styles.input}
-            placeholder="Enter new password"
-            placeholderTextColor="#999"
-            secureTextEntry
-            value={newPassword}
-            onChangeText={setNewPassword}
-            editable={!isLoading}
-          />
+          <Text style={styles.title}>Change Password</Text>
+          <Text style={styles.subtitle}>
+            {step === 1 
+              ? "Enter your email to receive a verification code" 
+              : "Enter the code and your new password"}
+          </Text>
 
-          <TextInput
-            style={styles.input}
-            placeholder="Confirm new password"
-            placeholderTextColor="#999"
-            secureTextEntry
-            value={confirmPassword}
-            onChangeText={setConfirmPassword}
-            editable={!isLoading}
-          />
+          {step === 1 ? (
+            <View style={styles.formContainer}>
+              <View style={styles.inputContainer}>
+                <Ionicons name="mail" size={20} color="#667eea" style={styles.inputIcon} />
+                <TextInput
+                  style={styles.input}
+                  placeholder="Enter your email"
+                  placeholderTextColor="#666"
+                  value={email}
+                  onChangeText={setEmail}
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  editable={!isLoading}
+                />
+              </View>
 
-          <TouchableOpacity 
-            style={[styles.button, isLoading && styles.buttonDisabled]} 
-            onPress={handleVerifyOtp}
-            disabled={isLoading}
-          >
-            {isLoading ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <Text style={styles.buttonText}>Change Password</Text>
-            )}
-          </TouchableOpacity>
+              <TouchableOpacity 
+                onPress={handleSendOtp}
+                disabled={isLoading}
+                activeOpacity={0.8}
+              >
+                <LinearGradient
+                  colors={['#667eea', '#764ba2']}
+                  style={[styles.button, isLoading && styles.buttonDisabled]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                >
+                  {isLoading ? (
+                    <ActivityIndicator color="#fff" />
+                  ) : (
+                    <>
+                      <Ionicons name="paper-plane" size={20} color="#ffffff" style={{ marginRight: 8 }} />
+                      <Text style={styles.buttonText}>Send OTP</Text>
+                    </>
+                  )}
+                </LinearGradient>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <View style={styles.formContainer}>
+              <View style={styles.inputContainer}>
+                <Ionicons name="key" size={20} color="#fa709a" style={styles.inputIcon} />
+                <TextInput
+                  style={styles.input}
+                  placeholder="Enter 6-digit OTP"
+                  placeholderTextColor="#666"
+                  value={otp}
+                  onChangeText={setOtp}
+                  keyboardType="number-pad"
+                  maxLength={6}
+                  editable={!isLoading}
+                />
+              </View>
 
-          <TouchableOpacity 
-            style={styles.resendButton}
-            onPress={handleSendOtp}
-            disabled={isLoading}
-          >
-            <Text style={styles.resendText}>Resend OTP</Text>
-          </TouchableOpacity>
-        </>
-      )}
-    </View>
+              <View style={styles.inputContainer}>
+                <Ionicons name="lock-closed" size={20} color="#fa709a" style={styles.inputIcon} />
+                <TextInput
+                  style={styles.input}
+                  placeholder="Enter new password"
+                  placeholderTextColor="#666"
+                  secureTextEntry={!showPassword}
+                  value={newPassword}
+                  onChangeText={setNewPassword}
+                  editable={!isLoading}
+                />
+                <TouchableOpacity 
+                  onPress={() => setShowPassword(!showPassword)}
+                  style={styles.eyeIcon}
+                >
+                  <Ionicons 
+                    name={showPassword ? "eye-off" : "eye"} 
+                    size={20} 
+                    color="#666" 
+                  />
+                </TouchableOpacity>
+              </View>
+
+              <View style={styles.inputContainer}>
+                <Ionicons name="lock-closed" size={20} color="#fa709a" style={styles.inputIcon} />
+                <TextInput
+                  style={styles.input}
+                  placeholder="Confirm new password"
+                  placeholderTextColor="#666"
+                  secureTextEntry={!showConfirmPassword}
+                  value={confirmPassword}
+                  onChangeText={setConfirmPassword}
+                  editable={!isLoading}
+                />
+                <TouchableOpacity 
+                  onPress={() => setShowConfirmPassword(!showConfirmPassword)}
+                  style={styles.eyeIcon}
+                >
+                  <Ionicons 
+                    name={showConfirmPassword ? "eye-off" : "eye"} 
+                    size={20} 
+                    color="#666" 
+                  />
+                </TouchableOpacity>
+              </View>
+
+              <TouchableOpacity 
+                onPress={handleVerifyOtp}
+                disabled={isLoading}
+                activeOpacity={0.8}
+              >
+                <LinearGradient
+                  colors={['#fa709a', '#fee140']}
+                  style={[styles.button, isLoading && styles.buttonDisabled]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                >
+                  {isLoading ? (
+                    <ActivityIndicator color="#fff" />
+                  ) : (
+                    <>
+                      <Ionicons name="checkmark-circle" size={20} color="#ffffff" style={{ marginRight: 8 }} />
+                      <Text style={styles.buttonText}>Change Password</Text>
+                    </>
+                  )}
+                </LinearGradient>
+              </TouchableOpacity>
+
+              <TouchableOpacity 
+                style={styles.resendButton}
+                onPress={handleSendOtp}
+                disabled={isLoading}
+              >
+                <Ionicons name="refresh" size={16} color="#fa709a" style={{ marginRight: 6 }} />
+                <Text style={styles.resendText}>Resend OTP</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+        </Animated.View>
+      </View>
+    </LinearGradient>
   );
 }
 
 const styles = StyleSheet.create({
+  gradient: {
+    flex: 1,
+  },
   container: {
     flex: 1,
-    backgroundColor: "#0a0a0a",
     justifyContent: "center",
     alignItems: "center",
-    paddingHorizontal: 20,
+    paddingHorizontal: 24,
   },
   backButton: {
     position: "absolute",
     top: 60,
     left: 20,
     zIndex: 10,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  backButtonText: {
-    color: "#5a3dff",
-    fontSize: 16,
-    fontWeight: "600",
+  progressContainer: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 40,
+  },
+  progressDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+  },
+  progressDotActive: {
+    width: 24,
+    backgroundColor: '#fa709a',
+  },
+  progressDotComplete: {
+    backgroundColor: '#4caf50',
+  },
+  content: {
+    width: '100%',
+    alignItems: 'center',
+  },
+  iconBadge: {
+    width: 80,
+    height: 80,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
   },
   title: {
     color: "#fff",
-    fontSize: 28,
-    fontWeight: "bold",
-    marginBottom: 10,
+    fontSize: 32,
+    fontFamily: 'Montserrat_700Bold',
+    marginBottom: 12,
+    textAlign: 'center',
   },
   subtitle: {
-    color: "#999",
-    fontSize: 14,
+    color: "#aaa",
+    fontSize: 15,
+    fontFamily: 'Montserrat_400Regular',
     textAlign: "center",
-    marginBottom: 30,
+    marginBottom: 40,
     paddingHorizontal: 20,
+    lineHeight: 22,
+  },
+  formContainer: {
+    width: '100%',
+  },
+  inputContainer: {
+    width: "100%",
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: "rgba(255, 255, 255, 0.08)",
+    borderRadius: 12,
+    marginBottom: 16,
+    paddingHorizontal: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  inputIcon: {
+    marginRight: 12,
   },
   input: {
-    width: "100%",
-    height: 50,
-    backgroundColor: "#1e1e1e",
+    flex: 1,
+    height: 56,
     color: "#fff",
-    borderRadius: 10,
-    paddingHorizontal: 15,
-    marginBottom: 15,
     fontSize: 16,
+    fontFamily: 'Montserrat_400Regular',
+  },
+  eyeIcon: {
+    padding: 8,
   },
   button: {
     width: "100%",
-    height: 50,
-    backgroundColor: "#5a3dff",
+    height: 56,
+    flexDirection: 'row',
     justifyContent: "center",
     alignItems: "center",
-    borderRadius: 10,
-    marginTop: 10,
+    borderRadius: 12,
+    marginTop: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
   },
   buttonDisabled: {
     opacity: 0.6,
   },
   buttonText: {
     color: "#fff",
-    fontSize: 18,
-    fontWeight: "bold",
+    fontSize: 16,
+    fontFamily: 'Montserrat_700Bold',
   },
   resendButton: {
     marginTop: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   resendText: {
-    color: "#5a3dff",
-    fontSize: 14,
+    color: "#fa709a",
+    fontSize: 15,
+    fontFamily: 'Montserrat_600SemiBold',
   },
 });
