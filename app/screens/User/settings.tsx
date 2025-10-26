@@ -1,7 +1,6 @@
 import BottomNavigation from '@/components/Interface/nav-bar';
 import { BebasNeue_400Regular, useFonts } from '@expo-google-fonts/bebas-neue';
 import { Montserrat_300Light } from '@expo-google-fonts/montserrat';
-import { Ionicons } from "@expo/vector-icons";
 import { Picker } from '@react-native-picker/picker';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Linking from 'expo-linking';
@@ -196,71 +195,40 @@ useEffect(() => {
                 <Text style={{ color: textColor }}>🔐 Enable App Lock / Biometric Login</Text>
               </TouchableOpacity>
 
-              {/* App Permissions (collapsible) */}
-              <TouchableOpacity
-                onPress={() => toggleSection('appPermissions')}
-                style={styles.privacyButton}
-              >
-                <View style={styles.row}>
-                  <Text style={[styles.subHeader, { color: textColor }]}>📱 App Permissions</Text>
-                  <Ionicons
-                    name={expanded.appPermissions ? 'chevron-up' : 'chevron-down'}
-                    size={18}
-                    color={textColor}
-                  />
-                </View>
+              {/* App Permissions (clean + no borders) */}
+              <TouchableOpacity disabled style={styles.privacyButton}>
+                <Text style={[styles.subHeader, { color: textColor }]}>📱 App Permissions</Text>
               </TouchableOpacity>
-                        
-              {expanded.appPermissions && (
-                <View style={{ marginVertical: 8, paddingLeft: 10 }}>
-                  {permissions.map((p) => (
-                    <View key={p.name} style={[styles.row, { marginVertical: 6 }]}>
-                      <Text style={[styles.permissionText, { color: textColor }]}>
-                        {p.icon} {p.name}
-                      </Text>
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                        <Text
-                          style={{
-                            color: p.status ? '#2ecc71' : '#e74c3c',
-                            fontWeight: '500',
-                          }}
-                        >
-                          {p.status ? 'Allowed' : 'Denied'}
-                        </Text>
-                        {!p.status && (
-                          <TouchableOpacity
-                            onPress={p.onRequest}
-                            style={{
-                              backgroundColor: '#81b0ff',
-                              paddingHorizontal: 10,
-                              paddingVertical: 5,
-                              borderRadius: 6,
-                            }}
-                          >
-                            <Text style={{ color: '#fff', fontSize: 12 }}>Allow</Text>
-                          </TouchableOpacity>
-                        )}
-                      </View>
-                    </View>
-                  ))}
-              
-                  {/* Manage in Device Settings (moved inside section) */}
-                  <TouchableOpacity
-                    style={{
-                      marginTop: 10,
-                      paddingVertical: 8,
-                      alignSelf: 'flex-start',
-                    }}
-                    onPress={() => Linking.openSettings()}
-                  >
-                    <Text style={{ color: textColor }}>⚙️ Manage in Device Settings</Text>
-                  </TouchableOpacity>
+                    
+              {permissions.map((p) => (
+                <View key={p.name} style={[styles.row, { marginVertical: 6 }]}>
+                  <Text style={[styles.permissionText, { color: textColor }]}>
+                    {p.icon} {p.name}
+                  </Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                    <Text style={{ color: p.status ? '#2ecc71' : '#e74c3c', fontWeight: '500' }}>
+                      {p.status ? 'Allowed' : 'Denied'}
+                    </Text>
+                    {!p.status && (
+                      <TouchableOpacity
+                        onPress={p.onRequest}
+                        style={{
+                          backgroundColor: '#81b0ff',
+                          paddingHorizontal: 10,
+                          paddingVertical: 5,
+                          borderRadius: 6,
+                        }}
+                      >
+                        <Text style={{ color: '#fff', fontSize: 12 }}>Allow</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
                 </View>
-              )}
+              ))}
 
-
-
-              
+              <TouchableOpacity style={[styles.privacyButton, { marginTop: 5 }]} onPress={() => Linking.openSettings()}>
+                <Text style={{ color: textColor }}>⚙️ Manage in Device Settings</Text>
+              </TouchableOpacity>
 
               <TouchableOpacity style={styles.privacyButton}>
                 <Text style={{ color: textColor }}>🧹 Clear App Data</Text>
@@ -387,10 +355,11 @@ permissionTitle: {
   marginBottom: 5,
 },
 subHeader: {
-  fontSize: 14,
+  fontSize: 16,
+  fontWeight: '600',
   marginVertical: 8,
+  marginLeft: 2,
 },
-
 
 permissionText: {
   fontSize: 14,
