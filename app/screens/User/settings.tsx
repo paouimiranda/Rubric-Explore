@@ -4,7 +4,12 @@ import { Montserrat_300Light } from '@expo-google-fonts/montserrat';
 import { Picker } from '@react-native-picker/picker';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Linking from 'expo-linking';
-import React, { useState } from 'react';
+import * as Camera from 'expo-camera';
+import * as MediaLibrary from 'expo-media-library';
+import * as Notifications from 'expo-notifications';
+import React, { useEffect, useState } from 'react';
+
+
 import { SafeAreaView, ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
 
 const translations: Record<string, Record<string, string>> = {
@@ -32,6 +37,8 @@ const translations: Record<string, Record<string, string>> = {
   },
 };
 
+
+
 const SettingsScreen = () => {
   const [fontsLoaded] = useFonts ({
     BebasNeue_400Regular,
@@ -41,6 +48,54 @@ const SettingsScreen = () => {
   const [lang, setLang] = useState<'en' | 'tl'>('en');
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [notificationsEnabled, setNotificationsEnabled] = useState(false);
+
+ // Camera permission hook (new Expo API)
+const [cameraPermission, requestCameraPermission] = Camera.useCameraPermissions();
+
+// Store the permissions state
+const [permissions, setPermissions] = useState<
+  { name: string; icon: string; status: boolean; onRequest?: () => void }[]
+>([]);
+
+// Check permissions on mount
+useEffect(() => {
+  const checkPermissions = async () => {
+    const cameraGranted = cameraPermission?.granted ?? false;
+
+    const { status: mediaStatus } = await MediaLibrary.getPermissionsAsync();
+    const { status: notifStatus } = await Notifications.getPermissionsAsync();
+
+    setPermissions([
+      {
+        name: 'Camera',
+        icon: '📷',
+        status: cameraGranted,
+        onRequest: requestCameraPermission,
+      },
+      {
+        name: 'Media Library',
+        icon: '🗂️',
+        status: mediaStatus === 'granted',
+        onRequest: async () => {
+          await MediaLibrary.requestPermissionsAsync();
+          checkPermissions();
+        },
+      },
+      {
+        name: 'Notifications',
+        icon: '🔔',
+        status: notifStatus === 'granted',
+        onRequest: async () => {
+          await Notifications.requestPermissionsAsync();
+          checkPermissions();
+        },
+      },
+    ]);
+  };
+
+  checkPermissions();
+}, [cameraPermission]);
+
 
   const t = translations[lang];
 
@@ -93,6 +148,7 @@ const SettingsScreen = () => {
                   onValueChange={(value) => setLang(value)}
                   style={[styles.picker, { color: textColor }]}
                   dropdownIconColor={textColor}
+                  mode="dropdown"
                 >
                   <Picker.Item label="English" value="en" />
                   <Picker.Item label="Tagalog" value="tl" />
@@ -139,13 +195,40 @@ const SettingsScreen = () => {
                 <Text style={{ color: textColor }}>🔐 Enable App Lock / Biometric Login</Text>
               </TouchableOpacity>
 
-               {/* Manage Permissions */}
-               <TouchableOpacity
-                 style={styles.privacyButton}
-                 onPress={() => Linking.openSettings()}
-               >
-                 <Text style={{ color: textColor }}>📱 Manage App Permissions</Text>
-               </TouchableOpacity>
+              {/* App Permissions (clean + no borders) */}
+              <TouchableOpacity disabled style={styles.privacyButton}>
+                <Text style={[styles.subHeader, { color: textColor }]}>📱 App Permissions</Text>
+              </TouchableOpacity>
+                    
+              {permissions.map((p) => (
+                <View key={p.name} style={[styles.row, { marginVertical: 6 }]}>
+                  <Text style={[styles.permissionText, { color: textColor }]}>
+                    {p.icon} {p.name}
+                  </Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                    <Text style={{ color: p.status ? '#2ecc71' : '#e74c3c', fontWeight: '500' }}>
+                      {p.status ? 'Allowed' : 'Denied'}
+                    </Text>
+                    {!p.status && (
+                      <TouchableOpacity
+                        onPress={p.onRequest}
+                        style={{
+                          backgroundColor: '#81b0ff',
+                          paddingHorizontal: 10,
+                          paddingVertical: 5,
+                          borderRadius: 6,
+                        }}
+                      >
+                        <Text style={{ color: '#fff', fontSize: 12 }}>Allow</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                </View>
+              ))}
+
+              <TouchableOpacity style={[styles.privacyButton, { marginTop: 5 }]} onPress={() => Linking.openSettings()}>
+                <Text style={{ color: textColor }}>⚙️ Manage in Device Settings</Text>
+              </TouchableOpacity>
 
               <TouchableOpacity style={styles.privacyButton}>
                 <Text style={{ color: textColor }}>🧹 Clear App Data</Text>
@@ -171,8 +254,6 @@ const SettingsScreen = () => {
             </View>
           )}
 
-
-
           {/* Support */}
           <TouchableOpacity onPress={() => toggleSection('support')} style={[styles.section, { borderColor: dividerColor }]}>
             <Text style={[styles.label, { color: textColor }]}>🧰 {t.support}</Text>
@@ -197,6 +278,7 @@ const SettingsScreen = () => {
       </SafeAreaView>
     </LinearGradient>
   );
+
 };
 
 export default SettingsScreen;
@@ -242,20 +324,53 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   pickerWrapper: {
-    borderWidth: 1,
-    borderRadius: 6,
-    borderColor: '#888',
-    marginTop: 10,
-  },
-  picker: {
-    height: 40,
-    width: '100%',
-  },
+  borderWidth: 1,
+  borderRadius: 8,
+  borderColor: '#888',
+  overflow: 'hidden',
+  marginTop: 10,
+  alignItems: 'center',
+  justifyContent: 'center',
+},
+picker: {
+  height: 40,
+  width: '100%',
+  fontSize: 14,
+},
   privacyButton: {
   paddingVertical: 10,
   borderBottomWidth: 1,
   borderColor: '#555',
   marginBottom: 5,
 },
+permissionBox: {
+  borderWidth: 1,
+  borderRadius: 8,
+  padding: 10,
+  marginBottom: 10,
+},
+permissionTitle: {
+  fontSize: 16,
+  fontWeight: 'bold',
+  marginBottom: 5,
+},
+subHeader: {
+  fontSize: 16,
+  fontWeight: '600',
+  marginVertical: 8,
+  marginLeft: 2,
+},
+
+permissionText: {
+  fontSize: 14,
+  marginLeft: 5,
+},
+permissionButton: {
+  marginTop: 8,
+  paddingVertical: 6,
+  borderTopWidth: 1,
+  borderColor: '#555',
+},
+
 
 });
