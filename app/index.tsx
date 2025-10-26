@@ -13,7 +13,7 @@ import {
   TextInput,
   TouchableOpacity
 } from 'react-native';
-import { loginUser } from '../services/auth-service'; // Import the auth service
+import { loginUser } from '../services/auth-service';
 
 const LoginScreen = () => {
   const [email, setEmail] = useState('');
@@ -44,10 +44,8 @@ const LoginScreen = () => {
     setIsLoading(true);
     
     try {
-      // Authenticate user with Firebase
       const userData = await loginUser(email.trim().toLowerCase(), password);
       
-      // Success - animate out and navigate
       Animated.timing(opacityAnim, {
         toValue: 0,
         duration: 500,
@@ -57,9 +55,7 @@ const LoginScreen = () => {
       });
       
     } catch (error) {
-      // Show error message
       Alert.alert('Login Error');
-      // Reset animation on error
       opacityAnim.setValue(1);
     } finally {
       setIsLoading(false);
@@ -71,23 +67,8 @@ const LoginScreen = () => {
   };
 
   const handleForgotPassword = () => {
-    if (!email.trim()) {
-      Alert.alert('Email Required', 'Please enter your email address first');
-      return;
-    }
-    
-    // You can implement password reset here
-    Alert.alert(
-      'Password Reset', 
-      'A password reset link would be sent to your email address.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Send', onPress: () => {
-          // Implement password reset functionality
-          console.log('Send reset email to:', email);
-        }}
-      ]
-    );
+    // Changed from /screens/User/forgot-password to ./screens/User/forgot-password
+    router.push('./screens/User/forgot-password');
   };
 
   return (
@@ -128,7 +109,6 @@ const LoginScreen = () => {
             editable={!isLoading}
           />
 
-          {/* Forgot Password Link */}
           <TouchableOpacity 
             style={styles.forgotPasswordContainer}
             onPress={handleForgotPassword}
@@ -137,7 +117,6 @@ const LoginScreen = () => {
             <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
           </TouchableOpacity>
 
-          {/* Login Button */}
           <TouchableOpacity 
             style={[styles.button, isLoading && styles.disabledButton]} 
             onPress={handleLogin}
@@ -157,7 +136,6 @@ const LoginScreen = () => {
             </LinearGradient>
           </TouchableOpacity>
 
-          {/* Register Button */}
           <TouchableOpacity 
             style={[styles.button, styles.registerButton]} 
             onPress={handleRegister}
@@ -196,7 +174,7 @@ const styles = StyleSheet.create({
   },
   forgotPasswordContainer: {
     alignSelf: 'flex-end',
-    marginRight: '10%', // Align with input field
+    marginRight: '10%',
     marginBottom: 20,
   },
   forgotPasswordText: {
@@ -234,6 +212,6 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
-    minHeight: 48, // Ensure consistent height for loading state
+    minHeight: 48,
   },
 });

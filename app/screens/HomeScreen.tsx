@@ -28,6 +28,7 @@ export default function HomeScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const [shouldAnimate, setShouldAnimate] = useState(!hasShownAnimation);
+  const [isNavigating, setIsNavigating] = useState(false);
   const { userData } = useAuth();
 
   const [fontsLoaded] = useFonts({
@@ -42,6 +43,12 @@ export default function HomeScreen() {
     if (hour < 12) return 'Good Morning';
     if (hour < 18) return 'Good Afternoon';
     return 'Good Evening';
+  };
+
+  const handleNavigation = (path: string) => {
+    if (isNavigating) return; // Prevent double navigation
+    setIsNavigating(true);
+    router.push(path as any);
   };
 
   // Get first name from username

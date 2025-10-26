@@ -1,9 +1,12 @@
 {
-  "extends": "expo/tsconfig.base",
   "compilerOptions": {
     "target": "es2017",
     "module": "esnext",
-    "lib": ["esnext", "DOM", "DOM.Iterable"],
+    "lib": [
+      "esnext",
+      "DOM",
+      "DOM.Iterable"
+    ],
     "jsx": "react-native",
     "moduleResolution": "bundler",
     "allowJs": true,
@@ -25,5 +28,6 @@
     ".expo/types/**/*.ts",
     "expo-env.d.ts",
     "services/friends-service.js"
-  ]
+  ],
+  "extends": "expo/tsconfig.base"
 }
