@@ -1,10 +1,10 @@
 // contexts/AuthContext.tsx
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { createContext, ReactNode, useContext, useEffect, useState } from 'react';
 import { auth } from '../../firebase';
 import { getCurrentUserData } from '../../services/auth-service';
 
-// Define the shape of your user data
 interface UserData {
   uid: string;
   username: string;
@@ -26,7 +26,6 @@ interface UserData {
   updatedAt: any;
 }
 
-// Define the context type
 interface AuthContextType {
   user: User | null;
   userData: UserData | null;
@@ -34,14 +33,11 @@ interface AuthContextType {
   isAuthenticated: boolean;
 }
 
-// Create context with proper typing
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const useAuth = (): AuthContextType => {
   const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
+  if (!context) throw new Error('useAuth must be used within an AuthProvider');
   return context;
 };
 
@@ -56,18 +52,40 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      setLoading(true);
       if (user) {
         setUser(user);
+        console.log('🔐 User signed in:', user.uid);
+
         try {
+          // 🧠 Try loading cached user data first
+          const cachedData = await AsyncStorage.getItem('userData');
+          if (cachedData) {
+            console.log('💾 Loaded userData from AsyncStorage.');
+            setUserData(JSON.parse(cachedData));
+          } else {
+            console.log('⚠️ No cached userData found in AsyncStorage.');
+          }
+
+          // 🔄 Then fetch latest user data from Firestore
           const data = await getCurrentUserData();
-          setUserData(data as UserData);
+          if (data) {
+            setUserData(data as UserData);
+            await AsyncStorage.setItem('userData', JSON.stringify(data));
+            console.log('✅ Updated and saved userData to AsyncStorage.');
+          }
         } catch (error) {
-          console.error('Error fetching user data:', error);
+          console.error('❌ Error fetching user data:', error);
           setUserData(null);
+          await AsyncStorage.removeItem('userData');
+          console.log('🧹 Cleared AsyncStorage due to error.');
         }
       } else {
+        console.log('🚪 User signed out.');
         setUser(null);
         setUserData(null);
+        await AsyncStorage.removeItem('userData');
+        console.log('🧹 AsyncStorage cleared (logout).');
       }
       setLoading(false);
     });
@@ -82,9 +100,5 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     isAuthenticated: !!user,
   };
 
-  return (
-    <AuthContext.Provider value={value}>
-      {children}
-    </AuthContext.Provider>
-  );
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
