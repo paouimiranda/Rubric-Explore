@@ -15,6 +15,7 @@ import React, { useEffect, useState } from 'react';
 import { Alert, Animated, SafeAreaView, ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
 import { auth } from '../../../firebase';
 import { useAuth } from '../../contexts/AuthContext';
+import TermsModal from '../Misc/t&c';
 
 const translations: Record<string, Record<string, string>> = {
   en: {
@@ -61,6 +62,8 @@ const SettingsScreen = () => {
   const [permissions, setPermissions] = useState<
     { name: string; icon: string; status: boolean; onRequest?: () => void }[]
   >([]);
+
+  const [showPrivacyModal, setShowPrivacyModal] = useState(false);
 
   useEffect(() => {
     const checkPermissions = async () => {
@@ -116,6 +119,7 @@ const SettingsScreen = () => {
               await signOut(auth);
               await AsyncStorage.removeItem('userData');
               console.log('👋 User logged out successfully');
+              router.dismissAll();
               router.replace('/');
             } catch (error) {
               console.error('❌ Logout error:', error);
@@ -367,7 +371,11 @@ const SettingsScreen = () => {
             
             <View style={styles.sectionDivider} />
             <ActionButton label="Clear App Data" iconName="trash" onPress={() => {}} />
-            <ActionButton label="View Privacy Policy" iconName="document-text" onPress={() => {}} />
+            <ActionButton 
+              label="View Privacy Policy" 
+              iconName="document-text" 
+              onPress={() => setShowPrivacyModal(true)} 
+            />
             <ActionButton label="Two-Factor Authentication" iconName="lock-closed" onPress={() => {}} />
             
             <SettingRow label="Allow Data Sharing" value={true} onToggle={() => {}} />
@@ -417,6 +425,11 @@ const SettingsScreen = () => {
             </LinearGradient>
           </TouchableOpacity>
         </ScrollView>
+        {/* Privacy Policy Modal */}
+        <TermsModal 
+          visible={showPrivacyModal} 
+          onClose={() => setShowPrivacyModal(false)} 
+        />
         <BottomNavigation />
       </SafeAreaView>
     </LinearGradient>

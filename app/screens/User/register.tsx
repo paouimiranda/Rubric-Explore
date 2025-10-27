@@ -1,4 +1,5 @@
-import { registerUser } from '@/services/auth-service'; // We'll create this
+import { registerUser } from '@/services/auth-service';
+import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
@@ -13,8 +14,10 @@ import {
   StyleSheet,
   Text,
   TextInput,
-  TouchableOpacity
+  TouchableOpacity,
+  View
 } from 'react-native';
+import TermsModal from '../Misc/t&c';
 
 const RegisterScreen = () => {
   const [firstName, setFirstName] = useState('');
@@ -26,6 +29,8 @@ const RegisterScreen = () => {
   const [dateOfBirth, setDateOfBirth] = useState(new Date());
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
+  const [showTermsModal, setShowTermsModal] = useState(false);
   
   const opacityAnim = useRef(new Animated.Value(1)).current;
   const router = useRouter();
@@ -76,6 +81,11 @@ const RegisterScreen = () => {
       return false;
     }
     
+    if (!acceptedTerms) {
+      Alert.alert('Validation Error', 'You must accept the Terms and Conditions');
+      return false;
+    }
+    
     return true;
   };
 
@@ -96,7 +106,7 @@ const RegisterScreen = () => {
       
       await registerUser(userData);
       
-      // NEW: Send verification email after successful registration
+      // Send verification email after successful registration
       try {
         const response = await fetch('https://us-central1-rubric-app-8f65c.cloudfunctions.net/api/sendVerificationLink', {
           method: 'POST',
@@ -115,7 +125,6 @@ const RegisterScreen = () => {
         console.error('Error sending verification email:', error);
       }
       
-      // UPDATED: Alert now mentions checking email for verification
       Alert.alert(
         'Success', 
         'Account created successfully! Please check your email to verify your account.',
@@ -128,14 +137,14 @@ const RegisterScreen = () => {
                 duration: 500,
                 useNativeDriver: true,
               }).start(() => {
-                router.replace('/');
+                router.replace('../index');
               });
             }
           }
         ]
       );
     } catch (error: any) {
-      Alert.alert('Registration Error', error.message || 'An error occurred during registration.');
+      Alert.alert('Registration Error', error.message || 'An error occurred during registration');
     } finally {
       setIsLoading(false);
     }
@@ -151,13 +160,18 @@ const RegisterScreen = () => {
       setDateOfBirth(selectedDate);
     }
   };
-  // NO TS SAFETY!!!!
-  const formatDate = (date?: Date) => {
-    return date!.toLocaleDateString('en-US', {
+
+  const formatDate = (date: Date) => {
+    return date.toLocaleDateString('en-US', {
       year: 'numeric',
       month: 'long',
       day: 'numeric',
     });
+  };
+
+  const handleTermsClose = () => {
+    setShowTermsModal(false);
+    setAcceptedTerms(true);
   };
 
   return (
@@ -177,7 +191,7 @@ const RegisterScreen = () => {
         >
           <Animated.View style={[styles.formContainer, { opacity: opacityAnim }]}>
             <Image
-              source={require('@/assets/images/clover.png')}
+              source={require('@/assets/images/rubric.png')}
               style={styles.logo}
             />
             
@@ -186,7 +200,7 @@ const RegisterScreen = () => {
             <TextInput
               style={styles.input}
               placeholder="First Name"
-              placeholderTextColor="#B0C4DE"
+              placeholderTextColor="#fff"
               value={firstName}
               onChangeText={setFirstName}
               autoCapitalize="words"
@@ -195,7 +209,7 @@ const RegisterScreen = () => {
             <TextInput
               style={styles.input}
               placeholder="Last Name"
-              placeholderTextColor="#B0C4DE"
+              placeholderTextColor="#fff"
               value={lastName}
               onChangeText={setLastName}
               autoCapitalize="words"
@@ -204,7 +218,7 @@ const RegisterScreen = () => {
             <TextInput
               style={styles.input}
               placeholder="Email Address"
-              placeholderTextColor="#B0C4DE"
+              placeholderTextColor="#fff"
               value={email}
               onChangeText={setEmail}
               autoCapitalize="none"
@@ -214,7 +228,7 @@ const RegisterScreen = () => {
             <TextInput
               style={styles.input}
               placeholder="Username"
-              placeholderTextColor="#B0C4DE"
+              placeholderTextColor="#fff"
               value={username}
               onChangeText={setUsername}
               autoCapitalize="none"
@@ -223,7 +237,7 @@ const RegisterScreen = () => {
             <TextInput
               style={styles.input}
               placeholder="Password"
-              placeholderTextColor="#B0C4DE"
+              placeholderTextColor="#fff"
               value={password}
               onChangeText={setPassword}
               secureTextEntry
@@ -232,7 +246,7 @@ const RegisterScreen = () => {
             <TextInput
               style={styles.input}
               placeholder="Confirm Password"
-              placeholderTextColor="#B0C4DE"
+              placeholderTextColor="#fff"
               value={confirmPassword}
               onChangeText={setConfirmPassword}
               secureTextEntry
@@ -257,6 +271,28 @@ const RegisterScreen = () => {
               />
             )}
 
+            <View style={styles.termsContainer}>
+              <TouchableOpacity 
+                style={styles.checkbox}
+                onPress={() => setAcceptedTerms(!acceptedTerms)}
+              >
+                <View style={[styles.checkboxBox, acceptedTerms && styles.checkboxChecked]}>
+                  {acceptedTerms && (
+                    <Ionicons name="checkmark" size={18} color="#263A56" />
+                  )}
+                </View>
+              </TouchableOpacity>
+              <Text style={styles.termsText}>
+                I have read the{' '}
+                <Text 
+                  style={styles.termsLink}
+                  onPress={() => setShowTermsModal(true)}
+                >
+                  Terms and Conditions
+                </Text>
+              </Text>
+            </View>
+
             <TouchableOpacity 
               style={[styles.button, isLoading && styles.disabledButton]} 
               onPress={handleRegister}
@@ -279,6 +315,12 @@ const RegisterScreen = () => {
             </TouchableOpacity>
           </Animated.View>
         </ScrollView>
+
+        {/* Terms and Conditions Modal */}
+        <TermsModal 
+          visible={showTermsModal} 
+          onClose={handleTermsClose}
+        />
       </LinearGradient>
     </KeyboardAvoidingView>
   );
@@ -313,36 +355,62 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   input: {
-    width: '100%',
-    height: 50,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    borderRadius: 25,
-    paddingHorizontal: 20,
-    marginBottom: 15,
+    width: '80%',
+    height: 40,
+    borderBottomWidth: 0.5,
+    borderColor: '#fff',
     color: '#fff',
-    fontSize: 16,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.2)',
+    marginBottom: 30,
+    backgroundColor: 'transparent',
   },
   dateInput: {
-    width: '100%',
-    height: 50,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    borderRadius: 25,
-    paddingHorizontal: 20,
-    marginBottom: 15,
+    width: '80%',
+    height: 40,
+    borderBottomWidth: 0.5,
+    borderColor: '#fff',
+    marginBottom: 30,
     justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.2)',
+    backgroundColor: 'transparent',
   },
   dateText: {
     color: '#fff',
     fontSize: 16,
   },
+  termsContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    width: '80%',
+    marginBottom: 20,
+  },
+  checkbox: {
+    marginRight: 10,
+  },
+  checkboxBox: {
+    width: 24,
+    height: 24,
+    borderWidth: 2,
+    borderColor: '#fff',
+    borderRadius: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  checkboxChecked: {
+    backgroundColor: '#52F7E2',
+    borderColor: '#52F7E2',
+  },
+  termsText: {
+    color: '#B0C4DE',
+    fontSize: 14,
+    flex: 1,
+  },
+  termsLink: {
+    color: '#52F7E2',
+    textDecorationLine: 'underline',
+    fontWeight: '600',
+  },
   button: {
-    width: '100%',
-    height: 50,
-    borderRadius: 25,
+    width: '80%',
+    borderRadius: 150,
     marginTop: 20,
     overflow: 'hidden',
   },
@@ -350,14 +418,16 @@ const styles = StyleSheet.create({
     opacity: 0.6,
   },
   gradientButton: {
-    flex: 1,
-    justifyContent: 'center',
+    padding: 16,
+    borderRadius: 20,
     alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 48,
   },
   registerButtonText: {
-    color: '#fff',
+    color: '#263A56',
     fontSize: 18,
-    fontWeight: 'bold',
+    fontWeight: '600',
   },
   backButton: {
     marginTop: 20,
