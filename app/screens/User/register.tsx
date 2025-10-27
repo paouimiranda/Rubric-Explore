@@ -96,9 +96,29 @@ const RegisterScreen = () => {
       
       await registerUser(userData);
       
+      // NEW: Send verification email after successful registration
+      try {
+        const response = await fetch('https://us-central1-rubric-app-8f65c.cloudfunctions.net/api/sendVerificationLink', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ email: userData.email }),
+        });
+        
+        if (!response.ok) {
+          console.error('Failed to send verification email:', response.statusText);
+        } else {
+          console.log('Verification email sent successfully');
+        }
+      } catch (error) {
+        console.error('Error sending verification email:', error);
+      }
+      
+      // UPDATED: Alert now mentions checking email for verification
       Alert.alert(
         'Success', 
-        'Account created successfully!',
+        'Account created successfully! Please check your email to verify your account.',
         [
           {
             text: 'OK',
@@ -108,14 +128,14 @@ const RegisterScreen = () => {
                 duration: 500,
                 useNativeDriver: true,
               }).start(() => {
-                router.replace('../index');
+                router.replace('/');
               });
             }
           }
         ]
       );
-    } catch (error) {
-      Alert.alert('Registration Error', );
+    } catch (error: any) {
+      Alert.alert('Registration Error', error.message || 'An error occurred during registration.');
     } finally {
       setIsLoading(false);
     }

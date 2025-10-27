@@ -623,7 +623,7 @@ app.post("/sendVerificationLink", async (req, res) => {
     );
 
     await transporter.sendMail({
-      from: '"App Support" <rubric.capstone@gmail.com>',
+      from: '"Rubric" <rubric.capstone@gmail.com>',
       to: email,
       subject: "Verify your email address",
       html: `
