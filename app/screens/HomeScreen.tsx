@@ -25,6 +25,7 @@ const { width, height } = Dimensions.get('window');
 type Screen = 'notes' | 'quiz' | 'planner' | 'friendlist';
 
 // Global state to track if animation has been shown
+let hasShownDisclaimer = false;
 let hasShownAnimation = false;
 
 export default function HomeScreen() {
@@ -39,7 +40,7 @@ export default function HomeScreen() {
     Montserrat_700Bold,
   });
 
-  const [showDisclaimer, setShowDisclaimer] = useState(true);
+  const [showDisclaimer, setShowDisclaimer] = useState(!hasShownDisclaimer);
   const disclaimerOpacity = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -316,7 +317,10 @@ export default function HomeScreen() {
                     toValue: 0,
                     duration: 300,
                     useNativeDriver: true,
-                  }).start(() => setShowDisclaimer(false));
+                  }).start(() => {
+                    setShowDisclaimer(false);
+                    hasShownDisclaimer = true;
+                  });
                 }}
                 style={styles.disclaimerButton}
               >
