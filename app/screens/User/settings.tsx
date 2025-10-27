@@ -1,15 +1,20 @@
+//settings.tsx - IMPROVED UI with Logout
 import BottomNavigation from '@/components/Interface/nav-bar';
 import { BebasNeue_400Regular, useFonts } from '@expo-google-fonts/bebas-neue';
 import { Montserrat_300Light, Montserrat_400Regular, Montserrat_600SemiBold } from '@expo-google-fonts/montserrat';
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Camera from 'expo-camera';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Linking from 'expo-linking';
 import * as MediaLibrary from 'expo-media-library';
 import * as Notifications from 'expo-notifications';
 import { useRouter } from 'expo-router';
+import { signOut } from 'firebase/auth';
 import React, { useEffect, useState } from 'react';
-import { Animated, SafeAreaView, ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, Animated, SafeAreaView, ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
+import { auth } from '../../../firebase';
+import { useAuth } from '../../contexts/AuthContext';
 
 const translations: Record<string, Record<string, string>> = {
   en: {
@@ -19,6 +24,10 @@ const translations: Record<string, Record<string, string>> = {
     privacy: 'Privacy & Security',
     support: 'Help & Support',
     about: 'About Us',
+    logout: 'Log Out',
+    logoutConfirm: 'Are you sure you want to log out?',
+    cancel: 'Cancel',
+    confirm: 'Log Out',
   },
   tl: {
     settings: 'Mga Setting',
@@ -27,6 +36,10 @@ const translations: Record<string, Record<string, string>> = {
     privacy: 'Privacy at Seguridad',
     support: 'Tulong at Suporta',
     about: 'Tungkol sa Amin',
+    logout: 'Mag-logout',
+    logoutConfirm: 'Sigurado ka bang gusto mong mag-logout?',
+    cancel: 'Kanselahin',
+    confirm: 'Mag-logout',
   },
 };
 
@@ -39,6 +52,7 @@ const SettingsScreen = () => {
   });
 
   const router = useRouter();
+  const { user } = useAuth();
   const [isDarkMode, setIsDarkMode] = useState(true);
   const [lang, setLang] = useState<'en' | 'tl'>('en');
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
@@ -84,6 +98,35 @@ const SettingsScreen = () => {
 
     checkPermissions();
   }, [cameraPermission]);
+
+  const handleLogout = async () => {
+    Alert.alert(
+      t.logout,
+      t.logoutConfirm,
+      [
+        {
+          text: t.cancel,
+          style: 'cancel',
+        },
+        {
+          text: t.confirm,
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await signOut(auth);
+              await AsyncStorage.removeItem('userData');
+              console.log('👋 User logged out successfully');
+              router.replace('/');
+            } catch (error) {
+              console.error('❌ Logout error:', error);
+              Alert.alert('Error', 'Failed to log out. Please try again.');
+            }
+          },
+        },
+      ],
+      { cancelable: true }
+    );
+  };
 
   const t = translations[lang];
   const textColor = isDarkMode ? '#ffffff' : '#113470ff';
@@ -338,7 +381,7 @@ const SettingsScreen = () => {
             title={t.about} 
             iconName="information-circle" 
             sectionKey="about"
-            gradientColors={['#a8edea', '#fed6e3']}
+            gradientColors={['#a6ea6eff', '#5c9724ff']}
           >
             <View style={styles.aboutContent}>
               <Text style={[styles.aboutText, { color: textColor }]}>
@@ -349,6 +392,23 @@ const SettingsScreen = () => {
               </Text>
             </View>
           </SettingCard>
+
+          {/* Logout Button */}
+          <TouchableOpacity 
+            onPress={handleLogout}
+            activeOpacity={0.8}
+            style={styles.logoutButtonContainer}
+          >
+            <LinearGradient
+              colors={['#eb3349', '#ff7340ff']}
+              style={styles.logoutButton}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+            >
+              <Ionicons name="log-out-outline" size={22} color="#ffffff" style={{ marginRight: 10 }} />
+              <Text style={styles.logoutButtonText}>{t.logout}</Text>
+            </LinearGradient>
+          </TouchableOpacity>
         </ScrollView>
         <BottomNavigation />
       </SafeAreaView>
@@ -403,9 +463,10 @@ const styles = StyleSheet.create({
   cardHeaderLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    flex: 1,
   },
   iconBadge: {
+    marginTop: 5,
     width: 44,
     height: 44,
     borderRadius: 12,
@@ -420,6 +481,7 @@ const styles = StyleSheet.create({
   cardTitle: {
     fontSize: 18,
     fontFamily: 'Montserrat_600SemiBold',
+    marginLeft: 15,
   },
   cardContent: {
     padding: 16,
@@ -520,5 +582,27 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: 'Montserrat_400Regular',
     marginVertical: 4,
+  },
+  logoutButtonContainer: {
+    marginTop: 24,
+    marginBottom: 16,
+  },
+  logoutButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 16,
+    borderRadius: 12,
+    shadowColor: '#eb3349',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  logoutButtonText: {
+    color: '#ffffff',
+    fontSize: 16,
+    fontFamily: 'Montserrat_600SemiBold',
+    letterSpacing: 0.5,
   },
 });

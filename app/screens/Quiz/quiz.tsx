@@ -604,8 +604,9 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   animation: {
-    width: width * 0.9,
-    height: width * 0.9,
+    width: 100,
+    height: 100,
+    marginBottom: 16,
   },
 });
 

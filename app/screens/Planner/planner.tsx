@@ -1,3 +1,4 @@
+import BottomNavigation from '@/components/Interface/nav-bar';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import DateTimePicker from '@react-native-community/datetimepicker';
@@ -159,7 +160,7 @@ export default function App() {
 
       if (sortedDates.length === 0) {
         return (
-          <View style={styles.emptyState}>
+          <View style={[styles.emptyState, showFullCalendar && { paddingTop: 100 }]}>
             <LinearGradient
               colors={['#667eea', '#764ba2']}
               start={{ x: 0, y: 0 }}
@@ -225,7 +226,7 @@ export default function App() {
     const dayPlans = plans[selectedDate] || [];
     if (dayPlans.length === 0) {
       return (
-        <View style={styles.emptyState}>
+        <View style={[styles.emptyState, showFullCalendar && { paddingTop: 100 }]}>
           <LinearGradient
             colors={['#f093fb', '#f5576c']}
             start={{ x: 0, y: 0 }}
@@ -566,6 +567,7 @@ export default function App() {
           </Animated.View>
         </View>
       </Modal>
+      <BottomNavigation/>
     </LinearGradient>
   );
 }
@@ -819,8 +821,8 @@ const styles = StyleSheet.create({
   },
   addButtonContainer: {
     position: 'absolute',
-    bottom: 40,
-    alignSelf: 'center',
+    bottom: 80,
+    right: 20,
     shadowColor: '#fa709a',
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.4,

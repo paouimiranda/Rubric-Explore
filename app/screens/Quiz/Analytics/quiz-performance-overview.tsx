@@ -4,17 +4,17 @@ import { QuizService, type QuizAttempt } from '@/services/quiz-service';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
+import LottieView from 'lottie-react-native';
 import React, { useEffect, useState } from 'react';
 import {
-    ActivityIndicator,
-    Dimensions,
-    RefreshControl,
-    SafeAreaView,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  Dimensions,
+  RefreshControl,
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
 } from 'react-native';
 import { LineChart } from 'react-native-gifted-charts';
 
@@ -249,8 +249,13 @@ const QuizPerformanceOverview = () => {
       >
         <SafeAreaView style={styles.container}>
           <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color="#63DC9A" />
-            <Text style={styles.loadingText}>Loading analytics...</Text>
+            <LottieView
+              source={require('@/assets/animations/quiz-loading.json')}
+              autoPlay
+              loop
+              style={styles.lottieAnimation}
+            />
+            <Text style={styles.loadingText}>Loading profile...</Text>
           </View>
         </SafeAreaView>
       </LinearGradient>
@@ -500,6 +505,11 @@ const styles = StyleSheet.create({
     color: '#94a3b8',
     fontSize: 16,
     marginTop: 16,
+  },
+  lottieAnimation: {
+    width: 100,
+    height: 100,
+    marginBottom: 3,
   },
 });
 

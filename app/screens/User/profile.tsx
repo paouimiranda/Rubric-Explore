@@ -12,9 +12,9 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { doc, getDoc } from 'firebase/firestore';
+import LottieView from 'lottie-react-native';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-  ActivityIndicator,
   Alert,
   Image,
   RefreshControl,
@@ -23,7 +23,7 @@ import {
   StyleSheet,
   Text,
   TouchableOpacity,
-  View,
+  View
 } from 'react-native';
 
 
@@ -151,14 +151,12 @@ export default function ProfileScreen() {
       <LinearGradient colors={['#0f2c45', '#1a3a52']} style={styles.container}>
         <SafeAreaView style={styles.container}>
           <View style={styles.loadingContainer}>
-            <View style={styles.loadingIconContainer}>
-              <LinearGradient
-                colors={['#6ADBCE', '#568CD2']}
-                style={styles.loadingIconGradient}
-              >
-                <ActivityIndicator size="large" color="#fff" />
-              </LinearGradient>
-            </View>
+            <LottieView
+              source={require('@/assets/animations/quiz-loading.json')}
+              autoPlay
+              loop
+              style={styles.lottieAnimation}
+            />
             <Text style={styles.loadingText}>Loading profile...</Text>
           </View>
         </SafeAreaView>
@@ -1083,5 +1081,10 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#6b7280',
     textAlign: 'center',
+  },
+  lottieAnimation: {
+    width: 100,
+    height: 100,
+    marginBottom: 3,
   },
 });

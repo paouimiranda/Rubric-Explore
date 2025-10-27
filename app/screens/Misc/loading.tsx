@@ -1,98 +1,37 @@
-import { LinearGradient } from 'expo-linear-gradient';
-import { useFocusEffect, useRouter } from 'expo-router';
-import LottieView from 'lottie-react-native';
-import React, { useRef } from 'react';
-import {
-  Animated,
-  Dimensions,
-  Easing,
-  StyleSheet,
-  View,
-} from 'react-native';
+// app/screens/Misc/loading.tsx
+import { useRouter } from 'expo-router';
+import React, { useEffect } from 'react';
+import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { useAuth } from '../../contexts/AuthContext';
 
-const { width } = Dimensions.get('window');
-
-export default function LoadingScreen() {
-  const animation = useRef<LottieView>(null);
+const LoadingScreen = () => {
+  const { isAuthenticated, loading } = useAuth();
   const router = useRouter();
 
-  const scaleAnim = useRef(new Animated.Value(0)).current; // for pop-in
-  const opacityAnim = useRef(new Animated.Value(1)).current; // for fade-out
+  useEffect(() => {
+    if (loading) return;
 
-  useFocusEffect(
-    React.useCallback(() => {
-      // ✅ Reset animated values every time screen is focused
-      scaleAnim.setValue(0);
-      opacityAnim.setValue(1);
-
-      animation.current?.play();
-
-      // Pop-in entrance
-      Animated.spring(scaleAnim, {
-        toValue: 1,
-        useNativeDriver: true,
-        friction: 5,
-        tension: 100,
-      }).start();
-
-      // Fade out and navigate after 2.5s
-      const timeout = setTimeout(() => {
-        Animated.timing(opacityAnim, {
-          toValue: 0,
-          duration: 500,
-          easing: Easing.out(Easing.ease),
-          useNativeDriver: true,
-        }).start(() => {
-          router.replace('../HomeScreen');
-        });
-      }, 2500);
-
-      return () => clearTimeout(timeout);
-    }, [])
-  );
+    if (isAuthenticated) {
+      router.replace('/screens/HomeScreen');
+    } else {
+      router.replace('/');
+    }
+  }, [loading, isAuthenticated]);
 
   return (
-    <LinearGradient
-      colors={['#324762', '#0A1C3C']}
-      start={{x: 1, y: 1}}
-      end={{ x: 1, y: 0 }}
-      style={{ flex: 1}}
-    >
     <View style={styles.container}>
-      <Animated.View
-        style={[
-          styles.animationWrapper,
-          {
-            transform: [{ scale: scaleAnim }],
-            opacity: opacityAnim,
-          },
-        ]}
-      >
-        <LottieView
-          ref={animation}
-          source={require('@/assets/animations/quiz-loading.json')} // adjust path
-          autoPlay
-          loop={false}
-          style={styles.animation}
-        />
-      </Animated.View>
+      <ActivityIndicator size="large" color="#52F7E2" />
     </View>
-    </LinearGradient>
   );
-}
+};
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  animationWrapper: {
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  animation: {
-    width: width * 0.9,
-    height: width * 0.9,
+    backgroundColor: '#1A2D4B',
   },
 });
+
+export default LoadingScreen;

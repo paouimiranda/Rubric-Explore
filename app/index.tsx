@@ -84,7 +84,7 @@ const LoginScreen = () => {
       >
         <Animated.View style={[{ opacity: opacityAnim }, styles.formContainer]}>
           <Image
-            source={require('../assets/images/clover.png')}
+            source={require('../assets/images/rubric.png')}
             style={{ width: 300, height: 300, marginBottom: 25 }}
           />
           

@@ -1,7 +1,7 @@
 // contexts/AuthContext.tsx
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { onAuthStateChanged, User } from 'firebase/auth';
-import { createContext, ReactNode, useContext, useEffect, useState } from 'react';
+import React, { createContext, ReactNode, useContext, useEffect, useState } from 'react';
 import { auth } from '../../firebase';
 import { getCurrentUserData } from '../../services/auth-service';
 
@@ -49,45 +49,44 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   const [user, setUser] = useState<User | null>(null);
   const [userData, setUserData] = useState<UserData | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
+  const [initialized, setInitialized] = useState<boolean>(false);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      setLoading(true);
+      console.log('🧠 Auth state changed');
+
       if (user) {
+        console.log('🔐 Signed in as:', user.uid);
         setUser(user);
-        console.log('🔐 User signed in:', user.uid);
 
         try {
-          // 🧠 Try loading cached user data first
-          const cachedData = await AsyncStorage.getItem('userData');
-          if (cachedData) {
-            console.log('💾 Loaded userData from AsyncStorage.');
-            setUserData(JSON.parse(cachedData));
-          } else {
-            console.log('⚠️ No cached userData found in AsyncStorage.');
+          // Try cached data first
+          const cached = await AsyncStorage.getItem('userData');
+          if (cached) {
+            setUserData(JSON.parse(cached));
+            console.log('💾 Loaded userData from AsyncStorage');
           }
 
-          // 🔄 Then fetch latest user data from Firestore
-          const data = await getCurrentUserData();
-          if (data) {
-            setUserData(data as UserData);
-            await AsyncStorage.setItem('userData', JSON.stringify(data));
-            console.log('✅ Updated and saved userData to AsyncStorage.');
+          // Always refresh in background
+          const freshData = await getCurrentUserData();
+          if (freshData) {
+            setUserData(freshData as UserData);
+            await AsyncStorage.setItem('userData', JSON.stringify(freshData));
+            console.log('✅ Updated userData from Firestore');
           }
-        } catch (error) {
-          console.error('❌ Error fetching user data:', error);
+        } catch (err) {
+          console.error('❌ Failed to load user data:', err);
           setUserData(null);
-          await AsyncStorage.removeItem('userData');
-          console.log('🧹 Cleared AsyncStorage due to error.');
         }
       } else {
-        console.log('🚪 User signed out.');
+        console.log('🚪 User signed out');
         setUser(null);
         setUserData(null);
         await AsyncStorage.removeItem('userData');
-        console.log('🧹 AsyncStorage cleared (logout).');
       }
+
       setLoading(false);
+      setInitialized(true);
     });
 
     return unsubscribe;
@@ -96,7 +95,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   const value: AuthContextType = {
     user,
     userData,
-    loading,
+    loading: !initialized || loading,
     isAuthenticated: !!user,
   };
 

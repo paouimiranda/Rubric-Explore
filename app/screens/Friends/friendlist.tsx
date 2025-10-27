@@ -437,7 +437,7 @@ export default function Friendlist() {
               <Text style={styles.onlineText}>{onlineCount} online</Text>
             </View>
             
-            <TouchableOpacity style={styles.findFriendsBtn} onPress={navigateToSearch}>
+            {/* <TouchableOpacity style={styles.findFriendsBtn} onPress={navigateToSearch}>
               <LinearGradient
                 colors={['#3b82f6', '#2563eb']}
                 style={styles.findFriendsBtnGradient}
@@ -447,7 +447,7 @@ export default function Friendlist() {
                 <Ionicons name="search" size={16} color="#fff" />
                 <Text style={styles.findFriendsText}>Find Friends</Text>
               </LinearGradient>
-            </TouchableOpacity>
+            </TouchableOpacity> */}
           </View>
         )}
 

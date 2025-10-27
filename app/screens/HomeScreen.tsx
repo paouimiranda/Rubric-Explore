@@ -1,6 +1,7 @@
 import BottomNavigation from '@/components/Interface/nav-bar';
 import { BebasNeue_400Regular, useFonts } from '@expo-google-fonts/bebas-neue';
 import { Montserrat_400Regular, Montserrat_700Bold } from '@expo-google-fonts/montserrat';
+import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
@@ -8,6 +9,8 @@ import {
   Animated,
   Dimensions,
   Image,
+  Modal,
+  Pressable,
   SafeAreaView,
   StyleSheet,
   Text,
@@ -28,7 +31,6 @@ export default function HomeScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const [shouldAnimate, setShouldAnimate] = useState(!hasShownAnimation);
-  const [isNavigating, setIsNavigating] = useState(false);
   const { userData } = useAuth();
 
   const [fontsLoaded] = useFonts({
@@ -36,6 +38,19 @@ export default function HomeScreen() {
     Montserrat_400Regular,
     Montserrat_700Bold,
   });
+
+  const [showDisclaimer, setShowDisclaimer] = useState(true);
+  const disclaimerOpacity = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (showDisclaimer) {
+      Animated.timing(disclaimerOpacity, {
+        toValue: 1,
+        duration: 400,
+        useNativeDriver: true,
+      }).start();
+    }
+  }, [showDisclaimer]);
 
   // Get greeting based on time of day
   const getGreeting = () => {
@@ -45,40 +60,29 @@ export default function HomeScreen() {
     return 'Good Evening';
   };
 
-  const handleNavigation = (path: string) => {
-    if (isNavigating) return; // Prevent double navigation
-    setIsNavigating(true);
-    router.push(path as any);
-  };
-
-  // Get first name from username
   const getFirstName = () => {
     if (!userData?.username) return 'User';
-    // Split by space and get first part
     return userData.username.split(' ')[0];
   };
 
   const greeting = getGreeting();
   const firstName = getFirstName();
 
-  // Animation values - initialize based on whether we should animate
+  // Animation values
   const fadeAnim = useRef(new Animated.Value(shouldAnimate ? 0 : 1)).current;
   const slideAnim = useRef(new Animated.Value(shouldAnimate ? 50 : 0)).current;
   const scaleAnim = useRef(new Animated.Value(shouldAnimate ? 0.8 : 1)).current;
   const logoFadeAnim = useRef(new Animated.Value(shouldAnimate ? 0 : 1)).current;
   const logoRotateAnim = useRef(new Animated.Value(shouldAnimate ? 0 : 1)).current;
   
-  // Individual letter animations for greeting text - recreate when greeting changes
   const [letterAnims, setLetterAnims] = useState(() => 
     greeting.split('').map(() => new Animated.Value(shouldAnimate ? 0 : 1))
   );
 
-  // Update letter animations when greeting changes
   useEffect(() => {
     setLetterAnims(greeting.split('').map(() => new Animated.Value(shouldAnimate ? 0 : 1)));
   }, [greeting]);
   
-  // Module button animations
   const moduleAnims = useRef([
     new Animated.Value(shouldAnimate ? 0 : 1),
     new Animated.Value(shouldAnimate ? 0 : 1),
@@ -91,13 +95,11 @@ export default function HomeScreen() {
   useEffect(() => {
     if (fontsLoaded && shouldAnimate) {
       startAnimations();
-      // Mark animation as shown
       hasShownAnimation = true;
     }
   }, [fontsLoaded, shouldAnimate]);
 
   const startAnimations = () => {
-    // Main container fade in
     Animated.parallel([
       Animated.timing(fadeAnim, {
         toValue: 1,
@@ -114,7 +116,6 @@ export default function HomeScreen() {
         duration: 800,
         useNativeDriver: true,
       }),
-      // Logo animation
       Animated.timing(logoFadeAnim, {
         toValue: 1,
         duration: 800,
@@ -127,26 +128,24 @@ export default function HomeScreen() {
       }),
     ]).start();
 
-    // Letter animations with stagger
     const letterAnimations = letterAnims.map((anim, index) =>
       Animated.timing(anim, {
         toValue: 1,
         duration: 300,
-        delay: index * 50, // 50ms delay between each letter
+        delay: index * 50,
         useNativeDriver: true,
       })
     );
 
     Animated.sequence([
-      Animated.delay(200), // Wait for container to start appearing
+      Animated.delay(200),
       Animated.parallel(letterAnimations),
     ]).start();
 
-    // Module buttons with stagger
     const moduleAnimations = moduleAnims.map((anim, index) =>
       Animated.spring(anim, {
         toValue: 1,
-        delay: 600 + (index * 150), // Start after letters, stagger by 150ms
+        delay: 600 + (index * 150),
         tension: 50,
         friction: 7,
         useNativeDriver: true,
@@ -155,7 +154,6 @@ export default function HomeScreen() {
 
     Animated.parallel(moduleAnimations).start();
 
-    // Bottom navigation slide up
     Animated.timing(bottomNavAnim, {
       toValue: 0,
       duration: 600,
@@ -164,90 +162,69 @@ export default function HomeScreen() {
     }).start();
   };
 
-  const renderAnimatedText = () => {
-    return (
-      <View style={styles.textContainer}>
-        <View style={styles.welcomeContainer}>
-          {greeting.split('').map((letter, index) => (
-            <Animated.Text
-              key={index}
-              style={[
-                styles.welcome,
-                // Adjust font size for "Good Afternoon" to fit better
-                greeting === 'Good Afternoon' && styles.welcomeSmaller,
-                {
-                  opacity: letterAnims[index],
-                  transform: [
-                    {
-                      translateY: letterAnims[index].interpolate({
-                        inputRange: [0, 1],
-                        outputRange: [-20, 0],
-                      }),
-                    },
-                    {
-                      scale: letterAnims[index].interpolate({
-                        inputRange: [0, 0.5, 1],
-                        outputRange: [0.5, 1.2, 1],
-                      }),
-                    },
-                  ],
-                },
-              ]}
-            >
-              {letter === ' ' ? '\u00A0' : letter}
-            </Animated.Text>
-          ))}
-        </View>
-        <Animated.Text 
-          style={[
-            styles.motto,
-            {
-              opacity: fadeAnim,
-              transform: [{ translateY: slideAnim }],
-            }
-          ]}
-        >
-          It's time to lock in, {firstName}.
-        </Animated.Text>
+  const renderAnimatedText = () => (
+    <View style={styles.textContainer}>
+      <View style={styles.welcomeContainer}>
+        {greeting.split('').map((letter, index) => (
+          <Animated.Text
+            key={index}
+            style={[
+              styles.welcome,
+              greeting === 'Good Afternoon' && styles.welcomeSmaller,
+              {
+                opacity: letterAnims[index],
+                transform: [
+                  {
+                    translateY: letterAnims[index].interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [-20, 0],
+                    }),
+                  },
+                  {
+                    scale: letterAnims[index].interpolate({
+                      inputRange: [0, 0.5, 1],
+                      outputRange: [0.5, 1.2, 1],
+                    }),
+                  },
+                ],
+              },
+            ]}
+          >
+            {letter === ' ' ? '\u00A0' : letter}
+          </Animated.Text>
+        ))}
       </View>
-    );
-  };
+      <Animated.Text 
+        style={[
+          styles.motto,
+          { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }
+        ]}
+      >
+        It's time to lock in, {firstName}.
+      </Animated.Text>
+    </View>
+  );
 
   if (!fontsLoaded) {
-  return (
-    <LinearGradient
-      colors={['#0f2c45ff','#324762']}
-      style={{flex: 1, justifyContent: 'center', alignItems: 'center'}}>
-      <Image
-        source={require('../../assets/images/logo.png')}
-        style={{width: 100, height: 100, opacity: 0.8}}
-        resizeMode="contain"
-      />
-    </LinearGradient>
-  );
-}
+    return (
+      <LinearGradient colors={['#0f2c45ff','#324762']} style={{flex: 1, justifyContent: 'center', alignItems: 'center'}}>
+        <Image
+          source={require('../../assets/images/logo.png')}
+          style={{width: 100, height: 100, opacity: 0.8}}
+          resizeMode="contain"
+        />
+      </LinearGradient>
+    );
+  }
 
   return (
-    <LinearGradient
-      colors={['#0f2c45ff','#324762' ]}
-      start={{x: 0, y: 0}}
-      end={{ x: 0, y: 1 }}
-      style={{ 
-        flex: 1}}>
+    <LinearGradient colors={['#0f2c45ff','#324762']} start={{x: 0, y: 0}} end={{x: 0, y: 1}} style={{flex: 1}}>
       <SafeAreaView style={styles.container}>
-        <Animated.View
-          style={{
-            opacity: fadeAnim,
-            transform: [
-              { translateY: slideAnim },
-              { scale: scaleAnim },
-            ],
-          }}
-        >
+        <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }, { scale: scaleAnim }] }}>
           <View style={styles.headerContainer}>
             <Animated.View style={styles.logoContainer}>
               <Animated.Image
-                source={require('../../assets/images/logo.png')} // Update this path to your logo
+                source={require('../../assets/images/logo.png')}
                 style={[
                   styles.logo,
                   {
@@ -267,25 +244,13 @@ export default function HomeScreen() {
             </Animated.View>
             {renderAnimatedText()}
           </View>
-          
+
           <Animated.View 
-            style={[
-              styles.divider,
-              {
-                opacity: fadeAnim,
-                transform: [{ scaleX: fadeAnim }],
-              }
-            ]} 
+            style={[styles.divider, { opacity: fadeAnim, transform: [{ scaleX: fadeAnim }] }]} 
           />
 
           <Animated.Text 
-            style={[
-              styles.sectionTitle,
-              {
-                opacity: fadeAnim,
-                transform: [{ translateY: slideAnim }],
-              }
-            ]}
+            style={[styles.sectionTitle, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}
           >
             Activities
           </Animated.Text>
@@ -324,19 +289,50 @@ export default function HomeScreen() {
 
         <AnimatedBottomNavigation animValue={bottomNavAnim} />
       </SafeAreaView>
+
+      {/* Disclaimer Modal */}
+      <Modal
+        transparent
+        animationType="fade"
+        visible={showDisclaimer}
+        onRequestClose={() => setShowDisclaimer(false)}
+      >
+        <BlurView intensity={80} tint="dark" style={StyleSheet.absoluteFill}>
+          <Animated.View style={[styles.disclaimerContainer, { opacity: disclaimerOpacity }]}>
+            <LinearGradient
+              colors={['#324762', '#0F2245']}
+              start={{ x: 0, y: 1 }}
+              end={{ x: 1, y: 0 }}
+              style={styles.disclaimerBox}
+            >
+              <Text style={styles.disclaimerTitle}>Beta Version Notice</Text>
+              <Text style={styles.disclaimerText}>
+                This is a beta release of the application. Some features may be incomplete, limited in functionality, or subject to change as development progresses. We appreciate your understanding and feedback as we continue improving the app.
+              </Text>
+
+              <Pressable
+                onPress={() => {
+                  Animated.timing(disclaimerOpacity, {
+                    toValue: 0,
+                    duration: 300,
+                    useNativeDriver: true,
+                  }).start(() => setShowDisclaimer(false));
+                }}
+                style={styles.disclaimerButton}
+              >
+                <Text style={styles.disclaimerButtonText}>I Understand</Text>
+              </Pressable>
+            </LinearGradient>
+          </Animated.View>
+        </BlurView>
+      </Modal>
     </LinearGradient>
   );
 }
 
-type ModuleButtonProps = {
-  title: Screen;
-  color: readonly [string, string, ...string[]];
-  image: any;
-  onPress: () => void;
-  animValue: Animated.Value;
-};
+/* ------------------------------ Component Styles ------------------------------ */
 
-const AnimatedModuleButton = ({ title, color, image, onPress, animValue }: ModuleButtonProps) => {
+const AnimatedModuleButton = ({ title, color, image, onPress, animValue }: any) => {
   const scaleValue = useRef(new Animated.Value(1)).current;
 
   const handlePressIn = () => {
@@ -364,9 +360,7 @@ const AnimatedModuleButton = ({ title, color, image, onPress, animValue }: Modul
               outputRange: [50, 0],
             }),
           },
-          {
-            scale: Animated.multiply(animValue, scaleValue),
-          },
+          { scale: Animated.multiply(animValue, scaleValue) },
         ],
       }}
     >
@@ -376,35 +370,28 @@ const AnimatedModuleButton = ({ title, color, image, onPress, animValue }: Modul
         onPressOut={handlePressOut}
         activeOpacity={0.8}
       >
-        <LinearGradient
-          colors={color}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 0, y: 1 }}
-          style={styles.moduleButton}
-        >
-        <Image source={image} style={[styles.moduleImage]} resizeMode="contain" />
-        <Text style={styles.moduleText}>{title}</Text>
+        <LinearGradient colors={color} start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }} style={styles.moduleButton}>
+          <Image source={image} style={styles.moduleImage} resizeMode="contain" />
+          <Text style={styles.moduleText}>{title}</Text>
         </LinearGradient>
       </TouchableOpacity>
     </Animated.View>
   );
 };
 
-const AnimatedBottomNavigation = ({ animValue }: { animValue: Animated.Value }) => {
-  return (
-    <Animated.View 
-      style={{
-        position: 'absolute',
-        bottom: 0,
-        left: 0,
-        right: 0,
-        transform: [{ translateY: animValue }],
-      }}
-    >
-      <BottomNavigation/>
-    </Animated.View>
-  );
-};
+const AnimatedBottomNavigation = ({ animValue }: { animValue: Animated.Value }) => (
+  <Animated.View 
+    style={{
+      position: 'absolute',
+      bottom: 0,
+      left: 0,
+      right: 0,
+      transform: [{ translateY: animValue }],
+    }}
+  >
+    <BottomNavigation />
+  </Animated.View>
+);
 
 const styles = StyleSheet.create({
   container: {
@@ -494,4 +481,47 @@ const styles = StyleSheet.create({
     height: '50%',
     marginBottom: '4%',
   },
+  disclaimerContainer: {
+  flex: 1,
+  justifyContent: 'center',
+  alignItems: 'center',
+  paddingHorizontal: 25,
+},
+  disclaimerBox: {
+    width: '100%',
+    borderRadius: 20,
+    padding: 25,
+    shadowColor: '#000',
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
+    elevation: 10,
+},
+  disclaimerTitle: {
+    fontSize: 22,
+    fontFamily: 'Montserrat_700Bold',
+    color: '#fff',
+    marginBottom: 10,
+    textAlign: 'center',
+},
+  disclaimerText: {
+    fontSize: 15,
+    fontFamily: 'Montserrat_400Regular',
+    color: '#D3D3D3',
+    textAlign: 'center',
+    lineHeight: 22,
+    marginBottom: 20,
+},
+  disclaimerButton: {
+    backgroundColor: '#4E80E1',
+    borderRadius: 12,
+    alignSelf: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 30,
+},
+  disclaimerButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontFamily: 'Montserrat_700Bold',
+},
+
 });

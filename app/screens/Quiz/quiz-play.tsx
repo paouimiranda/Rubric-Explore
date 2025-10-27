@@ -98,7 +98,7 @@ const QuizPlay = () => {
   const loadQuiz = async (id: string) => {
     try {
       setLoading(true);
-      const quizData = await QuizService.getQuizById(id);
+      const quizData = await QuizService.getQuizById(id, true);
       if (quizData) {
         setQuiz(quizData);
         setAnswers(quizData.questions.map(q => ({
@@ -389,33 +389,36 @@ const QuizPlay = () => {
     <View style={styles.questionContent}>
       <View style={styles.optionsGrid}>
         {question.options.map((option, index) => {
-          const optionStyles: any[] = [
-            styles.optionButton,
-            selectedAnswers.includes(index) && styles.selectedOption
-          ];
+          const isSelected = selectedAnswers.includes(index);
           
-          // Add color style based on index
-          switch (index) {
-            case 0: optionStyles.push(styles.option0); break;
-            case 1: optionStyles.push(styles.option1); break;
-            case 2: optionStyles.push(styles.option2); break;
-            case 3: optionStyles.push(styles.option3); break;
-          }
+          // Define color styles for each option
+          const optionColorStyles = [
+            styles.option0, // Red
+            styles.option1, // Orange
+            styles.option2, // Green
+            styles.option3, // Blue
+          ];
 
           return (
             <TouchableOpacity
               key={index}
-              style={optionStyles}
+              style={[
+                styles.optionButton,
+                optionColorStyles[index],
+                isSelected && styles.selectedOption
+              ]}
               onPress={() => handleMultipleChoiceAnswer(index)}
               activeOpacity={0.8}
             >
-              <View style={styles.optionContent}>
-                <View style={styles.optionIndicator}>
-                  {selectedAnswers.includes(index) && (
-                    <Ionicons name="checkmark" size={16} color="#ffffff" />
+              <View style={styles.radioRow}>
+                <View style={styles.radioCircleOuter}>
+                  {isSelected && (
+                    <View style={styles.radioCircleInner} />
                   )}
                 </View>
-                <Text style={styles.optionText}>{option}</Text>
+                <Text style={styles.optionText} numberOfLines={3}>
+                  {option}
+                </Text>
               </View>
             </TouchableOpacity>
           );
@@ -547,7 +550,8 @@ const QuizPlay = () => {
 
   const handleViewAnalytics = () => {
     if (quiz?.id) {
-      router.push(`./Analytics/quiz-detail?quizId=${quiz.id}`);
+      router.push(`/screens/Quiz/Analytics/quiz-performance-detail?quizId=${quiz.id}`);
+      console.log("hello");
     }
   };
 
@@ -862,20 +866,6 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   questionContent: { flex: 1 },
-  optionsGrid: { gap: 12 },
-  optionButton: {
-    borderRadius: 12,
-    padding: 16,
-    minHeight: 60,
-  },
-  option0: { backgroundColor: '#FF999A' },
-  option1: { backgroundColor: '#568CD2' },
-  option2: { backgroundColor: '#F2CD41' },
-  option3: { backgroundColor: '#63DC9A' },
-  selectedOption: {
-    borderWidth: 3,
-    borderColor: '#ffffff',
-  },
   optionContent: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -889,12 +879,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  optionText: {
-    color: '#ffffff',
-    fontSize: 16,
-    fontWeight: '500',
-    flex: 1,
-  },
+  
   fillBlankContainer: {
     alignItems: 'center',
     paddingVertical: 40,
@@ -1170,6 +1155,59 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: 16,
     fontWeight: 'bold',
+  },
+  optionsGrid: { 
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  optionButton: {
+    width: '48%',
+    minHeight: 100,
+    padding: 16,
+    borderRadius: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
+    justifyContent: 'center',
+  },
+  option0: { backgroundColor: '#ef4444' }, // Red
+  option1: { backgroundColor: '#f59e0b' }, // Orange
+  option2: { backgroundColor: '#10b981' }, // Green
+  option3: { backgroundColor: '#3b82f6' }, // Blue
+  selectedOption: {
+    borderWidth: 3,
+    borderColor: '#ffffff',
+    shadowOpacity: 0.4,
+  },
+  radioRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  radioCircleOuter: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 2,
+    borderColor: '#ffffff',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  radioCircleInner: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: '#ffffff',
+  },
+  optionText: {
+    color: '#ffffff',
+    fontSize: 15,
+    fontWeight: '600',
+    flex: 1,
   },
 });
 
