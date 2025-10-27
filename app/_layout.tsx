@@ -1,4 +1,5 @@
 // app/_layout.tsx
+import React from 'react'; // ✅ Added: Fixes TypeScript JSX children inference for ThemeProvider and AuthProvider
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { useFonts } from 'expo-font';
@@ -33,8 +34,9 @@ function RootNavigator() {
   if (!fontsLoaded || loading) {
     return <Loading />;
   }
-
+  
   // 🔐 If user is authenticated → go straight to HomeScreen
+  
   if (isAuthenticated) {
     return (
       <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>

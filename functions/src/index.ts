@@ -630,6 +630,7 @@ app.post("/sendVerificationLink", async (req, res) => {
         <p>Hello,</p>
         <p>Click the button below to verify your email address:</p>
         <a href="${link}" style="display:inline-block;padding:10px 20px;background-color:#5a3dff;color:white;text-decoration:none;border-radius:5px;">Verify Email</a>
+        <p>If you see this email you can login into the app</p>
       `,
     });
 

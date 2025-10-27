@@ -3,7 +3,7 @@ import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { LinearGradient } from 'expo-linear-gradient';
-import * as Notifications from 'expo-notifications';
+// import * as Notifications from 'expo-notifications';
 import moment from 'moment';
 import React, { useEffect, useRef, useState } from 'react';
 import {
@@ -59,16 +59,17 @@ export default function App() {
     ]).start();
 
     (async () => {
-      await Notifications.requestPermissionsAsync();
-      Notifications.setNotificationHandler({
-        handleNotification: async () => ({
-          shouldShowAlert: true,
-          shouldPlaySound: true,
-          shouldSetBadge: false,
-          shouldShowBanner: true,
-          shouldShowList: true,
-        }),
-      });
+      // Notifications code commented out - deprecated
+      // await Notifications.requestPermissionsAsync();
+      // Notifications.setNotificationHandler({
+      //   handleNotification: async () => ({
+      //     shouldShowAlert: true,
+      //     shouldPlaySound: true,
+      //     shouldSetBadge: false,
+      //     shouldShowBanner: true,
+      //     shouldShowList: true,
+      //   }),
+      // });
 
       const stored = await AsyncStorage.getItem('plans');
       if (stored) setPlans(JSON.parse(stored));
@@ -98,23 +99,24 @@ export default function App() {
     setPlanText('');
     setPlanTime('');
 
-    const [h, m] = planTime.split(':').map(Number);
-    const fireAt = new Date(dateKey);
-    fireAt.setHours(h, m, 0, 0);
+    // Notification scheduling code commented out - deprecated
+    // const [h, m] = planTime.split(':').map(Number);
+    // const fireAt = new Date(dateKey);
+    // fireAt.setHours(h, m, 0, 0);
 
-    if (fireAt.getTime() > Date.now() + 3000) {
-      await Notifications.scheduleNotificationAsync({
-        content: {
-          title: '📅 Reminder',
-          body: `${planText} at ${planTime}`,
-          sound: true,
-        },
-        trigger: {
-          type: Notifications.SchedulableTriggerInputTypes.DATE,
-          date: fireAt,
-        } as Notifications.DateTriggerInput,
-      });
-    }
+    // if (fireAt.getTime() > Date.now() + 3000) {
+    //   await Notifications.scheduleNotificationAsync({
+    //     content: {
+    //       title: '📅 Reminder',
+    //       body: `${planText} at ${planTime}`,
+    //       sound: true,
+    //     },
+    //     trigger: {
+    //       type: Notifications.SchedulableTriggerInputTypes.DATE,
+    //       date: fireAt,
+    //     } as Notifications.DateTriggerInput,
+    //   });
+    // }
   };
 
   const deletePlan = async (date: string, index: number) => {

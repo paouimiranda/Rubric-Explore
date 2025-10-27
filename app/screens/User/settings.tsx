@@ -8,7 +8,7 @@ import * as Camera from 'expo-camera';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Linking from 'expo-linking';
 import * as MediaLibrary from 'expo-media-library';
-import * as Notifications from 'expo-notifications';
+//import * as Notifications from 'expo-notifications'; // Commented out due to expo-notifications removal from Expo Go in SDK 53
 import { useRouter } from 'expo-router';
 import { signOut } from 'firebase/auth';
 import React, { useEffect, useState } from 'react';
@@ -56,7 +56,7 @@ const SettingsScreen = () => {
   const [isDarkMode, setIsDarkMode] = useState(true);
   const [lang, setLang] = useState<'en' | 'tl'>('en');
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
-  const [notificationsEnabled, setNotificationsEnabled] = useState(false);
+  const [notificationsEnabled, setNotificationsEnabled] = useState(false); // Set to false by default since disabled
   const [cameraPermission, requestCameraPermission] = Camera.useCameraPermissions();
   const [permissions, setPermissions] = useState<
     { name: string; icon: string; status: boolean; onRequest?: () => void }[]
@@ -66,7 +66,7 @@ const SettingsScreen = () => {
     const checkPermissions = async () => {
       const cameraGranted = cameraPermission?.granted ?? false;
       const { status: mediaStatus } = await MediaLibrary.getPermissionsAsync();
-      const { status: notifStatus } = await Notifications.getPermissionsAsync();
+      //const { status: notifStatus } = await Notifications.getPermissionsAsync(); // Commented out due to expo-notifications removal
 
       setPermissions([
         {
@@ -84,15 +84,15 @@ const SettingsScreen = () => {
             checkPermissions();
           },
         },
-        {
-          name: 'Notifications',
-          icon: 'notifications',
-          status: notifStatus === 'granted',
-          onRequest: async () => {
-            await Notifications.requestPermissionsAsync();
-            checkPermissions();
-          },
-        },
+        // {
+        //   name: 'Notifications',
+        //   icon: 'notifications',
+        //   status: notifStatus === 'Not applicable', // Commented out due to expo-notifications removal
+        //   onRequest: async () => {
+        //     await Notifications.requestPermissionsAsync(); // Commented out due to expo-notifications removal
+        //     checkPermissions();
+        //   },
+        // },
       ]);
     };
 
@@ -148,13 +148,13 @@ const SettingsScreen = () => {
     title, 
     iconName, 
     sectionKey, 
-    children,
+    children = undefined, // Made optional to fix TypeScript error
     gradientColors: customGradient
   }: { 
     title: string; 
     iconName: keyof typeof Ionicons.glyphMap; 
     sectionKey: string; 
-    children: React.ReactNode;
+    children?: React.ReactNode; // Made optional
     gradientColors?: [string, string];
   }) => {
     const [animation] = useState(new Animated.Value(0));
@@ -206,18 +206,21 @@ const SettingsScreen = () => {
   const SettingRow = ({ 
     label, 
     value, 
-    onToggle 
+    onToggle,
+    disabled = false // Added disabled prop
   }: { 
     label: string; 
     value: boolean; 
-    onToggle: (val: boolean) => void 
+    onToggle: (val: boolean) => void;
+    disabled?: boolean; // Added disabled prop
   }) => (
     <View style={styles.settingRow}>
-      <Text style={[styles.settingLabel, { color: textColor }]}>{label}</Text>
+      <Text style={[styles.settingLabel, { color: textColor, opacity: disabled ? 0.5 : 1 }]}>{label}</Text> {/* Gray out text when disabled */}
       <Switch
         value={value}
-        onValueChange={onToggle}
-        trackColor={{ false: '#555', true: '#667eea' }}
+        onValueChange={disabled ? undefined : onToggle} // Prevent toggling when disabled
+        disabled={disabled} // Disable the switch
+        trackColor={{ false: disabled ? '#888' : '#555', true: disabled ? '#888' : '#667eea' }} // Gray track when disabled
         thumbColor={value ? '#ffffff' : '#dddddd'}
         ios_backgroundColor="#555"
       />
@@ -259,9 +262,11 @@ const SettingsScreen = () => {
   );
 
   const PermissionItem = ({ 
-    permission 
+    permission,
+    key // Added key prop to fix TypeScript error (not used in component, but required for React map)
   }: { 
-    permission: { name: string; icon: string; status: boolean; onRequest?: () => void } 
+    permission: { name: string; icon: string; status: boolean; onRequest?: () => void };
+    key?: string; // Added key prop
   }) => {
     const permissionGradient = permission.status 
       ? ['#11998e', '#38ef7d'] 
@@ -328,10 +333,12 @@ const SettingsScreen = () => {
             sectionKey="notifications"
             gradientColors={['#f093fb', '#f5576c']}
           >
+            {/* Disabled due to expo-notifications removal from Expo Go in SDK 53. Re-enable when using a development build. */}
             <SettingRow 
               label={t.enablePush} 
               value={notificationsEnabled} 
               onToggle={setNotificationsEnabled} 
+              disabled={true} // Disable the toggle to gray it out
             />
           </SettingCard>
 
@@ -417,6 +424,9 @@ const SettingsScreen = () => {
 };
 
 export default SettingsScreen;
+
+// Styles remain unchanged from the original code. No additions or removals needed.
+
 
 const styles = StyleSheet.create({
   gradient: {
