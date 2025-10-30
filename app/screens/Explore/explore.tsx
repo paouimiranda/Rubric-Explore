@@ -425,7 +425,7 @@ const styles = StyleSheet.create({
   },
   buttonContainer: {
     paddingHorizontal: 24,
-    marginTop: 24,
+    marginTop: 30,
   },
   button: {
     height: 56,

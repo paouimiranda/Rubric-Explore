@@ -1,7 +1,9 @@
 // components/RichTextEditor/RichTextEditor.tsx (PRODUCTION)
 import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { LogBox, StyleSheet, View } from 'react-native';
 import { RichEditor } from 'react-native-pell-rich-editor';
+
+
 
 interface RichTextEditorProps {
   initialContent: string;
@@ -484,6 +486,8 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(({
     }
   }, [initialContent]);
 
+
+
   const handleCursorPosition = useCallback(async (position: number) => {
     if (!isApplyingRemoteUpdate.current) {
       lastCursorPosition.current = position;
@@ -556,6 +560,10 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(({
       pendingRequests.clear();
     };
   }, [pendingRequests]);
+
+  useEffect(() => {
+    LogBox.ignoreLogs(['VirtualizedLists should never be nested']);
+  }, []);
 
   return (
     <View style={[styles.container, style]}>

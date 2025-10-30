@@ -12,7 +12,7 @@ import * as MediaLibrary from 'expo-media-library';
 import { useRouter } from 'expo-router';
 import { signOut } from 'firebase/auth';
 import React, { useEffect, useState } from 'react';
-import { Alert, Animated, SafeAreaView, ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, Animated, LogBox, SafeAreaView, ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
 import { auth } from '../../../firebase';
 import { useAuth } from '../../contexts/AuthContext';
 import TermsModal from '../Misc/t&c';
@@ -64,6 +64,10 @@ const SettingsScreen = () => {
   >([]);
 
   const [showPrivacyModal, setShowPrivacyModal] = useState(false);
+
+  useEffect(() => {
+    LogBox.ignoreLogs(['Text strings must be rendered within a <Text> component']);
+  }, []);
 
   useEffect(() => {
     const checkPermissions = async () => {
@@ -152,7 +156,7 @@ const SettingsScreen = () => {
     title, 
     iconName, 
     sectionKey, 
-    children = undefined, // Made optional to fix TypeScript error
+    children, // Made optional to fix TypeScript error
     gradientColors: customGradient
   }: { 
     title: string; 
@@ -266,11 +270,9 @@ const SettingsScreen = () => {
   );
 
   const PermissionItem = ({ 
-    permission,
-    key // Added key prop to fix TypeScript error (not used in component, but required for React map)
+    permission
   }: { 
     permission: { name: string; icon: string; status: boolean; onRequest?: () => void };
-    key?: string; // Added key prop
   }) => {
     const permissionGradient = permission.status 
       ? ['#11998e', '#38ef7d'] 

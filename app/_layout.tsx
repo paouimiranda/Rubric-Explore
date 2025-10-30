@@ -1,5 +1,4 @@
 // app/_layout.tsx
-import React from 'react'; // ✅ Added: Fixes TypeScript JSX children inference for ThemeProvider and AuthProvider
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { useFonts } from 'expo-font';
@@ -7,7 +6,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import * as NavigationBar from 'expo-navigation-bar';
 import { Stack, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect } from 'react';
+import React, { useEffect } from 'react'; // ✅ Added: Fixes TypeScript JSX children inference for ThemeProvider and AuthProvider
 import 'react-native-get-random-values';
 import 'react-native-reanimated';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';

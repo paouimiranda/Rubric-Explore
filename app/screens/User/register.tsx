@@ -127,7 +127,7 @@ const RegisterScreen = () => {
       
       Alert.alert(
         'Success', 
-        'Account created successfully! Please check your email to verify your account.',
+        'Account created successfully! Please log in again.',
         [
           {
             text: 'OK',
@@ -137,7 +137,7 @@ const RegisterScreen = () => {
                 duration: 500,
                 useNativeDriver: true,
               }).start(() => {
-                router.replace('../index');
+                router.back();
               });
             }
           }

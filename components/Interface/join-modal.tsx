@@ -403,7 +403,7 @@ export default function JoinNoteModal({
                     <View style={styles.infoIconContainer}>
                       <Ionicons name="people" size={16} color="#6366f1" />
                     </View>
-                    <Text style={styles.infoCardText}>Collaborative</Text>
+                    <Text style={styles.infoCardText}>Sharing</Text>
                   </View>
                 </View>
               </View>

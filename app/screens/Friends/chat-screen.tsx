@@ -1,28 +1,28 @@
 // app/screens/Chat/chat-screen.tsx
 import { auth } from '@/firebase';
 import {
-    createOrGetConversation,
-    listenToMessages,
-    markMessagesAsRead,
-    Message,
-    sendMessage
+  createOrGetConversation,
+  listenToMessages,
+  markMessagesAsRead,
+  Message,
+  sendMessage
 } from '@/services/chat-service';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useRef, useState } from 'react';
 import {
-    ActivityIndicator,
-    Alert,
-    KeyboardAvoidingView,
-    Platform,
-    SafeAreaView,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View
+  ActivityIndicator,
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
 } from 'react-native';
 
 export default function ChatScreen() {
@@ -215,9 +215,6 @@ export default function ChatScreen() {
           <View style={styles.headerInfo}>
             <Text style={styles.headerName}>{otherUserName}</Text>
           </View>
-          <TouchableOpacity style={styles.headerAction}>
-            <Ionicons name="call" size={20} color="#0EA5E9" />
-          </TouchableOpacity>
         </View>
 
         <KeyboardAvoidingView 

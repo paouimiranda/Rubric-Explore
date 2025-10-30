@@ -5,13 +5,13 @@
   "scripts": {
     "start": "expo start",
     "reset-project": "node ./scripts/reset-project.js",
-    "android": "expo start --android",
-    "ios": "expo start --ios",
+    "android": "expo run:android",
+    "ios": "expo run:ios",
     "web": "expo start --web",
-    "lint": "expo lint"
+    "lint": "expo lint",
+    "postinstall": "patch-package"
   },
   "dependencies": {
-    "@10play/tentap-editor": "^0.7.4",
     "@expo-google-fonts/bebas-neue": "^0.4.0",
     "@expo-google-fonts/montserrat": "^0.4.1",
     "@expo/server": "^0.7.5",
@@ -35,7 +35,7 @@
     "expo-file-system": "~18.1.11",
     "expo-font": "~13.3.2",
     "expo-haptics": "~14.1.4",
-    "expo-image": "~2.3.0",
+    "expo-image": "~2.4.1",
     "expo-image-manipulator": "^13.1.7",
     "expo-image-picker": "^16.1.4",
     "expo-linear-gradient": "~14.1.5",
@@ -50,15 +50,13 @@
     "expo-status-bar": "~2.2.3",
     "expo-symbols": "~0.4.5",
     "expo-system-ui": "~5.0.8",
-    "expo-web-browser": "~14.1.6",
+    "expo-web-browser": "~14.2.0",
     "firebase": "^12.4.0",
     "isomorphic-webcrypto": "^2.3.8",
     "lottie-react-native": "7.2.2",
-    "patch-package": "^8.0.0",
-    "postinstall-postinstall": "^2.1.0",
     "react": "19.0.0",
     "react-dom": "19.0.0",
-    "react-native": "0.79.5",
+    "react-native": "0.79.6",
     "react-native-calendars": "^1.1312.1",
     "react-native-confetti-cannon": "^1.5.2",
     "react-native-gesture-handler": "~2.24.0",
@@ -71,9 +69,9 @@
     "react-native-reanimated": "~3.17.4",
     "react-native-safe-area-context": "5.4.0",
     "react-native-screens": "~4.11.1",
-    "react-native-svg": "^15.14.0",
+    "react-native-svg": "15.11.2",
     "react-native-web": "~0.20.0",
-    "react-native-webview": "^13.16.0",
+    "react-native-webview": "13.13.5",
     "y-prosemirror": "^1.3.7",
     "y-protocols": "^1.0.6",
     "y-websocket": "^3.0.0",
@@ -83,9 +81,35 @@
   "devDependencies": {
     "@babel/core": "^7.25.2",
     "@types/react": "~19.0.10",
+    "empty-npm-package": "^1.0.0",
     "eslint": "^9.25.0",
     "eslint-config-expo": "~9.2.0",
+    "patch-package": "^8.0.1",
+    "postinstall-postinstall": "^2.1.0",
     "typescript": "~5.8.3"
+  },
+  "expo": {
+    "doctor": {
+      "reactNativeDirectoryCheck": {
+        "exclude": [
+          "react-native-confetti-cannon",
+          "react-native-pell-rich-editor",
+          "asmcrypto.js",
+          "firebase",
+          "isomorphic-webcrypto",
+          "patch-package",
+          "postinstall-postinstall",
+          "y-prosemirror",
+          "y-protocols",
+          "y-websocket",
+          "yjs"
+        ]
+      }
+    }
+  },
+  "overrides": {
+    "@unimodules/core": "npm:empty-npm-package@1.0.0",
+    "@unimodules/react-native-adapter": "npm:empty-npm-package@1.0.0"
   },
   "private": true
 }
