@@ -1,8 +1,7 @@
-package com.capstone_clover_pao.Multimodal_App
+package com.multimodalapp
 
 import android.app.Application
 import android.content.res.Configuration
-import com.multimodalapp.BuildConfig
 
 import com.facebook.react.PackageList
 import com.facebook.react.ReactApplication
