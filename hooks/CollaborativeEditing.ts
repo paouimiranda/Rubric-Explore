@@ -1,4 +1,4 @@
-// hooks/useCollaborativeEditing.ts - Optimized for cursor preservation
+// hooks/useCollaborativeEditing.ts - Optimized for cursor preservation with undo/redo
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { TextInput } from 'react-native';
 import { CHUNK_CONFIG } from '../app/types/notebook';
@@ -18,6 +18,11 @@ export interface CollaborativeState {
   contentInputRef: React.RefObject<TextInput | null>;
   activeChunkId: string | null;
   chunkCount: number;
+  // NEW: Undo/Redo methods
+  undo: () => void;
+  redo: () => void;
+  canUndo: boolean;
+  canRedo: boolean;
 }
 
 interface TextChange {
@@ -39,6 +44,10 @@ export function useCollaborativeEditing(
   const [content, setContent] = useState(initialContent);
   const [activeChunkId, setActiveChunkId] = useState<string | null>(null);
   const [chunkCount, setChunkCount] = useState(0);
+  
+  // NEW: Undo/Redo state
+  const [canUndo, setCanUndo] = useState(false);
+  const [canRedo, setCanRedo] = useState(false);
   
   const titleInputRef = useRef<TextInput | null>(null);
   const contentInputRef = useRef<TextInput | null>(null);
@@ -158,6 +167,14 @@ export function useCollaborativeEditing(
     }
   }, [noteId, user]);
 
+  // NEW: Update undo/redo state
+  const updateUndoRedoState = useCallback(() => {
+    if (!noteId) return;
+    
+    setCanUndo(collaborativeService.canUndo(noteId));
+    setCanRedo(collaborativeService.canRedo(noteId));
+  }, [noteId]);
+
   /**
    * OPTIMIZED YJS OBSERVERS
    * - Longer debounce (300ms) to reduce cursor disruption
@@ -215,6 +232,9 @@ export function useCollaborativeEditing(
                 setTitle(newTitle);
                 previousValues.current.title = newTitle;
               }
+              
+              // Update undo/redo state
+              updateUndoRedoState();
             }, 100);
           };
 
@@ -269,6 +289,9 @@ export function useCollaborativeEditing(
               } else {
                 console.log('⏭️ Skipping duplicate content update');
               }
+              
+              // Update undo/redo state
+              updateUndoRedoState();
             }, 300); // Longer debounce for better cursor stability
           };
 
@@ -292,6 +315,9 @@ export function useCollaborativeEditing(
           setContent(mergedContent || initialContent);
           previousValues.current.content = mergedContent || initialContent;
         }
+
+        // Initialize undo/redo state
+        updateUndoRedoState();
 
         const updateAwareness = () => {
           if (mounted) {
@@ -339,7 +365,7 @@ export function useCollaborativeEditing(
         cleanupFn();
       }
     };
-  }, [noteId, user?.uid]);
+  }, [noteId, user?.uid, updateUndoRedoState]);
 
   const handleTitleChange = useCallback((newTitle: string, selectionStart?: number, selectionEnd?: number) => {
     console.log('✏️ Handling title change');
@@ -357,8 +383,9 @@ export function useCollaborativeEditing(
       }
       
       previousValues.current.title = newTitle;
+      updateUndoRedoState();
     }
-  }, [noteId]);
+  }, [noteId, updateUndoRedoState]);
 
   const handleContentChange = useCallback((newContent: string, selectionStart?: number, selectionEnd?: number) => {
     console.log('✏️ Handling content change, length:', newContent.length);
@@ -436,8 +463,9 @@ export function useCollaborativeEditing(
       
       isApplyingYjsUpdate.current.content = false;
       previousValues.current.content = newContent;
+      updateUndoRedoState();
     }
-  }, [noteId, user, checkAndSplitChunk]);
+  }, [noteId, user, checkAndSplitChunk, updateUndoRedoState]);
 
   const updateTitle = useCallback((newTitle: string) => {
     handleTitleChange(newTitle);
@@ -468,6 +496,28 @@ export function useCollaborativeEditing(
     collaborativeService.updateUserAwareness(noteId, user.uid, cursor);
   }, [noteId, user?.uid, title, content, activeChunkId, getChunkForPosition]);
 
+  // NEW: Undo method
+  const undo = useCallback(() => {
+    if (!noteId) return;
+    
+    const success = collaborativeService.undo(noteId);
+    if (success) {
+      // Content will be updated via Yjs observer
+      updateUndoRedoState();
+    }
+  }, [noteId, updateUndoRedoState]);
+
+  // NEW: Redo method
+  const redo = useCallback(() => {
+    if (!noteId) return;
+    
+    const success = collaborativeService.redo(noteId);
+    if (success) {
+      // Content will be updated via Yjs observer
+      updateUndoRedoState();
+    }
+  }, [noteId, updateUndoRedoState]);
+
   return {
     isConnected,
     activeUsers,
@@ -482,5 +532,10 @@ export function useCollaborativeEditing(
     contentInputRef,
     activeChunkId,
     chunkCount,
+    // NEW: Expose undo/redo
+    undo,
+    redo,
+    canUndo,
+    canRedo,
   };
 }

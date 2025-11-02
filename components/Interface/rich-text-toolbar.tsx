@@ -14,6 +14,11 @@ interface RichTextToolbarProps {
   noteId: string;
   userId: string;
   style?: any;
+  // NEW: Yjs undo/redo support
+  onUndo?: () => void;
+  onRedo?: () => void;
+  canUndo?: boolean;
+  canRedo?: boolean;
 }
 
 const COLORS = [

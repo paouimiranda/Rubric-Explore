@@ -1,4 +1,4 @@
-// services/collaborative-service.ts - Chunk-based collaboration
+// services/collaborative-service.ts - Chunk-based collaboration with UndoManager
 import { doc, getDoc, onSnapshot, serverTimestamp, updateDoc } from 'firebase/firestore';
 import * as Y from 'yjs';
 import { db } from '../firebase';
@@ -6,6 +6,7 @@ import { db } from '../firebase';
 export interface ChunkSession {
   ydoc: Y.Doc;
   contentText: Y.Text;
+  undoManager: Y.UndoManager;
   provider: any;
   chunkId: string;
   index: number;
@@ -78,6 +79,14 @@ class ChunkBasedCollaborativeService {
   ): Promise<ChunkSession> {
     const ydoc = new Y.Doc();
     const contentText = ydoc.getText('title');
+    
+    // Create UndoManager for title
+    // CRITICAL: Only track changes from this specific user
+    const undoManager = new Y.UndoManager(contentText, {
+      // Don't track origins - we'll handle this differently
+      captureTimeout: 500,
+    });
+    
     const provider = this.createSafeFirestoreProvider(noteId, 'title', ydoc, userId);
 
     // Load initial title
@@ -86,10 +95,14 @@ class ChunkBasedCollaborativeService {
     return {
       ydoc,
       contentText,
+      undoManager,
       provider,
       chunkId: 'title',
       index: -1,
-      destroy: () => provider.destroy()
+      destroy: () => {
+        undoManager.destroy();
+        provider.destroy();
+      }
     };
   }
 
@@ -112,6 +125,13 @@ class ChunkBasedCollaborativeService {
 
     const ydoc = new Y.Doc();
     const contentText = ydoc.getText('content');
+    
+    // Create UndoManager for this chunk
+    // CRITICAL: Don't specify trackedOrigins to avoid tracking remote updates
+    const undoManager = new Y.UndoManager(contentText, {
+      captureTimeout: 500,
+    });
+    
     const provider = this.createSafeFirestoreProvider(noteId, chunkId, ydoc, userInfo.uid);
 
     // Load initial content
@@ -120,10 +140,14 @@ class ChunkBasedCollaborativeService {
     const chunkSession: ChunkSession = {
       ydoc,
       contentText,
+      undoManager,
       provider,
       chunkId,
       index,
-      destroy: () => provider.destroy()
+      destroy: () => {
+        undoManager.destroy();
+        provider.destroy();
+      }
     };
 
     session.chunkSessions.set(chunkId, chunkSession);
@@ -146,6 +170,13 @@ class ChunkBasedCollaborativeService {
       for (const chunk of chunks) {
         const ydoc = new Y.Doc();
         const contentText = ydoc.getText('content');
+        
+        // Create UndoManager for each chunk
+        // CRITICAL: Don't specify trackedOrigins
+        const undoManager = new Y.UndoManager(contentText, {
+          captureTimeout: 500,
+        });
+        
         const provider = this.createSafeFirestoreProvider(
           noteId, 
           chunk.id, 
@@ -158,10 +189,14 @@ class ChunkBasedCollaborativeService {
         const chunkSession: ChunkSession = {
           ydoc,
           contentText,
+          undoManager,
           provider,
           chunkId: chunk.id,
           index: chunk.index,
-          destroy: () => provider.destroy()
+          destroy: () => {
+            undoManager.destroy();
+            provider.destroy();
+          }
         };
 
         session.chunkSessions.set(chunk.id, chunkSession);
@@ -260,7 +295,40 @@ class ChunkBasedCollaborativeService {
           const state = new Uint8Array(stateArray);
           lastAppliedUpdate = stateString;
 
-          Y.applyUpdate(ydoc, state, 'firestore');
+          // CRITICAL FIX: Stop UndoManager from capturing remote updates
+          const textKey = isTitle ? 'title' : 'content';
+          const yText = ydoc.getText(textKey);
+          
+          // Get UndoManager from the session
+          const session = this.sessions.get(noteId);
+          let undoManager: Y.UndoManager | undefined;
+          
+          if (session) {
+            if (isTitle && session.titleSession) {
+              undoManager = session.titleSession.undoManager;
+            } else {
+              const chunkSession = session.chunkSessions.get(chunkId);
+              if (chunkSession) {
+                undoManager = chunkSession.undoManager;
+              }
+            }
+          }
+
+          // Stop capturing during remote update
+          if (undoManager) {
+            undoManager.stopCapturing();
+          }
+
+          // Apply the remote update
+          Y.applyUpdate(ydoc, state);
+
+          // Resume capturing after a brief delay
+          if (undoManager) {
+            setTimeout(() => {
+              // Don't clear the stack, just resume capturing
+              undoManager.stopCapturing();
+            }, 100);
+          }
         } catch (error) {
           console.error('Error applying Firestore update:', error);
         }
@@ -378,6 +446,59 @@ class ChunkBasedCollaborativeService {
     if (!session) return [];
     return Array.from(session.chunkSessions.values())
       .sort((a, b) => a.index - b.index);
+  }
+
+  // NEW: Undo last change
+  undo(noteId: string): boolean {
+    const session = this.sessions.get(noteId);
+    if (!session) return false;
+
+    // For now, undo on the first chunk (you can make this smarter based on cursor position)
+    const chunks = this.getChunkSessions(noteId);
+    if (chunks.length === 0) return false;
+
+    const firstChunk = chunks[0];
+    if (firstChunk.undoManager.canUndo()) {
+      firstChunk.undoManager.undo();
+      return true;
+    }
+
+    return false;
+  }
+
+  // NEW: Redo last undone change
+  redo(noteId: string): boolean {
+    const session = this.sessions.get(noteId);
+    if (!session) return false;
+
+    const chunks = this.getChunkSessions(noteId);
+    if (chunks.length === 0) return false;
+
+    const firstChunk = chunks[0];
+    if (firstChunk.undoManager.canRedo()) {
+      firstChunk.undoManager.redo();
+      return true;
+    }
+
+    return false;
+  }
+
+  // NEW: Check if undo is available
+  canUndo(noteId: string): boolean {
+    const session = this.sessions.get(noteId);
+    if (!session) return false;
+
+    const chunks = this.getChunkSessions(noteId);
+    return chunks.length > 0 && chunks[0].undoManager.canUndo();
+  }
+
+  // NEW: Check if redo is available
+  canRedo(noteId: string): boolean {
+    const session = this.sessions.get(noteId);
+    if (!session) return false;
+
+    const chunks = this.getChunkSessions(noteId);
+    return chunks.length > 0 && chunks[0].undoManager.canRedo();
   }
 
   getSessionUsers(noteId: string): UserInfo[] {

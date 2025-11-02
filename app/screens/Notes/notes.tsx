@@ -88,6 +88,35 @@ export default function NotesHome() {
     "Work": "#8b5cf6",
   };
 
+  const lightenColor = (color: string, percent: number) => {
+    const num = parseInt(color.replace("#", ""), 16);
+    const amt = Math.round(2.55 * percent);
+    const R = (num >> 16) + amt;
+    const G = (num >> 8 & 0x00FF) + amt;
+    const B = (num & 0x0000FF) + amt;
+    return "#" + (
+      0x1000000 +
+      (R < 255 ? (R < 1 ? 0 : R) : 255) * 0x10000 +
+      (G < 255 ? (G < 1 ? 0 : G) : 255) * 0x100 +
+      (B < 255 ? (B < 1 ? 0 : B) : 255)
+    ).toString(16).slice(1);
+  };
+
+  const darkenColor = (color: string, percent: number) => {
+    const num = parseInt(color.replace("#", ""), 16);
+    const amt = Math.round(2.55 * percent);
+    const R = (num >> 16) - amt;
+    const G = (num >> 8 & 0x00FF) - amt;
+    const B = (num & 0x0000FF) - amt;
+    return "#" + (
+      0x1000000 +
+      (R > 0 ? R : 0) * 0x10000 +
+      (G > 0 ? G : 0) * 0x100 +
+      (B > 0 ? B : 0)
+    ).toString(16).slice(1);
+  };
+  
+
   const fetchNotebooks = async () => {
     if (!uid) return;
     
@@ -128,7 +157,7 @@ export default function NotesHome() {
       }
     }, [uid, authLoading])
   );
-
+  
   if (authLoading) {
     return (
       <LinearGradient
@@ -308,12 +337,10 @@ export default function NotesHome() {
     const scaleAnim = useRef(new Animated.Value(0.9)).current;
 
     useEffect(() => {
-      // Reset animations when view mode changes
       fadeAnim.setValue(0);
       slideAnim.setValue(30);
       scaleAnim.setValue(0.9);
 
-      // Stagger the animations based on index
       Animated.parallel([
         Animated.timing(fadeAnim, {
           toValue: 1,
@@ -348,141 +375,189 @@ export default function NotesHome() {
     const primaryProperty = item.properties?.[0];
     const coverImageSource = getCoverImageSource(item.coverImage);
     const notebookColor = item.color || "#3b82f6";
+    const lighterColor = lightenColor(notebookColor, 40);
+    const darkerColor = darkenColor(notebookColor, 20);
 
-    // Render based on view mode
+    // LIST VIEW
     if (viewMode === 'list') {
       return (
         <Animated.View style={animatedStyle}>
           <TouchableOpacity
-            style={[styles.notebookCard, { backgroundColor: notebookColor }]}
+            style={styles.listCardContainer}
             onPress={() =>
               router.push({ pathname: "./notebook-screen", params: { notebookId: item.id } })
             }
             onLongPress={() => handleDeleteNotebook(item.id!)}
           >
+            {/* Top gradient strip */}
+            <LinearGradient
+              colors={[notebookColor, lighterColor]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={styles.listTopStrip}
+            />
+            
+            {/* Cover Image */}
             {coverImageSource ? (
-              <Image source={coverImageSource} style={styles.notebookCover} />
+              <View style={styles.listCoverContainer}>
+                <Image source={coverImageSource} style={styles.listCover} />
+                <View style={styles.listCoverOverlay} />
+              </View>
             ) : (
-              <View style={[styles.notebookCoverPlaceholder, { backgroundColor: `${notebookColor}CC` }]}>
-                <Ionicons name="book-outline" size={32} color="#ffffff" />
+              <View style={[styles.listCoverPlaceholder, { backgroundColor: darkerColor }]}>
+                <Ionicons name="book-outline" size={36} color="#ffffff" />
               </View>
             )}
 
-            {/* Public Badge */}
             {item.isPublic && (
-              <View style={styles.publicBadgeOverlay}>
+              <View style={styles.listPublicBadge}>
                 <Ionicons name="globe-outline" size={12} color="#52C72B" />
-                <Text style={styles.publicBadgeOverlayText}>Public</Text>
+                <Text style={styles.publicBadgeText}>Public</Text>
               </View>
             )}
 
-            <View style={styles.notebookContent}>
-              <Text style={styles.notebookTitle} numberOfLines={1}>
+            {/* Solid Gradient Content */}
+            <LinearGradient
+              colors={[darkerColor, notebookColor]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.listContentGradient}
+            >
+              <Text style={styles.listTitle} numberOfLines={1}>
                 {item.title}
               </Text>
               {primaryProperty && (
-                <Text style={styles.notebookProperty}>
-                  {primaryProperty.key}: {primaryProperty.value}
-                </Text>
+                <View style={styles.propertyPill}>
+                  <Text style={styles.propertyText}>
+                    {primaryProperty.key}: {primaryProperty.value}
+                  </Text>
+                </View>
               )}
-              <Text style={styles.notebookDate}>{item.createdAt.toLocaleDateString()}</Text>
+              <Text style={styles.listDate}>{item.createdAt.toLocaleDateString()}</Text>
               
-              <View style={styles.notebookFooter}>
-                <View style={[styles.colorIndicator, { backgroundColor: notebookColor }]} />
-                {item.tags && item.tags.length > 0 && (
-                  <View style={styles.tagsContainer}>
-                    {item.tags.slice(0, 2).map((tag, index) => (
-                      <View 
-                        key={index} 
-                        style={[
-                          styles.miniTag, 
-                          { backgroundColor: tagColors[tag as keyof typeof tagColors] || "#6b7280" }
-                        ]}
-                      >
-                        <Text style={styles.miniTagText}>{tag}</Text>
-                      </View>
-                    ))}
-                    {item.tags.length > 2 && (
-                      <Text style={styles.moreTagsText}>+{item.tags.length - 2}</Text>
-                    )}
-                  </View>
-                )}
-              </View>
-            </View>
-          </TouchableOpacity>
-        </Animated.View>
-      );
-    }
-
-    if (viewMode === 'compact') {
-      return (
-        <Animated.View style={animatedStyle}>
-          <TouchableOpacity
-            style={styles.compactCard}
-            onPress={() =>
-              router.push({ pathname: "./notebook-screen", params: { notebookId: item.id } })
-            }
-            onLongPress={() => handleDeleteNotebook(item.id!)}
-          >
-            <View style={styles.compactCoverWrapper}>
-              {coverImageSource ? (
-                <Image source={coverImageSource} style={styles.compactCover} />
-              ) : (
-                <View style={[styles.compactCoverPlaceholder, { backgroundColor: `${notebookColor}CC` }]}>
-                  <Ionicons name="book-outline" size={20} color="#ffffff" />
-                </View>
-              )}
-              {item.isPublic && (
-                <View style={styles.compactPublicBadge}>
-                  <Ionicons name="globe" size={10} color="#52C72B" />
-                </View>
-              )}
-            </View>
-            
-            <View style={styles.compactContent}>
-              <View style={styles.compactHeader}>
-                <Text style={styles.compactTitle} numberOfLines={1}>
-                  {item.title}
-                </Text>
-                <View style={[styles.compactColorDot, { backgroundColor: notebookColor }]} />
-              </View>
-              <Text style={styles.compactDate}>{item.createdAt.toLocaleDateString()}</Text>
               {item.tags && item.tags.length > 0 && (
-                <View style={styles.compactTags}>
+                <View style={styles.listTagsContainer}>
                   {item.tags.slice(0, 3).map((tag, index) => (
                     <View 
                       key={index} 
                       style={[
-                        styles.compactTag, 
-                        { backgroundColor: tagColors[tag as keyof typeof tagColors] || "#6b7280" }
+                        styles.listTag, 
+                        { backgroundColor: `${tagColors[tag as keyof typeof tagColors] || "#6b7280"}33`,
+                          borderColor: tagColors[tag as keyof typeof tagColors] || "#6b7280" }
                       ]}
                     >
-                      <Text style={styles.compactTagText}>{tag}</Text>
+                      <Text style={styles.listTagText}>{tag}</Text>
                     </View>
                   ))}
+                  {item.tags.length > 3 && (
+                    <Text style={styles.moreTagsText}>+{item.tags.length - 3}</Text>
+                  )}
                 </View>
               )}
-            </View>
+            </LinearGradient>
           </TouchableOpacity>
         </Animated.View>
       );
     }
 
-    // Grid view
+    // COMPACT VIEW
+    if (viewMode === 'compact') {
+      return (
+        <Animated.View style={animatedStyle}>
+          <TouchableOpacity
+            style={styles.compactCardContainer}
+            onPress={() =>
+              router.push({ pathname: "./notebook-screen", params: { notebookId: item.id } })
+            }
+            onLongPress={() => handleDeleteNotebook(item.id!)}
+          >
+            {/* Top gradient strip */}
+            <LinearGradient
+              colors={[notebookColor, lighterColor]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={styles.compactTopStrip}
+            />
+            
+            <LinearGradient
+              colors={[darkerColor, notebookColor]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.compactContentGradient}
+            >
+              <View style={styles.compactCoverWrapper}>
+                {coverImageSource ? (
+                  <View style={styles.compactCoverContainer}>
+                    <Image source={coverImageSource} style={styles.compactCover} />
+                    <View style={styles.compactCoverOverlay} />
+                  </View>
+                ) : (
+                  <View style={[styles.compactCoverPlaceholder, { backgroundColor: darkerColor }]}>
+                    <Ionicons name="book-outline" size={24} color="#ffffff" />
+                  </View>
+                )}
+                {item.isPublic && (
+                  <View style={styles.compactPublicBadge}>
+                    <Ionicons name="globe" size={10} color="#52C72B" />
+                  </View>
+                )}
+              </View>
+              
+              <View style={styles.compactContent}>
+                <Text style={styles.compactTitle} numberOfLines={1}>
+                  {item.title}
+                </Text>
+                <Text style={styles.compactDate}>{item.createdAt.toLocaleDateString()}</Text>
+                {item.tags && item.tags.length > 0 && (
+                  <View style={styles.compactTags}>
+                    {item.tags.slice(0, 3).map((tag, index) => (
+                      <View 
+                        key={index} 
+                        style={[
+                          styles.compactTag, 
+                          { backgroundColor: `${tagColors[tag as keyof typeof tagColors] || "#6b7280"}33`,
+                            borderColor: tagColors[tag as keyof typeof tagColors] || "#6b7280" }
+                        ]}
+                      >
+                        <Text style={styles.compactTagText}>{tag}</Text>
+                      </View>
+                    ))}
+                  </View>
+                )}
+              </View>
+            </LinearGradient>
+          </TouchableOpacity>
+        </Animated.View>
+      );
+    }
+
+    // GRID VIEW
     return (
       <Animated.View style={animatedStyle}>
         <TouchableOpacity
-          style={[styles.gridCard, { backgroundColor: notebookColor }]}
+          style={styles.gridCardContainer}
           onPress={() =>
             router.push({ pathname: "./notebook-screen", params: { notebookId: item.id } })
           }
           onLongPress={() => handleDeleteNotebook(item.id!)}
         >
+          {/* Top gradient strip */}
+          <LinearGradient
+            colors={[notebookColor, lighterColor]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            style={styles.gridTopStrip}
+          />
+          
+          {/* Cover Image */}
           {coverImageSource ? (
-            <Image source={coverImageSource} style={styles.gridCover} />
+            <View style={styles.gridCoverContainer}>
+              <Image source={coverImageSource} style={styles.gridCover} />
+              <View style={styles.gridCoverOverlay} />
+            </View>
           ) : (
-            <View style={[styles.gridCoverPlaceholder, { backgroundColor: `${notebookColor}CC` }]}>
-              <Ionicons name="book-outline" size={28} color="#ffffff" />
+            <View style={[styles.gridCoverPlaceholder, { backgroundColor: darkerColor }]}>
+              <Ionicons name="book-outline" size={32} color="#ffffff" />
             </View>
           )}
           
@@ -492,7 +567,13 @@ export default function NotesHome() {
             </View>
           )}
           
-          <View style={styles.gridContent}>
+          {/* Solid Gradient Content */}
+          <LinearGradient
+            colors={[darkerColor, notebookColor]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.gridContentGradient}
+          >
             <Text style={styles.gridTitle} numberOfLines={2}>
               {item.title}
             </Text>
@@ -510,7 +591,7 @@ export default function NotesHome() {
                 ))}
               </View>
             )}
-          </View>
+          </LinearGradient>
         </TouchableOpacity>
       </Animated.View>
     );
@@ -945,11 +1026,7 @@ const styles = StyleSheet.create({
     color: "#ffffff",
     fontWeight: "500",
   },
-  moreTagsText: {
-    fontSize: 10,
-    color: "#d1d5db",
-    marginLeft: 4,
-  },
+
 
   // COMPACT VIEW STYLES
   compactCard: {
@@ -960,126 +1037,8 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     padding: 10,
   },
-  compactCoverWrapper: {
-    position: 'relative',
-  },
-  compactCover: {
-    width: 60,
-    height: 60,
-    borderRadius: 8,
-  },
-  compactCoverPlaceholder: {
-    width: 60,
-    height: 60,
-    borderRadius: 8,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  compactPublicBadge: {
-    position: 'absolute',
-    top: 2,
-    right: 2,
-    backgroundColor: 'rgba(82, 199, 43, 0.9)',
-    borderRadius: 8,
-    padding: 3,
-  },
-  compactContent: {
-    flex: 1,
-    marginLeft: 12,
-    justifyContent: "center",
-  },
-  compactHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 4,
-  },
-  compactTitle: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#fff",
-    flex: 1,
-  },
-  compactColorDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    marginLeft: 8,
-  },
-  compactDate: {
-    fontSize: 11,
-    color: "#9ca3af",
-    marginBottom: 4,
-  },
-  compactTags: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-  },
-  compactTag: {
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 6,
-    marginRight: 4,
-    marginTop: 2,
-  },
-  compactTagText: {
-    fontSize: 9,
-    color: "#ffffff",
-    fontWeight: "500",
-  },
-
-  // GRID VIEW STYLES
   gridRow: {
-    justifyContent: "space-between",
-  },
-  gridCard: {
-    width: (width - 48) / 2,
-    borderRadius: 12,
-    marginBottom: 16,
-    overflow: "hidden",
-    position: 'relative',
-  },
-  gridCover: {
-    width: "100%",
-    height: 100,
-  },
-  gridCoverPlaceholder: {
-    width: "100%",
-    height: 100,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  gridPublicBadge: {
-    position: 'absolute',
-    top: 6,
-    right: 6,
-    backgroundColor: 'rgba(82, 199, 43, 0.9)',
-    borderRadius: 10,
-    padding: 4,
-  },
-  gridContent: {
-    padding: 10,
-  },
-  gridTitle: {
-    fontSize: 14,
-    fontWeight: "bold",
-    color: "#fff",
-    marginBottom: 4,
-  },
-  gridDate: {
-    fontSize: 10,
-    color: "#d1d5db",
-    marginBottom: 6,
-  },
-  gridTagsContainer: {
-    flexDirection: "row",
-    marginTop: 4,
-  },
-  gridTag: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    marginRight: 4,
+    justifyContent: "space-between"
   },
 
   emptyContainer: {
@@ -1368,5 +1327,303 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 16,
     marginBottom: 10,
+  },
+  
+    // LIST VIEW STYLES
+  listCardContainer: {
+    marginBottom: 16,
+    borderRadius: 16,
+    overflow: 'hidden',
+    backgroundColor: '#1e293b',
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  listTopStrip: {
+    height: 6,
+    width: '100%',
+  },
+  listCoverContainer: {
+    width: '100%',
+    height: 140,
+    position: 'relative',
+  },
+  listCover: {
+    width: '100%',
+    height: '100%',
+  },
+  listCoverOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.2)',
+  },
+  listCoverPlaceholder: {
+    width: '100%',
+    height: 140,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  listPublicBadge: {
+    position: 'absolute',
+    top: 18,
+    right: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(82, 199, 43, 0.95)',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 20,
+    gap: 4,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  publicBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#ffffff',
+  },
+  listContentGradient: {
+    padding: 16,
+  },
+  listTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#ffffff',
+    marginBottom: 8,
+    textShadowColor: 'rgba(0, 0, 0, 0.3)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
+  },
+  propertyPill: {
+    alignSelf: 'flex-start',
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
+  },
+  propertyText: {
+    fontSize: 13,
+    color: '#ffffff',
+    fontWeight: '600',
+  },
+  listDate: {
+    fontSize: 12,
+    color: 'rgba(255, 255, 255, 0.8)',
+    marginBottom: 12,
+  },
+  listTagsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  listTag: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 10,
+    borderWidth: 1,
+  },
+  listTagText: {
+    fontSize: 11,
+    color: '#ffffff',
+    fontWeight: '600',
+  },
+  moreTagsText: {
+    fontSize: 11,
+    color: 'rgba(255, 255, 255, 0.7)',
+    alignSelf: 'center',
+    marginLeft: 4,
+  },
+
+  // COMPACT VIEW STYLES
+  compactCardContainer: {
+    marginBottom: 12,
+    borderRadius: 14,
+    overflow: 'hidden',
+    backgroundColor: '#1e293b',
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  compactTopStrip: {
+    height: 4,
+    width: '100%',
+  },
+  compactContentGradient: {
+    padding: 12,
+    flexDirection: 'row',
+  },
+  compactCoverWrapper: {
+    position: 'relative',
+  },
+  compactCoverContainer: {
+    width: 70,
+    height: 70,
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  compactCover: {
+    width: '100%',
+    height: '100%',
+  },
+  compactCoverOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.15)',
+  },
+  compactCoverPlaceholder: {
+    width: 70,
+    height: 70,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  compactPublicBadge: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    backgroundColor: 'rgba(82, 199, 43, 0.95)',
+    borderRadius: 10,
+    padding: 4,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.25,
+    shadowRadius: 2,
+    elevation: 3,
+  },
+  compactContent: {
+    flex: 1,
+    marginLeft: 14,
+    justifyContent: 'center',
+  },
+  compactTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#ffffff',
+    marginBottom: 6,
+    textShadowColor: 'rgba(0, 0, 0, 0.3)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
+  },
+  compactDate: {
+    fontSize: 11,
+    color: 'rgba(255, 255, 255, 0.8)',
+    marginBottom: 6,
+  },
+  compactTags: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 5,
+  },
+  compactTag: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  compactTagText: {
+    fontSize: 10,
+    color: '#ffffff',
+    fontWeight: '600',
+  },
+
+  // GRID VIEW STYLES
+  gridCardContainer: {
+    width: (width - 48) / 2,
+    marginBottom: 16,
+    borderRadius: 14,
+    overflow: 'hidden',
+    backgroundColor: '#1e293b',
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.25,
+    shadowRadius: 10,
+    elevation: 6,
+  },
+  gridTopStrip: {
+    height: 5,
+    width: '100%',
+  },
+  gridCoverContainer: {
+    width: '100%',
+    height: 110,
+    position: 'relative',
+  },
+  gridCover: {
+    width: '100%',
+    height: '100%',
+  },
+  gridCoverOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.2)',
+  },
+  gridCoverPlaceholder: {
+    width: '100%',
+    height: 110,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  gridPublicBadge: {
+    position: 'absolute',
+    top: 13,
+    right: 8,
+    backgroundColor: 'rgba(82, 199, 43, 0.95)',
+    borderRadius: 12,
+    padding: 5,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3,
+    elevation: 3,
+  },
+  gridContentGradient: {
+    padding: 12,
+  },
+  gridTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#ffffff',
+    marginBottom: 6,
+    textShadowColor: 'rgba(0, 0, 0, 0.3)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
+  },
+  gridDate: {
+    fontSize: 11,
+    color: 'rgba(255, 255, 255, 0.8)',
+    marginBottom: 8,
+  },
+  gridTagsContainer: {
+    flexDirection: 'row',
+    gap: 5,
+  },
+  gridTag: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.3,
+    shadowRadius: 2,
+    elevation: 2,
   },
 });

@@ -452,6 +452,11 @@ export default function NoteEditor({
               onMetadataPress={() => setMetadataModalVisible(true)}
               noteId={routeNoteId as string}
               userId={uid!}
+              // NEW: Pass Yjs undo/redo props
+              onUndo={collaborative.undo}
+              onRedo={collaborative.redo}
+              canUndo={collaborative.canUndo}
+              canRedo={collaborative.canRedo}              
             />
           )}
         </KeyboardAvoidingView>
