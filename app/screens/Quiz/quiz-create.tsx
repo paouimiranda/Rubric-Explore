@@ -1,16 +1,25 @@
-// File: app/Quiz/quiz-create.tsx - Complete Refactored Version with Modern UI
+// File: app/Quiz/quiz-create.tsx - Updated with Firebase Storage Integration
 import { convertAPIQuestionToInternalFormat, generateQuizFromAI } from '@/api/quizApi';
 import { TopicSelectionModal } from '@/components/Interface/ai-quiz-modal';
+import { auth } from '@/firebase';
+import {
+  deleteQuizImage,
+  extractStoragePathFromUrl,
+  getQuizImageSource,
+  isFirebaseStorageUrl,
+  pickImage,
+  takePhoto,
+  uploadQuestionImage
+} from '@/services/image-service';
 import { QuizService, type Question, type Quiz } from '@/services/quiz-service';
 import { useQuizStore } from '@/services/stores/quiz-store';
 import { Ionicons } from '@expo/vector-icons';
-import * as FileSystem from 'expo-file-system';
-import * as ImagePicker from 'expo-image-picker';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import LottieView from 'lottie-react-native';
 import React, { useEffect, useState } from 'react';
 import {
+  ActivityIndicator,
   Alert,
   Image,
   Modal,
@@ -27,7 +36,6 @@ const QuizMaker = () => {
   const router = useRouter();
   const params = useLocalSearchParams();
 
-  // Zustand store
   const {
     quizTitle,
     questions,
@@ -46,7 +54,6 @@ const QuizMaker = () => {
     addTopic
   } = useQuizStore();
 
-  // Local state for modals
   const [showTimeLimitModal, setShowTimeLimitModal] = useState(false);
   const [showQuestionTypeModal, setShowQuestionTypeModal] = useState(false);
   const [showTopicModal, setShowTopicModal] = useState(false);
@@ -54,8 +61,16 @@ const QuizMaker = () => {
   const [showEllipsisMenu, setShowEllipsisMenu] = useState(false);
   const [customTimeLimit, setCustomTimeLimit] = useState('');
   const [newTopicInput, setNewTopicInput] = useState('');
+  const [uploadingImage, setUploadingImage] = useState(false);
 
-  // Handle navigation from overview
+  const questionTypes = [
+    { key: 'multiple_choice', label: 'Multiple Choice', icon: 'checkmark-circle-outline' },
+    { key: 'fill_blank', label: 'Fill in the Blank', icon: 'create-outline' },
+    { key: 'matching', label: 'Matching', icon: 'git-compare-outline' }
+  ];
+
+  const timeLimitPresets = [10, 15, 20, 30, 45, 60, 90, 120];
+
   useEffect(() => {
     const { questionIndex } = params;
     if (questionIndex && typeof questionIndex === 'string') {
@@ -67,17 +82,6 @@ const QuizMaker = () => {
     }
   }, [params.questionIndex, questions.length, setCurrentQuestionIndex, setIsFromOverview]);
 
-  // Question type options
-  const questionTypes = [
-    { key: 'multiple_choice', label: 'Multiple Choice', icon: 'checkmark-circle-outline' },
-    { key: 'fill_blank', label: 'Fill in the Blank', icon: 'create-outline' },
-    { key: 'matching', label: 'Matching', icon: 'git-compare-outline' }
-  ];
-
-  // Time limit presets (in seconds)
-  const timeLimitPresets = [10, 15, 20, 30, 45, 60, 90, 120];
-
-  // Question management methods
   const handleAddQuestion = () => {
     const newQuestion: Question = { 
       id: Date.now().toString(),
@@ -211,7 +215,6 @@ const QuizMaker = () => {
     }
   };
 
-  // Topic management methods
   const handleTopicSelect = (topic: string) => {
     const updated = { ...questions[currentQuestionIndex] };
     updated.topic = topic;
@@ -253,32 +256,117 @@ const QuizMaker = () => {
     updateQuestion(currentQuestionIndex, updated);
   };
 
-  const handleSelectImage = async () => {
+  const handleSelectImage = () => {
+    Alert.alert(
+      'Add Question Image',
+      'Choose an image source',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Camera',
+          onPress: selectFromCamera
+        },
+        {
+          text: 'Photo Library',
+          onPress: selectFromGallery
+        },
+        ...(questions[currentQuestionIndex].image && isFirebaseStorageUrl(questions[currentQuestionIndex].image) 
+          ? [{
+              text: 'Remove Image',
+              onPress: handleRemoveImage,
+              style: 'destructive' as const
+            }]
+          : []
+        )
+      ]
+    );
+  };
+
+  const selectFromCamera = async () => {
     try {
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: true,
-        quality: 1,
-      });
-
-      if (!result.canceled && result.assets && result.assets.length > 0) {
-        const originalUri = result.assets[0].uri;
-        const filename = originalUri.split('/').pop();
-        const newPath = `${FileSystem.documentDirectory}${filename}`;
-
-        await FileSystem.copyAsync({
-          from: originalUri,
-          to: newPath,
-        });
-
-        const updated = { ...questions[currentQuestionIndex] };
-        updated.image = newPath;
-        updateQuestion(currentQuestionIndex, updated);
+      const imageAsset = await takePhoto();
+      if (imageAsset) {
+        await uploadQuestionImageToFirebase(imageAsset.uri);
       }
     } catch (error) {
-      console.error('Image picker error:', error);
-      Alert.alert('Error', 'Failed to select image');
+      console.error('Camera error:', error);
+      Alert.alert('Error', 'Failed to take photo. Please try again.');
     }
+  };
+
+  const selectFromGallery = async () => {
+    try {
+      const imageAsset = await pickImage();
+      if (imageAsset) {
+        await uploadQuestionImageToFirebase(imageAsset.uri);
+      }
+    } catch (error) {
+      console.error('Gallery error:', error);
+      Alert.alert('Error', 'Failed to select image. Please try again.');
+    }
+  };
+
+  const uploadQuestionImageToFirebase = async (localUri: string) => {
+    const currentQuestion = questions[currentQuestionIndex];
+    const quizId = Date.now().toString(); // In real use, this should be the actual quiz ID
+    const userId = auth.currentUser?.uid;
+    
+    if (!userId) {
+      Alert.alert('Error', 'You must be logged in to upload images.');
+      return;
+    }
+    
+    setUploadingImage(true);
+    
+    try {
+      // Delete old image if it exists and is a Firebase URL
+      if (currentQuestion.image && isFirebaseStorageUrl(currentQuestion.image)) {
+        const oldPath = extractStoragePathFromUrl(currentQuestion.image);
+        if (oldPath) {
+          await deleteQuizImage(oldPath).catch(err => 
+            console.log('Old image already deleted or not found')
+          );
+        }
+      }
+      
+      // Upload new image
+      const result = await uploadQuestionImage(
+        quizId,
+        currentQuestion.id,
+        localUri,
+        userId
+      );
+      
+      const updated = { ...currentQuestion };
+      updated.image = result.url;
+      updateQuestion(currentQuestionIndex, updated);
+      
+      Alert.alert('Success', 'Image uploaded successfully!');
+    } catch (error) {
+      console.error('Upload error:', error);
+      Alert.alert('Upload Failed', 'Failed to upload image. Please try again.');
+    } finally {
+      setUploadingImage(false);
+    }
+  };
+
+  const handleRemoveImage = async () => {
+    const currentQuestion = questions[currentQuestionIndex];
+    
+    if (currentQuestion.image && isFirebaseStorageUrl(currentQuestion.image)) {
+      const imagePath = extractStoragePathFromUrl(currentQuestion.image);
+      if (imagePath) {
+        await deleteQuizImage(imagePath).catch(err => 
+          console.log('Image already deleted or not found')
+        );
+      }
+    }
+    
+    const updated = { ...currentQuestion };
+    updated.image = '';
+    updateQuestion(currentQuestionIndex, updated);
+    
+    Alert.alert('Success', 'Image removed successfully!');
   };
 
   const handleSaveQuiz = async () => {
@@ -335,7 +423,21 @@ const QuizMaker = () => {
         {
           text: 'Delete',
           style: 'destructive',
-          onPress: () => deleteQuestionFromStore(currentQuestionIndex),
+          onPress: async () => {
+            const question = questions[currentQuestionIndex];
+            
+            // Delete image if exists
+            if (question.image && isFirebaseStorageUrl(question.image)) {
+              const imagePath = extractStoragePathFromUrl(question.image);
+              if (imagePath) {
+                await deleteQuizImage(imagePath).catch(err => 
+                  console.log('Image already deleted or not found')
+                );
+              }
+            }
+            
+            deleteQuestionFromStore(currentQuestionIndex);
+          },
         },
       ]
     );
@@ -528,9 +630,7 @@ const QuizMaker = () => {
       style={{ flex: 1 }}
     >
       <SafeAreaView style={styles.safeArea}>
-        {/* Header */}
         <View style={styles.header}>
-          {/* Question Type Dropdown */}
           <TouchableOpacity
             onPress={() => setShowQuestionTypeModal(true)}
             style={styles.questionTypeDropdown}
@@ -543,7 +643,6 @@ const QuizMaker = () => {
           </TouchableOpacity>
 
           <View style={styles.headerActions}>
-            {/* Ellipsis Menu */}
             <TouchableOpacity 
               onPress={() => setShowEllipsisMenu(true)} 
               style={styles.ellipsisBtn}
@@ -551,8 +650,11 @@ const QuizMaker = () => {
               <Ionicons name="ellipsis-horizontal" size={24} color="#fff" />
             </TouchableOpacity>
 
-            {/* Save/Done Button */}
-            <TouchableOpacity onPress={handleSaveQuiz} style={styles.saveBtn}>
+            <TouchableOpacity 
+              onPress={handleSaveQuiz} 
+              style={styles.saveBtn}
+              disabled={uploadingImage}
+            >
               <Text style={styles.btnText}>
                 {isFromOverview ? 'Done' : 'Save & Preview'}
               </Text>
@@ -560,9 +662,7 @@ const QuizMaker = () => {
           </View>
         </View>
 
-        {/* Main Content */}
         <ScrollView style={styles.mainContent} showsVerticalScrollIndicator={false}>
-          {/* Question Input with Topic Button */}
           <View style={styles.questionInputContainer}>
             <TextInput
               placeholder="Enter your question"
@@ -590,27 +690,43 @@ const QuizMaker = () => {
             </TouchableOpacity>
           </View>
 
-          {/* Image with Time Limit Pill */}
           <View style={styles.imageContainer}>
             <TouchableOpacity
               style={styles.imageBox}
               onPress={handleSelectImage}
+              disabled={uploadingImage}
             >
               {currentQuestion.image ? (
-                <Image 
-                  source={{ uri: currentQuestion.image }}
-                  style={styles.image}
-                  resizeMode="cover"
-                />
+                <>
+                  <Image 
+                    source={getQuizImageSource(currentQuestion.image)}
+                    style={styles.image}
+                    resizeMode="cover"
+                  />
+                  {uploadingImage && (
+                    <View style={styles.uploadOverlay}>
+                      <ActivityIndicator size="large" color="#ffffff" />
+                      <Text style={styles.uploadingText}>Uploading...</Text>
+                    </View>
+                  )}
+                </>
               ) : (
                 <View style={styles.imagePlaceholderContent}>
-                  <Ionicons name="image-outline" size={48} color="rgba(255, 255, 255, 0.3)" />
-                  <Text style={styles.imagePlaceholder}>Add Image</Text>
+                  {uploadingImage ? (
+                    <>
+                      <ActivityIndicator size="large" color="rgba(255, 255, 255, 0.3)" />
+                      <Text style={styles.imagePlaceholder}>Uploading...</Text>
+                    </>
+                  ) : (
+                    <>
+                      <Ionicons name="image-outline" size={48} color="rgba(255, 255, 255, 0.3)" />
+                      <Text style={styles.imagePlaceholder}>Add Image</Text>
+                    </>
+                  )}
                 </View>
               )}
             </TouchableOpacity>
             
-            {/* Floating Time Limit Pill */}
             <TouchableOpacity
               onPress={() => setShowTimeLimitModal(true)}
               style={styles.timeLimitPill}
@@ -625,7 +741,6 @@ const QuizMaker = () => {
           {renderQuestionContent()}
         </ScrollView>
 
-        {/* Bottom Navigation Bar */}
         <View style={styles.bottomBar}>
           <ScrollView 
             horizontal 
@@ -665,7 +780,7 @@ const QuizMaker = () => {
           )}
         </View>
 
-        {/* Ellipsis Menu Modal */}
+        {/* Modals remain the same as before - ellipsis, topic selector, time limit, question type */}
         <Modal
           visible={showEllipsisMenu}
           transparent={true}
@@ -709,7 +824,7 @@ const QuizMaker = () => {
           </TouchableOpacity>
         </Modal>
 
-        {/* Topic Selector Modal */}
+        {/* Topic Selector Modal - Same as before */}
         <Modal
           visible={showTopicSelectorModal}
           transparent={true}
@@ -728,7 +843,6 @@ const QuizMaker = () => {
                 </TouchableOpacity>
               </View>
 
-              {/* Add New Topic Section */}
               <View style={styles.addTopicInModalSection}>
                 <Text style={styles.addTopicInModalLabel}>Add New Topic:</Text>
                 <View style={styles.addTopicInModalRow}>
@@ -749,7 +863,6 @@ const QuizMaker = () => {
                 </View>
               </View>
 
-              {/* Topics List */}
               <ScrollView style={styles.topicsList}>
                 {topics.length === 0 ? (
                   <View style={styles.emptyTopicsInModal}>
@@ -790,7 +903,6 @@ const QuizMaker = () => {
                 )}
               </ScrollView>
 
-              {/* Clear Topic Button */}
               {currentQuestion.topic && (
                 <TouchableOpacity
                   style={styles.clearTopicInModalBtn}
@@ -916,7 +1028,6 @@ const QuizMaker = () => {
           </View>
         </Modal>
 
-        {/* Topic Selection Modal - Only show when not from overview */}
         {!isFromOverview && (
           <TopicSelectionModal
             visible={showTopicModal}
@@ -925,7 +1036,6 @@ const QuizMaker = () => {
           />
         )}
 
-        {/* Loading Overlay */}
         {isLoading && (
           <View style={styles.loadingOverlay}>
             <LottieView
@@ -947,11 +1057,7 @@ const QuizMaker = () => {
 export default QuizMaker;
 
 const styles = StyleSheet.create({
-  safeArea: { 
-    flex: 1 
-  },
-  
-  // Header styles
+  safeArea: { flex: 1 },
   header: {
     flexDirection: 'row',
     padding: 16,
@@ -1000,8 +1106,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     fontSize: 14,
   },
-  
-  // Main content
   mainContent: {
     flex: 1,
     paddingHorizontal: 16,
@@ -1049,8 +1153,6 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     backgroundColor: '#8b5cf6',
   },
-  
-  // Image container with floating time pill
   imageContainer: {
     position: 'relative',
     marginBottom: 24,
@@ -1080,6 +1182,22 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     fontSize: 15,
   },
+  uploadOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  uploadingText: {
+    color: '#ffffff',
+    marginTop: 12,
+    fontSize: 14,
+    fontWeight: '600',
+  },
   timeLimitPill: {
     position: 'absolute',
     bottom: 16,
@@ -1104,8 +1222,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     fontSize: 13,
   },
-  
-  // Ellipsis menu styles
   ellipsisOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.4)',
@@ -1144,8 +1260,6 @@ const styles = StyleSheet.create({
   ellipsisMenuTextDanger: {
     color: '#ef4444',
   },
-  
-  // Answer styles
   answerGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -1202,8 +1316,6 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     backgroundColor: '#fff',
   },
-  
-  // Fill blank styles
   fillBlankContainer: {
     marginBottom: 20,
   },
@@ -1228,8 +1340,6 @@ const styles = StyleSheet.create({
     marginTop: 8,
     fontStyle: 'italic',
   },
-  
-  // Matching styles
   matchingContainer: {
     marginBottom: 20,
   },
@@ -1254,12 +1364,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.15)',
   },
-  matchInputLeft: {
-    flex: 1,
-  },
-  matchInputRight: {
-    flex: 1,
-  },
+  matchInputLeft: { flex: 1 },
+  matchInputRight: { flex: 1 },
   removePairBtn: {
     backgroundColor: '#ef4444',
     borderRadius: 20,
@@ -1286,8 +1392,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     fontSize: 14,
   },
-  
-  // Bottom navigation
   bottomBar: {
     backgroundColor: 'rgba(0, 0, 0, 0.3)',
     paddingVertical: 12,
@@ -1343,8 +1447,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginRight: 16,
   },
-  
-  // Modal styles
   loadingOverlay: {
     position: 'absolute',
     top: 0,
@@ -1394,8 +1496,6 @@ const styles = StyleSheet.create({
   modalCloseIcon: {
     padding: 4,
   },
-  
-  // Topic selector modal
   addTopicInModalSection: {
     marginBottom: 20,
     padding: 12,
@@ -1501,8 +1601,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
   },
-  
-  // Time limit modal
   presetTimesContainer: {
     marginBottom: 20,
   },
@@ -1572,8 +1670,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     fontSize: 14,
   },
-  
-  // Question type modal
   questionTypeOption: {
     backgroundColor: 'rgba(255, 255, 255, 0.08)',
     borderRadius: 12,

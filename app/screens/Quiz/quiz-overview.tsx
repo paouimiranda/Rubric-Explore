@@ -1,15 +1,25 @@
-// File: app/Quiz/quiz-overview.tsx - Updated with Custom Modals
+// File: app/Quiz/quiz-overview.tsx - Updated with Firebase Storage Integration
 import { convertAPIQuestionToInternalFormat, generateQuizFromAI } from '@/api/quizApi';
 import { TopicSelectionModal } from '@/components/Interface/ai-quiz-modal';
 import { CustomAlertModal } from '@/components/Interface/custom-alert-modal';
+import { auth } from '@/firebase';
+import {
+  deleteQuizImage,
+  extractStoragePathFromUrl,
+  getQuizImageSource,
+  isFirebaseStorageUrl,
+  pickImage,
+  uploadQuizCoverImage
+} from '@/services/image-service';
 import { QuizService, type Question, type Quiz } from '@/services/quiz-service';
 import { useQuizStore } from '@/services/stores/quiz-store';
 import { Ionicons } from '@expo/vector-icons';
-import * as ImagePicker from 'expo-image-picker';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
+  ActivityIndicator,
+  Alert,
   FlatList,
   Image,
   Modal,
@@ -68,6 +78,7 @@ const QuizOverview: React.FC = () => {
   const [editTopicInput, setEditTopicInput] = useState('');
   const [isPublic, setIsPublic] = useState(false);
   const [showPublicWarningModal, setShowPublicWarningModal] = useState(false);
+  const [uploadingImage, setUploadingImage] = useState(false);
 
   const [alert, setAlert] = useState<AlertState>({
     visible: false,
@@ -78,12 +89,12 @@ const QuizOverview: React.FC = () => {
   });
 
   const defaultQuizImages = [
-    { id: 'quiz1', source: require('@/assets/covers/notebook1.jpg'), name: 'Classic Books' },
-    { id: 'quiz2', source: require('@/assets/covers/notebook2.jpg'), name: 'Science Lab' },
-    { id: 'quiz3', source: require('@/assets/covers/notebook3.jpg'), name: 'Mathematics' },
-    { id: 'quiz4', source: require('@/assets/covers/notebook4.jpg'), name: 'History' },
-    { id: 'quiz5', source: require('@/assets/covers/notebook5.jpg'), name: 'Technology' },
-    { id: 'quiz6', source: require('@/assets/covers/notebook6.jpg'), name: 'Nature' },
+    { id: 'quiz1', name: 'Classic Books' },
+    { id: 'quiz2', name: 'Science Lab' },
+    { id: 'quiz3', name: 'Mathematics' },
+    { id: 'quiz4', name: 'History' },
+    { id: 'quiz5', name: 'Technology' },
+    { id: 'quiz6', name: 'Nature' },
   ];
 
   const showAlert = (
@@ -128,7 +139,7 @@ const QuizOverview: React.FC = () => {
       if (quiz) {
         loadQuizData({
           title: quiz.title,
-          image: '',
+          image: quiz.questions[0]?.image || '',
           questions: quiz.questions,
           topics: quiz.topics || []
         });
@@ -209,54 +220,32 @@ const QuizOverview: React.FC = () => {
   };
 
   const handleImagePicker = () => {
-    showAlert(
-      'info',
-      'Select Quiz Image',
+    Alert.alert(
+      'Select Quiz Cover',
       'Choose an image source',
       [
-        {
-          text: 'Cancel',
-          onPress: () => setAlert(prev => ({ ...prev, visible: false })),
-          style: 'cancel'
-        },
+        { text: 'Cancel', style: 'cancel' },
         {
           text: 'Camera Roll',
-          onPress: () => {
-            setAlert(prev => ({ ...prev, visible: false }));
-            selectFromCameraRoll();
-          },
-          style: 'default'
+          onPress: selectFromCameraRoll
         },
         {
           text: 'Default Images',
-          onPress: () => {
-            setAlert(prev => ({ ...prev, visible: false }));
-            showDefaultImagePicker();
-          },
-          style: 'primary'
+          onPress: showDefaultImagePicker
         }
       ]
     );
   };
 
   const showDefaultImagePicker = () => {
-    showAlert(
-      'info',
-      'Choose Default Image',
+    Alert.alert(
+      'Choose Default Cover',
       'Select from available covers',
       [
-        {
-          text: 'Cancel',
-          onPress: () => setAlert(prev => ({ ...prev, visible: false })),
-          style: 'cancel'
-        },
+        { text: 'Cancel', style: 'cancel' },
         ...defaultQuizImages.map(image => ({
           text: image.name,
-          onPress: () => {
-            setQuizImage(image.id);
-            setAlert(prev => ({ ...prev, visible: false }));
-          },
-          style: 'default' as const
+          onPress: () => setQuizImage(image.id)
         }))
       ]
     );
@@ -264,30 +253,51 @@ const QuizOverview: React.FC = () => {
 
   const selectFromCameraRoll = async () => {
     try {
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: true,
-        aspect: [16, 9],
-        quality: 1,
-      });
-
-      if (!result.canceled && result.assets && result.assets.length > 0) {
-        setQuizImage(result.assets[0].uri);
+      const imageAsset = await pickImage();
+      if (!imageAsset) return;
+      
+      const currentQuizId = (quizId && typeof quizId === 'string') 
+        ? quizId 
+        : `temp_${Date.now()}`;
+      
+      const userId = auth.currentUser?.uid;
+      if (!userId) {
+        showAlert('error', 'Error', 'You must be logged in to upload images.');
+        return;
+      }
+      
+      setUploadingImage(true);
+      
+      try {
+        // Delete old image if it's a Firebase URL
+        if (quizImage && isFirebaseStorageUrl(quizImage)) {
+          const oldPath = extractStoragePathFromUrl(quizImage);
+          if (oldPath) {
+            await deleteQuizImage(oldPath).catch(err => 
+              console.log('Old image already deleted or not found')
+            );
+          }
+        }
+        
+        // Upload new image
+        const result = await uploadQuizCoverImage(
+          currentQuizId,
+          imageAsset.uri,
+          userId
+        );
+        
+        setQuizImage(result.url);
+        showAlert('success', 'Success', 'Cover image uploaded successfully!');
+      } catch (uploadError) {
+        console.error('Upload error:', uploadError);
+        showAlert('error', 'Upload Failed', 'Failed to upload image. Please try again.');
+      } finally {
+        setUploadingImage(false);
       }
     } catch (error) {
       console.error('Image picker error:', error);
       showAlert('error', 'Error', 'Failed to select image. Please try again.');
     }
-  };
-
-  const getImageSource = (imageId: string) => {
-    if (!imageId) return null;
-    
-    if (imageId.startsWith('http') || imageId.startsWith('file')) {
-      return { uri: imageId };
-    }
-    const defaultImage = defaultQuizImages.find(img => img.id === imageId);
-    return defaultImage ? defaultImage.source : null;
   };
 
   const handleQuestionTap = (questionIndex: number) => {
@@ -335,7 +345,19 @@ const QuizOverview: React.FC = () => {
         },
         {
           text: 'Delete',
-          onPress: () => {
+          onPress: async () => {
+            const question = questions[questionIndex];
+            
+            // Delete image from Firebase Storage if it exists
+            if (question.image && isFirebaseStorageUrl(question.image)) {
+              const imagePath = extractStoragePathFromUrl(question.image);
+              if (imagePath) {
+                await deleteQuizImage(imagePath).catch(err => 
+                  console.log('Image already deleted or not found')
+                );
+              }
+            }
+            
             deleteQuestion(questionIndex);
             setAlert(prev => ({ ...prev, visible: false }));
           },
@@ -507,7 +529,9 @@ const QuizOverview: React.FC = () => {
   };
 
   const renderQuestionItem = ({ item, index }: { item: Question; index: number }) => {
-    const imageSource = item.image ? { uri: item.image } : getImageSource(quizImage);
+    const imageSource = item.image 
+      ? getQuizImageSource(item.image) 
+      : getQuizImageSource(quizImage);
     
     return (
       <TouchableOpacity
@@ -571,9 +595,9 @@ const QuizOverview: React.FC = () => {
           </TouchableOpacity>
           
           <TouchableOpacity
-            style={[styles.saveButton, { opacity: isLoading ? 0.6 : 1 }]}
+            style={[styles.saveButton, { opacity: isLoading || uploadingImage ? 0.6 : 1 }]}
             onPress={handleSaveQuiz}
-            disabled={isLoading}
+            disabled={isLoading || uploadingImage}
           >
             <Ionicons name="checkmark" size={20} color="#ffffff" />
             <Text style={styles.saveButtonText}>
@@ -583,13 +607,34 @@ const QuizOverview: React.FC = () => {
         </View>
 
         <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-          <TouchableOpacity style={styles.imageContainer} onPress={handleImagePicker}>
+          <TouchableOpacity 
+            style={styles.imageContainer} 
+            onPress={handleImagePicker}
+            disabled={uploadingImage}
+          >
             {quizImage ? (
-              <Image source={getImageSource(quizImage)} style={styles.quizImage} />
+              <>
+                <Image source={getQuizImageSource(quizImage)} style={styles.quizImage} />
+                {uploadingImage && (
+                  <View style={styles.uploadOverlay}>
+                    <ActivityIndicator size="large" color="#ffffff" />
+                    <Text style={styles.uploadProgressText}>Uploading...</Text>
+                  </View>
+                )}
+              </>
             ) : (
               <View style={styles.imagePlaceholder}>
-                <Ionicons name="image-outline" size={48} color="#64748b" />
-                <Text style={styles.imagePlaceholderText}>Tap to add quiz image</Text>
+                {uploadingImage ? (
+                  <>
+                    <ActivityIndicator size="large" color="#64748b" />
+                    <Text style={styles.imagePlaceholderText}>Uploading...</Text>
+                  </>
+                ) : (
+                  <>
+                    <Ionicons name="image-outline" size={48} color="#64748b" />
+                    <Text style={styles.imagePlaceholderText}>Tap to add quiz image</Text>
+                  </>
+                )}
               </View>
             )}
           </TouchableOpacity>
@@ -714,14 +759,15 @@ const QuizOverview: React.FC = () => {
         </ScrollView>
 
         <TouchableOpacity 
-          style={[styles.fab, { opacity: isLoading ? 0.6 : 1 }]} 
+          style={[styles.fab, { opacity: isLoading || uploadingImage ? 0.6 : 1 }]} 
           onPress={handleAddQuestion}
-          disabled={isLoading}
+          disabled={isLoading || uploadingImage}
         >
           <Ionicons name="add" size={24} color="#ffffff" />
           <Text style={styles.fabText}>Add Question</Text>
         </TouchableOpacity>
 
+        {/* All modals remain the same as before */}
         <Modal
           visible={showManageTopicsModal}
           transparent={true}
@@ -893,9 +939,7 @@ const QuizOverview: React.FC = () => {
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
+  container: { flex: 1 },
   topBar: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -936,6 +980,7 @@ const styles = StyleSheet.create({
   },
   imageContainer: {
     marginBottom: 20,
+    position: 'relative',
   },
   quizImage: {
     width: '100%',
@@ -958,6 +1003,23 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#64748b',
     fontWeight: '500',
+  },
+  uploadOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: 16,
+  },
+  uploadProgressText: {
+    color: '#ffffff',
+    marginTop: 12,
+    fontSize: 14,
+    fontWeight: '600',
   },
   titleInput: {
     fontSize: 24,
