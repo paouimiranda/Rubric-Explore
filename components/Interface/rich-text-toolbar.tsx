@@ -1,7 +1,7 @@
 // components/RichTextEditor/RichTextToolbar.tsx
 import { pickImage, takePhoto, uploadNoteImage } from '@/services/image-service';
 import { Ionicons } from '@expo/vector-icons';
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { ActivityIndicator } from 'react-native-paper';
 import { RichToolbar, actions } from 'react-native-pell-rich-editor';
@@ -58,52 +58,133 @@ const RichTextToolbar: React.FC<RichTextToolbarProps> = ({ getEditor, onMetadata
   const [tableBuilderVisible, setTableBuilderVisible] = useState(false);
   const [mathEquationVisible, setMathEquationVisible] = useState(false);
 
-  // Direct formatting handlers using JavaScript injection
-  const handleBold = useCallback(() => {
+  // Formatting states
+  const [isBold, setIsBold] = useState(false);
+  const [isItalic, setIsItalic] = useState(false);
+  const [isUnderline, setIsUnderline] = useState(false);
+  const [isStrikethrough, setIsStrikethrough] = useState(false);
+
+  const stateCheckRef = useRef<NodeJS.Timeout>();
+
+  // Check formatting state by evaluating JavaScript and parsing result
+  const checkFormattingState = useCallback(async () => {
     const editor = getEditor();
-    console.log('Bold pressed, editor:', !!editor);
-    if (editor) {
-      console.log('Editor methods available:', {
-        setBold: !!editor.setBold,
-        webviewBridge: !!editor.webviewBridge,
-        injectJavaScript: !!editor.injectJavaScript
-      });
+    if (!editor || !editor.webviewBridge) return;
+
+    try {
+      // Use a unique callback name for this check
+      const callbackName = `__fmt_${Date.now()}`;
       
-      if (editor.webviewBridge) {
-        console.log('Using webviewBridge for bold');
-        // Save and restore selection
+      const script = `
+        (function() {
+          try {
+            const state = {
+              bold: document.queryCommandState('bold'),
+              italic: document.queryCommandState('italic'),
+              underline: document.queryCommandState('underline'),
+              strikethrough: document.queryCommandState('strikeThrough')
+            };
+            window.${callbackName} = state;
+            JSON.stringify(state);
+          } catch (e) {
+            JSON.stringify({bold: false, italic: false, underline: false, strikethrough: false});
+          }
+        })();
+      `;
+
+      editor.webviewBridge.injectJavaScript(script);
+      
+      // Poll for the result
+      setTimeout(() => {
         editor.webviewBridge.injectJavaScript(`
           (function() {
-            try {
-              // Get current selection
-              const selection = window.getSelection();
-              if (!selection || selection.rangeCount === 0) {
-                console.log('No selection found');
-                return;
-              }
-              
-              const range = selection.getRangeAt(0);
-              console.log('Selection text:', selection.toString());
-              
-              // Apply bold
-              document.execCommand('bold', false, null);
-              
-              // Ensure selection is maintained
-              if (range) {
-                selection.removeAllRanges();
-                selection.addRange(range);
-              }
-              
-              console.log('Bold applied');
-            } catch (e) {
-              console.error('Bold error:', e);
+            if (window.${callbackName}) {
+              window.ReactNativeWebView.postMessage(JSON.stringify({
+                type: '__formatting__',
+                ...window.${callbackName}
+              }));
+              delete window.${callbackName};
             }
           })();
           true;
         `);
-      }
+      }, 100);
+    } catch (error) {
+      console.error('Error checking formatting state:', error);
     }
   }, [getEditor]);
+
+  // Poll for formatting state
+  useEffect(() => {
+    const startPolling = () => {
+      if (stateCheckRef.current) {
+        clearInterval(stateCheckRef.current);
+      }
+      
+      stateCheckRef.current = setInterval(() => {
+        checkFormattingState();
+      }, 300);
+    };
+
+    startPolling();
+
+    return () => {
+      if (stateCheckRef.current) {
+        clearInterval(stateCheckRef.current);
+      }
+    };
+  }, [checkFormattingState]);
+
+  // Listen for formatting state messages
+  useEffect(() => {
+    const editor = getEditor();
+    if (!editor) return;
+
+    // Patch the onMessage handler
+    const originalHandler = editor.onMessage;
+    
+    editor.onMessage = (event: any) => {
+      try {
+        const data = typeof event === 'string' ? JSON.parse(event) : JSON.parse(event?.nativeEvent?.data || event?.data || '{}');
+        
+        if (data.type === '__formatting__') {
+          setIsBold(!!data.bold);
+          setIsItalic(!!data.italic);
+          setIsUnderline(!!data.underline);
+          setIsStrikethrough(!!data.strikethrough);
+        }
+      } catch (e) {
+        // Ignore
+      }
+      
+      // Call original handler
+      if (originalHandler && typeof originalHandler === 'function') {
+        originalHandler(event);
+      }
+    };
+
+    return () => {
+      editor.onMessage = originalHandler;
+    };
+  }, [getEditor]);
+
+  // Formatting handlers with state update
+  const handleBold = useCallback(() => {
+    const editor = getEditor();
+    if (editor && editor.webviewBridge) {
+      editor.webviewBridge.injectJavaScript(`
+        (function() {
+          try {
+            document.execCommand('bold', false, null);
+          } catch (e) {
+            console.error('Bold error:', e);
+          }
+        })();
+        true;
+      `);
+      setTimeout(() => checkFormattingState(), 100);
+    }
+  }, [getEditor, checkFormattingState]);
 
   const handleItalic = useCallback(() => {
     const editor = getEditor();
@@ -111,22 +192,16 @@ const RichTextToolbar: React.FC<RichTextToolbarProps> = ({ getEditor, onMetadata
       editor.webviewBridge.injectJavaScript(`
         (function() {
           try {
-            const selection = window.getSelection();
-            if (!selection || selection.rangeCount === 0) return;
-            const range = selection.getRangeAt(0);
             document.execCommand('italic', false, null);
-            if (range) {
-              selection.removeAllRanges();
-              selection.addRange(range);
-            }
           } catch (e) {
             console.error('Italic error:', e);
           }
         })();
         true;
       `);
+      setTimeout(() => checkFormattingState(), 100);
     }
-  }, [getEditor]);
+  }, [getEditor, checkFormattingState]);
 
   const handleUnderline = useCallback(() => {
     const editor = getEditor();
@@ -134,22 +209,16 @@ const RichTextToolbar: React.FC<RichTextToolbarProps> = ({ getEditor, onMetadata
       editor.webviewBridge.injectJavaScript(`
         (function() {
           try {
-            const selection = window.getSelection();
-            if (!selection || selection.rangeCount === 0) return;
-            const range = selection.getRangeAt(0);
             document.execCommand('underline', false, null);
-            if (range) {
-              selection.removeAllRanges();
-              selection.addRange(range);
-            }
           } catch (e) {
             console.error('Underline error:', e);
           }
         })();
         true;
       `);
+      setTimeout(() => checkFormattingState(), 100);
     }
-  }, [getEditor]);
+  }, [getEditor, checkFormattingState]);
 
   const handleStrikethrough = useCallback(() => {
     const editor = getEditor();
@@ -157,36 +226,32 @@ const RichTextToolbar: React.FC<RichTextToolbarProps> = ({ getEditor, onMetadata
       editor.webviewBridge.injectJavaScript(`
         (function() {
           try {
-            const selection = window.getSelection();
-            if (!selection || selection.rangeCount === 0) return;
-            const range = selection.getRangeAt(0);
             document.execCommand('strikeThrough', false, null);
-            if (range) {
-              selection.removeAllRanges();
-              selection.addRange(range);
-            }
           } catch (e) {
             console.error('Strikethrough error:', e);
           }
         })();
         true;
       `);
+      setTimeout(() => checkFormattingState(), 100);
     }
-  }, [getEditor]);
+  }, [getEditor, checkFormattingState]);
 
   const handleUndo = useCallback(() => {
     const editor = getEditor();
     if (editor) {
       editor.undo();
+      setTimeout(() => checkFormattingState(), 100);
     }
-  }, [getEditor]);
+  }, [getEditor, checkFormattingState]);
 
   const handleRedo = useCallback(() => {
     const editor = getEditor();
     if (editor) {
       editor.redo();
+      setTimeout(() => checkFormattingState(), 100);
     }
-  }, [getEditor]);
+  }, [getEditor, checkFormattingState]);
 
   const handleColorSelect = useCallback((colorObj: typeof COLORS[0]) => {
     const editor = getEditor();
@@ -268,7 +333,7 @@ const RichTextToolbar: React.FC<RichTextToolbarProps> = ({ getEditor, onMetadata
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.scrollContent}
         >
-          {/* Undo/Redo - Custom buttons */}
+          {/* Undo/Redo */}
           <TouchableOpacity 
             style={styles.customButton}
             onPress={handleUndo}
@@ -283,37 +348,53 @@ const RichTextToolbar: React.FC<RichTextToolbarProps> = ({ getEditor, onMetadata
             <Ionicons name="arrow-redo" size={20} color="#ffffff" />
           </TouchableOpacity>
 
-          {/* Text formatting - Custom buttons */}
+          {/* Text formatting with active states */}
           <TouchableOpacity 
-            style={styles.customButton}
+            style={[styles.customButton, isBold && styles.activeButton]}
             onPress={handleBold}
             activeOpacity={0.7}
           >
-            <Text style={{ color: '#ffffff', fontWeight: 'bold', fontSize: 18 }}>B</Text>
+            <Text style={[
+              styles.formatText,
+              { fontWeight: 'bold' },
+              isBold && styles.activeText
+            ]}>B</Text>
           </TouchableOpacity>
 
           <TouchableOpacity 
-            style={styles.customButton}
+            style={[styles.customButton, isItalic && styles.activeButton]}
             onPress={handleItalic}
             activeOpacity={0.7}
           >
-            <Text style={{ color: '#ffffff', fontStyle: 'italic', fontSize: 18 }}>I</Text>
+            <Text style={[
+              styles.formatText,
+              { fontStyle: 'italic' },
+              isItalic && styles.activeText
+            ]}>I</Text>
           </TouchableOpacity>
 
           <TouchableOpacity 
-            style={styles.customButton}
+            style={[styles.customButton, isUnderline && styles.activeButton]}
             onPress={handleUnderline}
             activeOpacity={0.7}
           >
-            <Text style={{ color: '#ffffff', textDecorationLine: 'underline', fontSize: 18 }}>U</Text>
+            <Text style={[
+              styles.formatText,
+              { textDecorationLine: 'underline' },
+              isUnderline && styles.activeText
+            ]}>U</Text>
           </TouchableOpacity>
 
           <TouchableOpacity 
-            style={styles.customButton}
+            style={[styles.customButton, isStrikethrough && styles.activeButton]}
             onPress={handleStrikethrough}
             activeOpacity={0.7}
           >
-            <Text style={{ color: '#ffffff', textDecorationLine: 'line-through', fontSize: 18 }}>S</Text>
+            <Text style={[
+              styles.formatText,
+              { textDecorationLine: 'line-through' },
+              isStrikethrough && styles.activeText
+            ]}>S</Text>
           </TouchableOpacity>
 
           {/* Color and highlight */}
@@ -475,6 +556,7 @@ const RichTextToolbar: React.FC<RichTextToolbarProps> = ({ getEditor, onMetadata
         </ScrollView>
       </View>
 
+      {/* All modals remain the same... */}
       {/* Color Picker Modal */}
       <Modal
         visible={colorPickerVisible}
@@ -726,6 +808,18 @@ const styles = StyleSheet.create({
     marginHorizontal: 4,
     borderRadius: 6,
     position: 'relative',
+  },
+  activeButton: {
+    backgroundColor: 'rgba(96, 165, 250, 0.3)',
+    borderWidth: 1,
+    borderColor: '#60a5fa',
+  },
+  formatText: {
+    color: '#ffffff',
+    fontSize: 18,
+  },
+  activeText: {
+    color: '#60a5fa',
   },
   modalOverlay: {
     flex: 1,

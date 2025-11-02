@@ -79,6 +79,7 @@ export default function NoteEditor({
 
   const [ocrModalVisible, setOcrModalVisible] = useState(false);
   const [propertiesModalVisible, setPropertiesModalVisible] = useState(false);
+  const [ellipsisMenuVisible, setEllipsisMenuVisible] = useState(false);
   const [showCollaborators, setShowCollaborators] = useState(false);
   const [metadataModalVisible, setMetadataModalVisible] = useState(false);
     
@@ -102,18 +103,11 @@ export default function NoteEditor({
   const title = collaborative.title;  
   const content = collaborative.content;
 
-  /**
-   * IMPROVED SYNC MECHANISM
-   * - Only syncs when not typing
-   * - Uses ref to track last synced content to prevent loops
-   * - Delays sync until typing stops
-   */
   const syncTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastSyncedContent = useRef('');
   const isSyncing = useRef(false);
 
   useEffect(() => {
-    // Don't sync if already syncing, typing, or content hasn't changed
     if (isSyncing.current || isUserTyping() || content === lastSyncedContent.current) {
       return;
     }
@@ -124,9 +118,7 @@ export default function NoteEditor({
       clearTimeout(syncTimeoutRef.current);
     }
     
-    // Wait for typing to finish before syncing
     syncTimeoutRef.current = setTimeout(async () => {
-      // Final check before applying
       if (!isUserTyping() && richEditorRef.current && !isSyncing.current) {
         isSyncing.current = true;
         console.log('📥 Applying Yjs update with cursor preservation');
@@ -140,7 +132,7 @@ export default function NoteEditor({
           isSyncing.current = false;
         }
       }
-    }, 200); // Slightly longer delay for better stability
+    }, 200);
     
     return () => {
       if (syncTimeoutRef.current) {
@@ -174,46 +166,6 @@ export default function NoteEditor({
   const handleContentCursorPosition = useCallback((position: number) => {
     collaborative.updateCursor('content', position);
   }, [collaborative]);
-
-  const renderCollaborativeIndicators = () => (
-    <View style={styles.collaborativeIndicators}>
-      {collaborative.isConnected && (
-        <TouchableOpacity 
-          style={styles.connectedIndicator}
-          onPress={() => setShowCollaborators(!showCollaborators)}
-        >
-          <Ionicons name="people" size={16} color="#4ade80" />
-          <Text style={styles.collaboratorCount}>
-            {collaborative.activeUsers.length}
-          </Text>
-        </TouchableOpacity>
-      )}
-      
-      {!collaborative.isConnected && (
-        <View style={styles.disconnectedIndicator}>
-          <Ionicons name="wifi" size={16} color="#ef4444" />
-          <Text style={styles.offlineText}>Offline</Text>
-        </View>
-      )}
-    </View>
-  );
-
-  const renderSharingStatus = () => {
-    if (!effectiveIsSharedAccess) return null;
-    
-    return (
-      <View style={styles.sharingStatus}>
-        <Ionicons 
-          name={effectiveSharedPermission === 'edit' ? 'create' : 'eye'} 
-          size={16} 
-          color={effectiveSharedPermission === 'edit' ? '#22c55e' : '#60a5fa'} 
-        />
-        <Text style={styles.sharingStatusText}>
-          Shared with {effectiveSharedPermission} access
-        </Text>
-      </View>
-    );
-  };
 
   const autoSaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -340,6 +292,11 @@ export default function NoteEditor({
     setHasUnsavedChanges(true);
   }, [collaborative, content, effectiveIsSharedAccess, effectiveSharedPermission]);
 
+  const truncateText = (text: string, maxLength: number) => {
+    if (text.length <= maxLength) return text;
+    return text.substring(0, maxLength) + '...';
+  };
+
   if (loading) {
     return (
       <LinearGradient colors={["#324762", "#0A1C3C"]} style={styles.loadingContainer}>
@@ -354,62 +311,25 @@ export default function NoteEditor({
   return (
     <LinearGradient colors={["#324762", "#0A1C3C"]} style={styles.container}>
       <SafeAreaView style={styles.container}>
+        {/* Minimalist Header */}
         <View style={styles.header}>
-          <TouchableOpacity style={styles.headerButton} onPress={handleBack}>
-            <Ionicons name="arrow-back" size={24} color="#fff" />
+          <TouchableOpacity style={styles.iconButton} onPress={handleBack}>
+            <Ionicons name="arrow-back" size={22} color="#fff" />
           </TouchableOpacity>
           
-          <View style={styles.headerCenter}>
-            <Text style={styles.headerTitle}>
-              {effectiveIsSharedAccess ? 'Shared Note' : 'Edit Note'}
-            </Text>
-            {renderCollaborativeIndicators()}
-            {hasUnsavedChanges && (
-              <Text style={styles.unsavedIndicator}>● Unsaved changes</Text>
-            )}
-          </View>
-
-          {note?.isPublic && (
-            <View style={styles.publicBadge}>
-              <Ionicons name="globe" size={12} color="#22c55e" />
-              <Text style={styles.publicBadgeText}>Public</Text>
-            </View>
-          )}
-          
-          <View style={styles.headerActions}>
+          <View style={styles.headerRight}>
             {!effectiveIsSharedAccess && (
-              <>
-                <TouchableOpacity
-                  style={styles.headerButton}
-                  onPress={() => setOcrModalVisible(true)}
-                >
-                  <Ionicons name="scan-outline" size={24} color="#fff" />
-                </TouchableOpacity>
-                
-                <TouchableOpacity
-                  style={styles.headerButton}
-                  onPress={() => setPropertiesModalVisible(true)}
-                >
-                  <Ionicons name="pricetag-outline" size={24} color="#fff" />
-                </TouchableOpacity>
-              </>
+              <TouchableOpacity
+                style={styles.iconButton}
+                onPress={() => setOcrModalVisible(true)}
+              >
+                <Ionicons name="scan-outline" size={22} color="#fff" />
+              </TouchableOpacity>
             )}
-            
-            <TouchableOpacity
-              style={[styles.headerButton, saving && styles.headerButtonDisabled]}
-              onPress={() => saveNote(true)}
-              disabled={saving || (effectiveIsSharedAccess && effectiveSharedPermission === 'view')}
-            >
-              {saving ? (
-                <Ionicons name="reload" size={24} color="#9ca3af" />
-              ) : (
-                <Ionicons name="save-outline" size={24} color="#fff" />
-              )}
-            </TouchableOpacity>
             
             {!effectiveIsSharedAccess && (
               <TouchableOpacity
-                style={[styles.headerButton]}
+                style={styles.iconButton}
                 onPress={() => {
                   if (note) {
                     setVisible(true);
@@ -418,53 +338,29 @@ export default function NoteEditor({
                   }
                 }}
               >
-                <Ionicons name="share-social-outline" size={24} color="#fff" />
+                <Ionicons name="share-social-outline" size={22} color="#fff" />
               </TouchableOpacity>
             )}
+            
+            <TouchableOpacity
+              style={styles.iconButton}
+              onPress={() => setEllipsisMenuVisible(true)}
+            >
+              <Ionicons name="ellipsis-horizontal" size={22} color="#fff" />
+            </TouchableOpacity>
           </View>
         </View>
-        
-        {renderSharingStatus()}
-
-        {showCollaborators && collaborative.activeUsers.length > 0 && (
-          <View style={styles.collaboratorsList}>
-            {collaborative.activeUsers.map((user, index) => (
-              <View key={user.uid} style={styles.collaboratorItem}>
-                <View
-                  style={[
-                    styles.collaboratorAvatar, 
-                    { backgroundColor: user.color }
-                  ]} 
-                />
-                <Text style={styles.collaboratorName}>{user.name}</Text>
-              </View>
-            ))}
-          </View>
-        )}
 
         <KeyboardAvoidingView 
           style={styles.content} 
           behavior={Platform.OS === "ios" ? "padding" : "height"}
         >
-          {properties.length > 0 && !effectiveIsSharedAccess && (
-            <View style={styles.propertiesDisplay}>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                {properties.map((property, index) => (
-                  <TouchableOpacity
-                    key={index}
-                    style={styles.propertyChip}
-                    onPress={() => setPropertiesModalVisible(true)}
-                  >
-                    <Text style={styles.propertyText}>
-                      {property.key}: {property.value}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </ScrollView>
-            </View>
-          )}
-
-          <View style={styles.editorContainer}>
+          <ScrollView 
+            style={styles.scrollView}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+          >
+            {/* Title */}
             <TextInput
               ref={collaborative.titleInputRef}
               style={styles.titleInput}
@@ -472,8 +368,8 @@ export default function NoteEditor({
               onChangeText={(text) => handleTitleChange(text)}
               onSelectionChange={handleTitleSelectionChange}
               editable={!(effectiveIsSharedAccess && effectiveSharedPermission === "view")}
-              placeholder="Note title..."
-              placeholderTextColor="#9ca3af"
+              placeholder="Untitled"
+              placeholderTextColor="#6b7280"
               multiline
               textAlignVertical="top"
               autoCapitalize="sentences"
@@ -481,30 +377,174 @@ export default function NoteEditor({
               spellCheck={true}
             />
 
-            <RichTextEditor
-              ref={richEditorRef}
-              initialContent={content}
-              onContentChange={handleContentChange}
-              editable={!(effectiveIsSharedAccess && effectiveSharedPermission === "view")}
-              placeholder="Start writing your note..."
-              onCursorPosition={handleContentCursorPosition}
-              style={styles.richEditor}
-              onEditorReady={(editor) => {
-                // console.log('✅ Rich text editor ready');
-              }}
+            {/* Properties Section */}
+            {!effectiveIsSharedAccess && (
+              <View style={styles.propertiesSection}>
+                {properties.map((property, index) => (
+                  <TouchableOpacity
+                    key={index}
+                    style={styles.propertyRow}
+                    onPress={() => setPropertiesModalVisible(true)}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.propertyKey}>
+                      {truncateText(property.key, 20)}
+                    </Text>
+                    <Text style={styles.propertyValue}>
+                      {property.value}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+                
+                <TouchableOpacity
+                  style={styles.addPropertyButton}
+                  onPress={() => setPropertiesModalVisible(true)}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name="add" size={16} color="#6b7280" />
+                  <Text style={styles.addPropertyText}>Add property</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+
+            {/* Rich Text Editor */}
+            <View style={styles.editorWrapper}>
+              <RichTextEditor
+                ref={richEditorRef}
+                initialContent={content}
+                onContentChange={handleContentChange}
+                editable={!(effectiveIsSharedAccess && effectiveSharedPermission === "view")}
+                placeholder="Start writing..."
+                onCursorPosition={handleContentCursorPosition}
+                style={styles.richEditor}
+                onEditorReady={(editor) => {
+                  // console.log('✅ Rich text editor ready');
+                }}
+              />
+            </View>
+          </ScrollView>
+
+          {!(effectiveIsSharedAccess && effectiveSharedPermission === "view") && (
+            <RichTextToolbar
+              getEditor={() => richEditorRef.current?.getEditor()}
+              onMetadataPress={() => setMetadataModalVisible(true)}
+              noteId={routeNoteId as string}
+              userId={uid!}
             />
-          </View>
+          )}
         </KeyboardAvoidingView>
 
-        {!(effectiveIsSharedAccess && effectiveSharedPermission === "view") && (
-          <RichTextToolbar
-            getEditor={() => richEditorRef.current?.getEditor()}
-            onMetadataPress={() => setMetadataModalVisible(true)}
-            noteId={routeNoteId as string}
-            userId={uid!}
-          />
-        )}
+        {/* Ellipsis Bottom Sheet Menu */}
+        <Modal
+          visible={ellipsisMenuVisible}
+          transparent
+          animationType="slide"
+          onRequestClose={() => setEllipsisMenuVisible(false)}
+        >
+          <TouchableOpacity 
+            style={styles.bottomSheetOverlay}
+            activeOpacity={1}
+            onPress={() => setEllipsisMenuVisible(false)}
+          >
+            <View style={styles.bottomSheet}>
+              <View style={styles.bottomSheetHandle} />
+              
+              {effectiveIsSharedAccess && (
+                <View style={styles.menuItem}>
+                  <Ionicons 
+                    name={effectiveSharedPermission === 'edit' ? 'create' : 'eye'} 
+                    size={20} 
+                    color={effectiveSharedPermission === 'edit' ? '#22c55e' : '#60a5fa'} 
+                  />
+                  <Text style={styles.menuItemText}>
+                    Shared with {effectiveSharedPermission} access
+                  </Text>
+                </View>
+              )}
+              
+              {collaborative.isConnected && (
+                <TouchableOpacity
+                  style={styles.menuItem}
+                  onPress={() => {
+                    setShowCollaborators(!showCollaborators);
+                    if (!showCollaborators && collaborative.activeUsers.length === 0) {
+                      setEllipsisMenuVisible(false);
+                    }
+                  }}
+                >
+                  <Ionicons name="people" size={20} color="#4ade80" />
+                  <Text style={styles.menuItemText}>
+                    {collaborative.activeUsers.length} {collaborative.activeUsers.length === 1 ? 'Collaborator' : 'Collaborators'}
+                  </Text>
+                  <Ionicons name="chevron-forward" size={20} color="#9ca3af" style={{ marginLeft: 'auto' }} />
+                </TouchableOpacity>
+              )}
+              
+              <TouchableOpacity
+                style={[styles.menuItem, (saving || (effectiveIsSharedAccess && effectiveSharedPermission === 'view')) && styles.menuItemDisabled]}
+                onPress={() => {
+                  saveNote(true);
+                  setEllipsisMenuVisible(false);
+                }}
+                disabled={saving || (effectiveIsSharedAccess && effectiveSharedPermission === 'view')}
+              >
+                <Ionicons 
+                  name={saving ? "reload" : "save-outline"} 
+                  size={20} 
+                  color={saving ? "#9ca3af" : "#fff"} 
+                />
+                <Text style={styles.menuItemText}>
+                  {saving ? 'Saving...' : 'Save'}
+                </Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity
+                style={styles.menuItem}
+                onPress={() => {
+                  setMetadataModalVisible(true);
+                  setEllipsisMenuVisible(false);
+                }}
+              >
+                <Ionicons name="information-circle-outline" size={20} color="#fff" />
+                <Text style={styles.menuItemText}>Note Information</Text>
+              </TouchableOpacity>
+            </View>
+          </TouchableOpacity>
+        </Modal>
 
+        {/* Collaborators List Modal */}
+        <Modal
+          visible={showCollaborators}
+          transparent
+          animationType="slide"
+          onRequestClose={() => setShowCollaborators(false)}
+        >
+          <TouchableOpacity 
+            style={styles.bottomSheetOverlay}
+            activeOpacity={1}
+            onPress={() => setShowCollaborators(false)}
+          >
+            <View style={styles.bottomSheet}>
+              <View style={styles.bottomSheetHandle} />
+              
+              <Text style={styles.bottomSheetTitle}>Active Collaborators</Text>
+              
+              {collaborative.activeUsers.map((user, index) => (
+                <View key={user.uid} style={styles.collaboratorItem}>
+                  <View
+                    style={[
+                      styles.collaboratorAvatar, 
+                      { backgroundColor: user.color }
+                    ]} 
+                  />
+                  <Text style={styles.collaboratorName}>{user.name}</Text>
+                </View>
+              ))}
+            </View>
+          </TouchableOpacity>
+        </Modal>
+
+        {/* Metadata Modal */}
         <Modal
           visible={metadataModalVisible}
           transparent
@@ -639,146 +679,136 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingHorizontal: 20,
+    paddingVertical: 16,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255, 255, 255, 0.1)',
+    borderBottomColor: 'rgba(255, 255, 255, 0.05)',
   },
-  headerButton: {
-    width: 40,
-    height: 40,
+  iconButton: {
+    width: 36,
+    height: 36,
     justifyContent: 'center',
     alignItems: 'center',
-    borderRadius: 8,
   },
-  headerButtonDisabled: {
-    opacity: 0.5,
-  },
-  headerCenter: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  headerTitle: {
-    color: '#ffffff',
-    fontSize: 18,
-    fontWeight: '600',
-  },
-  headerActions: {
+  headerRight: {
     flexDirection: 'row',
-    gap: 8,
-  },
-  collaborativeIndicators: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 4,
-  },
-  connectedIndicator: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(74, 222, 128, 0.2)',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  collaboratorCount: {
-    color: '#4ade80',
-    fontSize: 12,
-    fontWeight: '600',
-    marginLeft: 4,
-  },
-  disconnectedIndicator: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(239, 68, 68, 0.2)',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  offlineText: {
-    color: '#ef4444',
-    fontSize: 12,
-    fontWeight: '600',
-    marginLeft: 4,
-  },
-  unsavedIndicator: {
-    color: '#fbbf24',
-    fontSize: 12,
-    marginTop: 2,
-  },
-  sharingStatus: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    backgroundColor: 'rgba(96, 165, 250, 0.1)',
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255, 255, 255, 0.1)',
-  },
-  sharingStatusText: {
-    color: '#60a5fa',
-    fontSize: 14,
-    marginLeft: 8,
-  },
-  collaboratorsList: {
-    flexDirection: 'row',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255, 255, 255, 0.1)',
-  },
-  collaboratorItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginRight: 16,
-  },
-  collaboratorAvatar: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    marginRight: 6,
-  },
-  collaboratorName: {
-    color: '#ffffff',
-    fontSize: 14,
+    gap: 12,
   },
   content: {
     flex: 1,
   },
-  propertiesDisplay: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255, 255, 255, 0.1)',
-  },
-  propertyChip: {
-    backgroundColor: 'rgba(96, 165, 250, 0.2)',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-    marginRight: 8,
-  },
-  propertyText: {
-    color: '#60a5fa',
-    fontSize: 12,
-    fontWeight: '500',
-  },
-  editorContainer: {
+  scrollView: {
     flex: 1,
-    padding: 16,
   },
   titleInput: {
-    fontSize: 24,
-    fontWeight: 'bold',
+    fontSize: 32,
+    fontWeight: '700',
     color: '#ffffff',
-    marginBottom: 16,
-    minHeight: 40,
+    paddingHorizontal: 20,
+    paddingTop: 24,
+    paddingBottom: 8,
+    minHeight: 60,
+  },
+  propertiesSection: {
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+  },
+  propertyRow: {
+    flexDirection: 'row',
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.05)',
+  },
+  propertyKey: {
+    flex: 0.4,
+    color: '#9ca3af',
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  propertyValue: {
+    flex: 0.6,
+    color: '#ffffff',
+    fontSize: 14,
+  },
+  addPropertyButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+    marginTop: 4,
+  },
+  addPropertyText: {
+    color: '#6b7280',
+    fontSize: 14,
+    marginLeft: 6,
+  },
+  editorWrapper: {
+    flex: 1,
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    minHeight: 400,
   },
   richEditor: {
     flex: 1,
-    minHeight: 200,
+    minHeight: 300,
+  },
+  bottomSheetOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  bottomSheet: {
+    backgroundColor: '#1f2937',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingBottom: 34,
+    paddingHorizontal: 20,
+  },
+  bottomSheetHandle: {
+    width: 40,
+    height: 4,
+    backgroundColor: '#4b5563',
+    borderRadius: 2,
+    alignSelf: 'center',
+    marginTop: 12,
+    marginBottom: 20,
+  },
+  bottomSheetTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#ffffff',
+    marginBottom: 16,
+  },
+  menuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.05)',
+  },
+  menuItemDisabled: {
+    opacity: 0.5,
+  },
+  menuItemText: {
+    color: '#ffffff',
+    fontSize: 16,
+    marginLeft: 16,
+  },
+  collaboratorItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.05)',
+  },
+  collaboratorAvatar: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    marginRight: 12,
+  },
+  collaboratorName: {
+    color: '#ffffff',
+    fontSize: 16,
   },
   modalOverlay: {
     flex: 1,
@@ -827,21 +857,5 @@ const styles = StyleSheet.create({
   metadataValue: {
     fontSize: 14,
     color: '#1f2937',
-  },
-  publicBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(34, 197, 94, 0.2)',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-    marginTop: 4,
-    alignSelf: 'center',
-  },
-  publicBadgeText: {
-    color: '#22c55e',
-    fontSize: 10,
-    fontWeight: '600',
-    marginLeft: 4,
   },
 });

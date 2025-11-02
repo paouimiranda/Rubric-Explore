@@ -1,11 +1,10 @@
-// TopicSelectionModal.tsx - Updated with Dark Theme
+// TopicSelectionModal.tsx - Updated with Custom Alerts and Disclaimer
 import { useAuth } from '@/app/contexts/AuthContext';
 import { getMergedNoteContent, getNotebooks, getNotesInNotebook } from '@/services/notes-service';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import React, { useEffect, useState } from 'react';
 import {
-  Alert,
   FlatList,
   Modal,
   SafeAreaView,
@@ -15,6 +14,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { CustomAlertModal } from './custom-alert-modal';
 
 interface NotebookProperty {
   key: string;
@@ -46,6 +46,18 @@ interface TopicSelectionModalProps {
   onTopicSelected: (topic: string, questionType: string, questionCount: number, content?: string) => void;
 }
 
+interface AlertState {
+  visible: boolean;
+  type: 'info' | 'success' | 'error' | 'warning';
+  title: string;
+  message: string;
+  buttons: Array<{
+    text: string;
+    onPress: () => void;
+    style?: 'default' | 'cancel' | 'primary';
+  }>;
+}
+
 export const TopicSelectionModal: React.FC<TopicSelectionModalProps> = ({
   visible,
   onClose,
@@ -67,29 +79,57 @@ export const TopicSelectionModal: React.FC<TopicSelectionModalProps> = ({
   const [questionCount, setQuestionCount] = useState(10);
   const [showQuestionTypeDropdown, setShowQuestionTypeDropdown] = useState(false);
 
+  const [alert, setAlert] = useState<AlertState>({
+    visible: false,
+    type: 'info',
+    title: '',
+    message: '',
+    buttons: [],
+  });
+
+  const [showDisclaimer, setShowDisclaimer] = useState(false);
+  const [pendingGeneration, setPendingGeneration] = useState<{
+    topic: string;
+    type: string;
+    count: number;
+    content?: string;
+  } | null>(null);
+
+  const showAlert = (
+    type: AlertState['type'],
+    title: string,
+    message: string,
+    buttons?: AlertState['buttons']
+  ) => {
+    setAlert({
+      visible: true,
+      type,
+      title,
+      message,
+      buttons: buttons || [
+        {
+          text: 'OK',
+          onPress: () => setAlert(prev => ({ ...prev, visible: false })),
+          style: 'primary',
+        },
+      ],
+    });
+  };
+
   const extractPlainTextFromHtml = (html: string): string => {
     if (!html) return '';
     
-    // Remove script and style tags completely
     let text = html.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '');
     text = text.replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, '');
-    
-    // Remove images, videos, iframes, and other media elements
     text = text.replace(/<img[^>]*>/gi, '');
     text = text.replace(/<video[^>]*>.*?<\/video>/gi, '');
     text = text.replace(/<audio[^>]*>.*?<\/audio>/gi, '');
     text = text.replace(/<iframe[^>]*>.*?<\/iframe>/gi, '');
     text = text.replace(/<svg[^>]*>.*?<\/svg>/gi, '');
     text = text.replace(/<canvas[^>]*>.*?<\/canvas>/gi, '');
-    
-    // Replace block-level elements with newlines
     text = text.replace(/<\/?(div|p|br|h[1-6]|li|tr)[^>]*>/gi, '\n');
     text = text.replace(/<\/?(ul|ol|table|tbody|thead)[^>]*>/gi, '\n\n');
-    
-    // Remove all other HTML tags
     text = text.replace(/<[^>]+>/g, '');
-    
-    // Decode HTML entities
     text = text.replace(/&nbsp;/g, ' ');
     text = text.replace(/&amp;/g, '&');
     text = text.replace(/&lt;/g, '<');
@@ -97,8 +137,6 @@ export const TopicSelectionModal: React.FC<TopicSelectionModalProps> = ({
     text = text.replace(/&quot;/g, '"');
     text = text.replace(/&#039;/g, "'");
     text = text.replace(/&apos;/g, "'");
-    
-    // Clean up whitespace
     text = text.replace(/\n\s*\n\s*\n/g, '\n\n');
     text = text.replace(/[ \t]+/g, ' ');
     text = text.trim();
@@ -142,7 +180,7 @@ export const TopicSelectionModal: React.FC<TopicSelectionModalProps> = ({
       setNotebooks(data);
     } catch (error) {
       console.error('Error fetching notebooks:', error);
-      Alert.alert('Error', 'Failed to load notebooks');
+      showAlert('error', 'Error', 'Failed to load notebooks. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -169,7 +207,7 @@ export const TopicSelectionModal: React.FC<TopicSelectionModalProps> = ({
       setNotePreviews(previews);
     } catch (error) {
       console.error('Error fetching notes:', error);
-      Alert.alert('Error', 'Failed to load notes');
+      showAlert('error', 'Error', 'Failed to load notes. Please try again.');
     } finally {
       setNotesLoading(false);
     }
@@ -182,22 +220,20 @@ export const TopicSelectionModal: React.FC<TopicSelectionModalProps> = ({
 
   const handleNoteSelect = async (note: Note) => {
     try {
-      // Get the HTML content from the note
       const htmlContent = await getMergedNoteContent(note.id);
 
       if (!htmlContent || htmlContent.trim().length === 0) {
-        Alert.alert("Empty Note", "This note has no content to generate questions from.");
+        showAlert('warning', 'Empty Note', 'This note has no content to generate questions from.');
         return;
       }
 
-      // 🎯 EXTRACT PLAIN TEXT - Remove images and formatting
       const plainText = extractPlainTextFromHtml(htmlContent);
 
-      // Validate plain text has actual content
       if (!plainText || plainText.trim().length === 0) {
-        Alert.alert(
-          "No Text Content", 
-          "This note only contains images or other non-text elements. Please add some text to generate questions."
+        showAlert(
+          'warning',
+          'No Text Content',
+          'This note only contains images or other non-text elements. Please add some text to generate questions.'
         );
         return;
       }
@@ -205,22 +241,42 @@ export const TopicSelectionModal: React.FC<TopicSelectionModalProps> = ({
       console.log('📝 Extracted plain text length:', plainText.length);
       console.log('📝 Plain text preview:', plainText.slice(0, 200));
 
-      // Pass plain text instead of HTML
-      onTopicSelected(note.title, selectedQuestionType, questionCount, plainText);
-      handleClose();
+      setPendingGeneration({
+        topic: note.title,
+        type: selectedQuestionType,
+        count: questionCount,
+        content: plainText,
+      });
+      setShowDisclaimer(true);
     } catch (error) {
       console.error("Error loading note content:", error);
-      Alert.alert("Error", "Failed to load the note's content. Please try again.");
+      showAlert('error', 'Error', "Failed to load the note's content. Please try again.");
     }
   };
 
   const handleManualSubmit = () => {
     if (!manualTopic.trim()) {
-      Alert.alert('Invalid Topic', 'Please enter a topic.');
+      showAlert('warning', 'Invalid Topic', 'Please enter a topic to generate questions.');
       return;
     }
-    onTopicSelected(manualTopic.trim(), selectedQuestionType, questionCount);
-    handleClose();
+    setPendingGeneration({
+      topic: manualTopic.trim(),
+      type: selectedQuestionType,
+      count: questionCount,
+    });
+    setShowDisclaimer(true);
+  };
+
+  const confirmGeneration = () => {
+    if (pendingGeneration) {
+      onTopicSelected(
+        pendingGeneration.topic,
+        pendingGeneration.type,
+        pendingGeneration.count,
+        pendingGeneration.content
+      );
+      handleClose();
+    }
   };
 
   const handleClose = () => {
@@ -232,6 +288,8 @@ export const TopicSelectionModal: React.FC<TopicSelectionModalProps> = ({
     setSelectedQuestionType('multiple_choice');
     setQuestionCount(10);
     setShowQuestionTypeDropdown(false);
+    setShowDisclaimer(false);
+    setPendingGeneration(null);
     onClose();
   };
 
@@ -309,7 +367,6 @@ export const TopicSelectionModal: React.FC<TopicSelectionModalProps> = ({
             multiline
           />
 
-          {/* Question Type Selector */}
           <View style={styles.selectorContainer}>
             <Text style={styles.selectorLabel}>Question Type</Text>
             <TouchableOpacity
@@ -363,7 +420,6 @@ export const TopicSelectionModal: React.FC<TopicSelectionModalProps> = ({
             )}
           </View>
 
-          {/* Question Count Selector */}
           {selectedQuestionType !== 'matching' && (
             <View style={styles.selectorContainer}>
               <Text style={styles.selectorLabel}>Number of Questions</Text>
@@ -390,7 +446,6 @@ export const TopicSelectionModal: React.FC<TopicSelectionModalProps> = ({
             </View>
           )}
 
-          {/* Matching type info */}
           {selectedQuestionType === 'matching' && (
             <View style={styles.infoContainer}>
               <Ionicons name="information-circle" size={20} color="#60a5fa" />
@@ -490,77 +545,167 @@ export const TopicSelectionModal: React.FC<TopicSelectionModalProps> = ({
   };
 
   return (
-    <Modal
-      visible={visible}
-      animationType="slide"
-      presentationStyle="pageSheet"
-      onRequestClose={handleClose}
-    >
-      <LinearGradient
-        colors={['#0f172a', '#1e293b', '#334155']}
-        style={styles.gradient}
+    <>
+      <Modal
+        visible={visible}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={handleClose}
       >
-        <SafeAreaView style={styles.container}>
-          <View style={styles.header}>
-            <Text style={styles.headerTitle}>Select Quiz Topic</Text>
-            <TouchableOpacity 
-              onPress={handleClose} 
-              style={styles.closeBtn}
-              activeOpacity={0.7}
-            >
-              <Ionicons name="close" size={28} color="#ffffff" />
-            </TouchableOpacity>
-          </View>
+        <LinearGradient
+          colors={['#0f172a', '#1e293b', '#334155']}
+          style={styles.gradient}
+        >
+          <SafeAreaView style={styles.container}>
+            <View style={styles.header}>
+              <Text style={styles.headerTitle}>Select Quiz Topic</Text>
+              <TouchableOpacity 
+                onPress={handleClose} 
+                style={styles.closeBtn}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="close" size={28} color="#ffffff" />
+              </TouchableOpacity>
+            </View>
 
-          <View style={styles.tabsContainer}>
-            <TouchableOpacity
-              style={[
-                styles.tab,
-                activeTab === 'manual' && styles.activeTab
-              ]}
-              onPress={() => setActiveTab('manual')}
-              activeOpacity={0.7}
-            >
-              <Ionicons 
-                name="create-outline" 
-                size={20} 
-                color={activeTab === 'manual' ? '#ffffff' : '#64748b'} 
-              />
-              <Text style={[
-                styles.tabText,
-                activeTab === 'manual' && styles.activeTabText
-              ]}>
-                Manual Topic
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[
-                styles.tab,
-                activeTab === 'notes' && styles.activeTab
-              ]}
-              onPress={() => setActiveTab('notes')}
-              activeOpacity={0.7}
-            >
-              <Ionicons 
-                name="document-text-outline" 
-                size={20} 
-                color={activeTab === 'notes' ? '#ffffff' : '#64748b'} 
-              />
-              <Text style={[
-                styles.tabText,
-                activeTab === 'notes' && styles.activeTabText
-              ]}>
-                From Notes
-              </Text>
-            </TouchableOpacity>
-          </View>
+            <View style={styles.tabsContainer}>
+              <TouchableOpacity
+                style={[
+                  styles.tab,
+                  activeTab === 'manual' && styles.activeTab
+                ]}
+                onPress={() => setActiveTab('manual')}
+                activeOpacity={0.7}
+              >
+                <Ionicons 
+                  name="create-outline" 
+                  size={20} 
+                  color={activeTab === 'manual' ? '#ffffff' : '#64748b'} 
+                />
+                <Text style={[
+                  styles.tabText,
+                  activeTab === 'manual' && styles.activeTabText
+                ]}>
+                  Manual Topic
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.tab,
+                  activeTab === 'notes' && styles.activeTab
+                ]}
+                onPress={() => setActiveTab('notes')}
+                activeOpacity={0.7}
+              >
+                <Ionicons 
+                  name="document-text-outline" 
+                  size={20} 
+                  color={activeTab === 'notes' ? '#ffffff' : '#64748b'} 
+                />
+                <Text style={[
+                  styles.tabText,
+                  activeTab === 'notes' && styles.activeTabText
+                ]}>
+                  From Notes
+                </Text>
+              </TouchableOpacity>
+            </View>
 
-          <View style={styles.content}>
-            {renderContent()}
+            <View style={styles.content}>
+              {renderContent()}
+            </View>
+          </SafeAreaView>
+        </LinearGradient>
+      </Modal>
+
+      {/* Custom Alert Modal */}
+      <CustomAlertModal
+        visible={alert.visible}
+        type={alert.type}
+        title={alert.title}
+        message={alert.message}
+        buttons={alert.buttons}
+        onClose={() => setAlert(prev => ({ ...prev, visible: false }))}
+      />
+
+      {/* Disclaimer Modal */}
+      <Modal
+        visible={showDisclaimer}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowDisclaimer(false)}
+      >
+        <View style={styles.disclaimerOverlay}>
+          <TouchableOpacity
+            style={StyleSheet.absoluteFill}
+            activeOpacity={1}
+            onPress={() => setShowDisclaimer(false)}
+          />
+
+          <View style={styles.disclaimerContainer}>
+            <View style={styles.disclaimerGlassCard}>
+              <LinearGradient
+                colors={['rgba(255, 255, 255, 0.08)', 'rgba(255, 255, 255, 0.04)']}
+                style={styles.disclaimerContent}
+              >
+                <View style={styles.disclaimerIconContainer}>
+                  <LinearGradient
+                    colors={['#f59e0b', '#d97706']}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={styles.disclaimerIconGradient}
+                  >
+                    <Ionicons name="warning" size={48} color="#ffffff" />
+                  </LinearGradient>
+                </View>
+
+                <Text style={styles.disclaimerTitle}>Before You Start</Text>
+
+                <View style={styles.disclaimerMessageContainer}>
+                  <Ionicons name="shield-checkmark" size={20} color="#94a3b8" />
+                  <Text style={styles.disclaimerMessage}>
+                    AI-generated questions may contain errors or inaccuracies. Please review each question carefully before using them for study or assessment purposes.
+                  </Text>
+                </View>
+
+                <View style={styles.disclaimerButtons}>
+                  <TouchableOpacity
+                    style={styles.disclaimerButtonWrapper}
+                    onPress={() => setShowDisclaimer(false)}
+                    activeOpacity={0.8}
+                  >
+                    <LinearGradient
+                      colors={['#475569', '#334155']}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 1 }}
+                      style={styles.disclaimerButton}
+                    >
+                      <Text style={styles.disclaimerButtonTextSecondary}>Cancel</Text>
+                    </LinearGradient>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={styles.disclaimerButtonWrapper}
+                    onPress={confirmGeneration}
+                    activeOpacity={0.8}
+                  >
+                    <LinearGradient
+                      colors={['#667eea', '#764ba2']}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 1 }}
+                      style={styles.disclaimerButton}
+                    >
+                      <Ionicons name="checkmark-circle" size={20} color="#ffffff" />
+                      <Text style={styles.disclaimerButtonText}>I Understand</Text>
+                    </LinearGradient>
+                  </TouchableOpacity>
+                </View>
+              </LinearGradient>
+            </View>
           </View>
-        </SafeAreaView>
-      </LinearGradient>
-    </Modal>
+        </View>
+      </Modal>
+    </>
   );
 };
 
@@ -894,5 +1039,102 @@ const styles = StyleSheet.create({
     color: '#bfdbfe',
     fontSize: 14,
     lineHeight: 20,
+  },
+  disclaimerOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.85)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  disclaimerContainer: {
+    width: '100%',
+    maxWidth: 420,
+  },
+  disclaimerGlassCard: {
+    borderRadius: 20,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.15)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.4,
+    shadowRadius: 16,
+    elevation: 10,
+    backgroundColor: '#1e293b',
+  },
+  disclaimerContent: {
+    padding: 28,
+    alignItems: 'center',
+    backgroundColor: 'transparent',
+  },
+  disclaimerIconContainer: {
+    width: 80,
+    height: 80,
+    borderRadius: 20,
+    marginBottom: 20,
+    overflow: 'hidden',
+    backgroundColor: 'rgba(245, 158, 11, 0.15)',
+  },
+  disclaimerIconGradient: {
+    width: '100%',
+    height: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  disclaimerTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#ffffff',
+    marginBottom: 20,
+    textAlign: 'center',
+  },
+  disclaimerMessageContainer: {
+    flexDirection: 'row',
+    backgroundColor: 'rgba(148, 163, 184, 0.1)',
+    padding: 16,
+    borderRadius: 12,
+    gap: 12,
+    alignItems: 'flex-start',
+    marginBottom: 28,
+    borderWidth: 1,
+    borderColor: 'rgba(148, 163, 184, 0.2)',
+  },
+  disclaimerMessage: {
+    flex: 1,
+    fontSize: 15,
+    color: '#cbd5e1',
+    lineHeight: 22,
+  },
+  disclaimerButtons: {
+    flexDirection: 'row',
+    gap: 12,
+    width: '100%',
+  },
+  disclaimerButtonWrapper: {
+    flex: 1,
+  },
+  disclaimerButton: {
+    height: 56,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  disclaimerButtonText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#ffffff',
+  },
+  disclaimerButtonTextSecondary: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#cbd5e1',
   },
 });

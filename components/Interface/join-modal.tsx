@@ -128,28 +128,40 @@ export default function JoinNoteModal({
       const result = await sharingService.useShareToken(token, user?.uid);
       
       Alert.alert(
-        'Success!', 
-        `You now have ${result.permission} access to "${result.note.title}"`,
-        [
-          {
-            text: 'Open Note',
-            style: 'default',
-            onPress: () => {
-              onClose();
-              setInput('');
-              
-              router.push({
-                pathname: '/screens/Notes/shared-note-viewer',
-                params: {
-                  noteId: result.note.id,
-                  permission: result.permission,
-                  isSharedAccess: 'true',
+          'Success!', 
+          `You now have ${result.permission} access to "${result.note.title}"`,
+          [
+            {
+              text: 'Open Note',
+              style: 'default',
+              onPress: () => {
+                onClose();
+                setInput('');
+                
+                // Route based on permission
+                if (result.permission === 'edit') {
+                  router.push({
+                    pathname: '/screens/Notes/note-editor',
+                    params: {
+                      noteId: result.note.id,
+                      isSharedAccess: 'true',
+                      sharedPermission: 'edit',
+                    }
+                  });
+                } else {
+                  router.push({
+                    pathname: '/screens/Notes/shared-note-viewer',
+                    params: {
+                      noteId: result.note.id,
+                      permission: 'view',
+                      isSharedAccess: 'true',
+                    }
+                  });
                 }
-              });
-              
-              onSuccess?.(result.note.id, result.permission);
-            }
-          },
+                
+                onSuccess?.(result.note.id, result.permission);
+              }
+            },
           {
             text: 'Close',
             style: 'cancel',

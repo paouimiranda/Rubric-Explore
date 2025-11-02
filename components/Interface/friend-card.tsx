@@ -59,7 +59,7 @@ export default function FriendCard({ name, status, onChatPress, username, onProf
       ['#f59e0b', '#f97316'], // Orange
       ['#10b981', '#059669'], // Green
       ['#06b6d4', '#0891b2'], // Cyan
-    ];
+    ] as any;
     return gradients[firstChar % gradients.length];
   };
 

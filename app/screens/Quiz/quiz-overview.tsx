@@ -1,7 +1,7 @@
-
-// File: app/Quiz/quiz-overview.tsx - Updated with Topic Management
+// File: app/Quiz/quiz-overview.tsx - Updated with Custom Modals
 import { convertAPIQuestionToInternalFormat, generateQuizFromAI } from '@/api/quizApi';
 import { TopicSelectionModal } from '@/components/Interface/ai-quiz-modal';
+import { CustomAlertModal } from '@/components/Interface/custom-alert-modal';
 import { QuizService, type Question, type Quiz } from '@/services/quiz-service';
 import { useQuizStore } from '@/services/stores/quiz-store';
 import { Ionicons } from '@expo/vector-icons';
@@ -10,7 +10,6 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
-  Alert,
   FlatList,
   Image,
   Modal,
@@ -24,11 +23,22 @@ import {
   View
 } from 'react-native';
 
+interface AlertState {
+  visible: boolean;
+  type: 'info' | 'success' | 'error' | 'warning';
+  title: string;
+  message: string;
+  buttons: Array<{
+    text: string;
+    onPress: () => void;
+    style?: 'default' | 'cancel' | 'primary';
+  }>;
+}
+
 const QuizOverview: React.FC = () => {
   const router = useRouter();
   const { quizId } = useLocalSearchParams();
   
-  // Zustand store
   const {
     quizTitle,
     quizImage,
@@ -56,11 +66,17 @@ const QuizOverview: React.FC = () => {
   const [newTopicInput, setNewTopicInput] = useState('');
   const [editingTopic, setEditingTopic] = useState<string | null>(null);
   const [editTopicInput, setEditTopicInput] = useState('');
-
   const [isPublic, setIsPublic] = useState(false);
   const [showPublicWarningModal, setShowPublicWarningModal] = useState(false);
 
-  // Hardcoded quiz cover images
+  const [alert, setAlert] = useState<AlertState>({
+    visible: false,
+    type: 'info',
+    title: '',
+    message: '',
+    buttons: [],
+  });
+
   const defaultQuizImages = [
     { id: 'quiz1', source: require('@/assets/covers/notebook1.jpg'), name: 'Classic Books' },
     { id: 'quiz2', source: require('@/assets/covers/notebook2.jpg'), name: 'Science Lab' },
@@ -70,17 +86,35 @@ const QuizOverview: React.FC = () => {
     { id: 'quiz6', source: require('@/assets/covers/notebook6.jpg'), name: 'Nature' },
   ];
 
-  // Load existing quiz if editing
+  const showAlert = (
+    type: AlertState['type'],
+    title: string,
+    message: string,
+    buttons?: AlertState['buttons']
+  ) => {
+    setAlert({
+      visible: true,
+      type,
+      title,
+      message,
+      buttons: buttons || [
+        {
+          text: 'OK',
+          onPress: () => setAlert(prev => ({ ...prev, visible: false })),
+          style: 'primary',
+        },
+      ],
+    });
+  };
+
   useEffect(() => {
     if (quizId && typeof quizId === 'string') {
       loadQuiz(quizId);
     } else {
-      // Reset to defaults when creating new quiz
       resetToDefaults();
     }
   }, [quizId]);
 
-  // Auto-extract topics from questions when component mounts or questions change
   useEffect(() => {
     if (questions.length > 0 && topics.length === 0) {
       extractTopicsFromQuestions();
@@ -94,15 +128,15 @@ const QuizOverview: React.FC = () => {
       if (quiz) {
         loadQuizData({
           title: quiz.title,
-          image: '', // Set if you store images in quiz data
+          image: '',
           questions: quiz.questions,
           topics: quiz.topics || []
         });
-        setIsPublic(quiz.isPublic ?? false); // ADD THIS LINE
+        setIsPublic(quiz.isPublic ?? false);
       }
     } catch (error) {
       console.error('Error loading quiz:', error);
-      Alert.alert('Error', 'Failed to load quiz');
+      showAlert('error', 'Error', 'Failed to load quiz. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -110,25 +144,25 @@ const QuizOverview: React.FC = () => {
 
   const handleSaveQuiz = async () => {
     if (!quizTitle.trim()) {
-      Alert.alert('Validation Error', 'Please enter a quiz title.');
+      showAlert('warning', 'Validation Error', 'Please enter a quiz title.');
       return;
     }
 
     if (questions.length === 0) {
-      Alert.alert('Validation Error', 'Please add at least one question.');
+      showAlert('warning', 'Validation Error', 'Please add at least one question.');
       return;
     }
 
     const quiz: Omit<Quiz, 'uid' | 'id' | 'createdAt' | 'updatedAt'> = {
       title: quizTitle,
       questions,
-      topics, // Include topics in quiz data
-      isPublic // ADD THIS LINE
+      topics,
+      isPublic
     };
 
     const validation = QuizService.validateQuiz(quiz);
     if (!validation.isValid) {
-      Alert.alert('Validation Error', validation.errors.join('\n'));
+      showAlert('error', 'Validation Error', validation.errors.join('\n'));
       return;
     }
 
@@ -143,64 +177,87 @@ const QuizOverview: React.FC = () => {
         savedQuizId = await QuizService.createQuiz(quiz);
       }
 
-      Alert.alert(
+      showAlert(
+        'success',
         'Success',
         'Quiz saved successfully!',
         [
           {
+            text: 'Continue Editing',
+            onPress: () => setAlert(prev => ({ ...prev, visible: false })),
+            style: 'cancel'
+          },
+          {
             text: 'Preview Quiz',
             onPress: () => {
-              resetToDefaults(); // Clear store before navigating
+              setAlert(prev => ({ ...prev, visible: false }));
+              resetToDefaults();
               router.push({
                 pathname: './quiz-preview',
                 params: { quizId: savedQuizId }
               });
-            }
-          },
-          {
-            text: 'Continue Editing',
-            style: 'cancel'
+            },
+            style: 'primary'
           }
         ]
       );
     } catch (error: any) {
-      Alert.alert('Error', error.message || 'Failed to save quiz');
+      showAlert('error', 'Error', error.message || 'Failed to save quiz. Please try again.');
     } finally {
       setLoading(false);
     }
   };
 
   const handleImagePicker = () => {
-    Alert.alert(
+    showAlert(
+      'info',
       'Select Quiz Image',
       'Choose an image source',
       [
         {
-          text: 'Default Images',
-          onPress: () => showDefaultImagePicker()
+          text: 'Cancel',
+          onPress: () => setAlert(prev => ({ ...prev, visible: false })),
+          style: 'cancel'
         },
         {
           text: 'Camera Roll',
-          onPress: () => selectFromCameraRoll()
+          onPress: () => {
+            setAlert(prev => ({ ...prev, visible: false }));
+            selectFromCameraRoll();
+          },
+          style: 'default'
         },
         {
-          text: 'Cancel',
-          style: 'cancel'
+          text: 'Default Images',
+          onPress: () => {
+            setAlert(prev => ({ ...prev, visible: false }));
+            showDefaultImagePicker();
+          },
+          style: 'primary'
         }
       ]
     );
   };
 
   const showDefaultImagePicker = () => {
-    Alert.alert(
+    showAlert(
+      'info',
       'Choose Default Image',
-      '',
+      'Select from available covers',
       [
+        {
+          text: 'Cancel',
+          onPress: () => setAlert(prev => ({ ...prev, visible: false })),
+          style: 'cancel'
+        },
         ...defaultQuizImages.map(image => ({
           text: image.name,
-          onPress: () => setQuizImage(image.id)
-        })),
-        { text: 'Cancel', style: 'cancel' }
+          onPress: () => {
+            setQuizImage(image.id);
+            setAlert(prev => ({ ...prev, visible: false }));
+          },
+          style: 'default' as const
+        }))
       ]
     );
   };
@@ -219,7 +276,7 @@ const QuizOverview: React.FC = () => {
       }
     } catch (error) {
       console.error('Image picker error:', error);
-      Alert.alert('Error', 'Failed to select image');
+      showAlert('error', 'Error', 'Failed to select image. Please try again.');
     }
   };
 
@@ -234,7 +291,6 @@ const QuizOverview: React.FC = () => {
   };
 
   const handleQuestionTap = (questionIndex: number) => {
-    // Set navigation state and navigate to quiz-create
     setIsFromOverview(true);
     router.push({
       pathname: './quiz-create',
@@ -243,7 +299,6 @@ const QuizOverview: React.FC = () => {
   };
 
   const handleAddQuestion = () => {
-    // Add a blank question
     const newQuestion: Question = {
       id: Date.now().toString(),
       type: 'multiple_choice',
@@ -254,30 +309,37 @@ const QuizOverview: React.FC = () => {
       timeLimit: 30,
       matchPairs: [],
       correctAnswer: '',
-      topic: '', // Empty topic initially
+      topic: '',
       points: 1
     };
 
     addQuestion(newQuestion);
     
-    // Navigate to edit the new question
     setIsFromOverview(true);
     router.push({
       pathname: './quiz-create',
-      params: { questionIndex: (questions.length).toString() } // New question will be at this index
+      params: { questionIndex: (questions.length).toString() }
     });
   };
 
   const handleDeleteQuestion = (questionIndex: number) => {
-    Alert.alert(
+    showAlert(
+      'warning',
       'Delete Question',
       'Are you sure you want to delete this question?',
       [
-        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Cancel',
+          onPress: () => setAlert(prev => ({ ...prev, visible: false })),
+          style: 'cancel'
+        },
         {
           text: 'Delete',
-          style: 'destructive',
-          onPress: () => deleteQuestion(questionIndex)
+          onPress: () => {
+            deleteQuestion(questionIndex);
+            setAlert(prev => ({ ...prev, visible: false }));
+          },
+          style: 'primary'
         }
       ]
     );
@@ -293,38 +355,42 @@ const QuizOverview: React.FC = () => {
         id: `ai_question_${Date.now()}_${index}`
       }));
 
-      // Add to existing questions
       setQuestions([...questions, ...convertedQuestions]);
       
       if (!quizTitle.trim()) {
         setQuizTitle(topic);
       }
       
-      // Extract any new topics from AI-generated questions
       extractTopicsFromQuestions();
       
-      Alert.alert("Success", `Added ${convertedQuestions.length} question${convertedQuestions.length > 1 ? 's' : ''} to your quiz!`);
+      showAlert('success', 'Success', `Added ${convertedQuestions.length} question${convertedQuestions.length > 1 ? 's' : ''} to your quiz!`);
     } catch (error: any) {
       console.error(error);
-      Alert.alert("Error", error.message || 'Failed to generate quiz questions.');
+      showAlert('error', 'Error', error.message || 'Failed to generate quiz questions. Please try again.');
     } finally {
       setLoading(false);
     }
   };
 
   const handleCancel = () => {
-    Alert.alert(
+    showAlert(
+      'warning',
       'Discard Changes?',
       'Are you sure you want to discard your changes?',
       [
-        { text: 'Keep Editing', style: 'cancel' },
+        {
+          text: 'Keep Editing',
+          onPress: () => setAlert(prev => ({ ...prev, visible: false })),
+          style: 'cancel'
+        },
         {
           text: 'Discard',
-          style: 'destructive',
           onPress: () => {
             resetToDefaults();
             router.back();
-          }
+            setAlert(prev => ({ ...prev, visible: false }));
+          },
+          style: 'primary'
         }
       ]
     );
@@ -332,30 +398,27 @@ const QuizOverview: React.FC = () => {
 
   const handlePublicToggle = (value: boolean) => {
     if (value) {
-      // Show warning when setting to public
       setShowPublicWarningModal(true);
     } else {
-      // Directly set to private without warning
       setIsPublic(false);
     }
   };
 
-const confirmSetPublic = () => {
-  setIsPublic(true);
-  setShowPublicWarningModal(false);
-};
+  const confirmSetPublic = () => {
+    setIsPublic(true);
+    setShowPublicWarningModal(false);
+  };
 
-  // Topic Management Functions
   const handleAddTopic = () => {
     const trimmedTopic = newTopicInput.trim();
     
     if (!trimmedTopic) {
-      Alert.alert('Validation Error', 'Topic name cannot be empty.');
+      showAlert('warning', 'Validation Error', 'Topic name cannot be empty.');
       return;
     }
 
     if (trimmedTopic.length > 50) {
-      Alert.alert('Validation Error', 'Topic name must be 50 characters or less.');
+      showAlert('warning', 'Validation Error', 'Topic name must be 50 characters or less.');
       return;
     }
 
@@ -363,9 +426,9 @@ const confirmSetPublic = () => {
     
     if (success) {
       setNewTopicInput('');
-      Alert.alert('Success', `Topic "${trimmedTopic}" added successfully!`);
+      showAlert('success', 'Success', `Topic "${trimmedTopic}" added successfully!`);
     } else {
-      Alert.alert('Duplicate Topic', 'This topic already exists.');
+      showAlert('warning', 'Duplicate Topic', 'This topic already exists.');
     }
   };
 
@@ -380,12 +443,12 @@ const confirmSetPublic = () => {
     const trimmedTopic = editTopicInput.trim();
     
     if (!trimmedTopic) {
-      Alert.alert('Validation Error', 'Topic name cannot be empty.');
+      showAlert('warning', 'Validation Error', 'Topic name cannot be empty.');
       return;
     }
 
     if (trimmedTopic.length > 50) {
-      Alert.alert('Validation Error', 'Topic name must be 50 characters or less.');
+      showAlert('warning', 'Validation Error', 'Topic name must be 50 characters or less.');
       return;
     }
 
@@ -394,25 +457,31 @@ const confirmSetPublic = () => {
     if (success) {
       setEditingTopic(null);
       setEditTopicInput('');
-      Alert.alert('Success', 'Topic updated successfully!');
+      showAlert('success', 'Success', 'Topic updated successfully!');
     } else {
-      Alert.alert('Error', 'A topic with this name already exists.');
+      showAlert('error', 'Error', 'A topic with this name already exists.');
     }
   };
 
   const handleDeleteTopic = (topic: string) => {
-    Alert.alert(
+    showAlert(
+      'warning',
       'Delete Topic',
       `Are you sure you want to delete "${topic}"? Questions using this topic will have their topic cleared.`,
       [
-        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Cancel',
+          onPress: () => setAlert(prev => ({ ...prev, visible: false })),
+          style: 'cancel'
+        },
         {
           text: 'Delete',
-          style: 'destructive',
           onPress: () => {
             deleteTopic(topic);
-            Alert.alert('Success', 'Topic deleted successfully!');
-          }
+            setAlert(prev => ({ ...prev, visible: false }));
+            showAlert('success', 'Success', 'Topic deleted successfully!');
+          },
+          style: 'primary'
         }
       ]
     );
@@ -492,7 +561,6 @@ const confirmSetPublic = () => {
       style={styles.container}
     >
       <SafeAreaView style={styles.container}>
-        {/* Fixed Top Bar */}
         <View style={styles.topBar}>
           <TouchableOpacity
             style={styles.cancelButton}
@@ -514,9 +582,7 @@ const confirmSetPublic = () => {
           </TouchableOpacity>
         </View>
 
-        {/* Scrollable Content */}
         <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-          {/* Quiz Image */}
           <TouchableOpacity style={styles.imageContainer} onPress={handleImagePicker}>
             {quizImage ? (
               <Image source={getImageSource(quizImage)} style={styles.quizImage} />
@@ -528,7 +594,6 @@ const confirmSetPublic = () => {
             )}
           </TouchableOpacity>
 
-          {/* Quiz Title */}
           <TextInput
             style={styles.titleInput}
             placeholder="Enter quiz title..."
@@ -538,7 +603,6 @@ const confirmSetPublic = () => {
             multiline
           />
 
-          {/* Privacy Section */}
           <View style={styles.privacySection}>
             <View style={styles.privacySectionHeader}>
               <View style={styles.privacyIconContainer}>
@@ -577,7 +641,6 @@ const confirmSetPublic = () => {
             )}
           </View>
 
-          {/* Topics Section */}
           <View style={styles.topicsSection}>
             <View style={styles.topicsHeader}>
               <Text style={styles.topicsTitle}>Topics ({topics.length})</Text>
@@ -610,7 +673,6 @@ const confirmSetPublic = () => {
             )}
           </View>
 
-          {/* Questions Section */}
           <View style={styles.questionsSection}>
             <View style={styles.questionsHeader}>
               <Text style={styles.questionsTitle}>Questions</Text>
@@ -643,7 +705,6 @@ const confirmSetPublic = () => {
             )}
           </View>
 
-          {/* Loading indicator */}
           {isLoading && (
             <View style={styles.loadingContainer}>
               <Ionicons name="hourglass-outline" size={24} color="#8b5cf6" />
@@ -652,7 +713,6 @@ const confirmSetPublic = () => {
           )}
         </ScrollView>
 
-        {/* Floating Add Question Button */}
         <TouchableOpacity 
           style={[styles.fab, { opacity: isLoading ? 0.6 : 1 }]} 
           onPress={handleAddQuestion}
@@ -662,7 +722,6 @@ const confirmSetPublic = () => {
           <Text style={styles.fabText}>Add Question</Text>
         </TouchableOpacity>
 
-        {/* Manage Topics Modal */}
         <Modal
           visible={showManageTopicsModal}
           transparent={true}
@@ -681,7 +740,6 @@ const confirmSetPublic = () => {
                 </TouchableOpacity>
               </View>
 
-              {/* Add New Topic */}
               <View style={styles.addTopicSection}>
                 <TextInput
                   style={styles.topicInput}
@@ -700,7 +758,6 @@ const confirmSetPublic = () => {
                 </TouchableOpacity>
               </View>
 
-              {/* Topics List */}
               <ScrollView style={styles.topicsListContainer}>
                 {topics.length === 0 ? (
                   <View style={styles.emptyTopicsList}>
@@ -768,7 +825,6 @@ const confirmSetPublic = () => {
                 )}
               </ScrollView>
 
-              {/* Close Button */}
               <TouchableOpacity
                 style={styles.modalCloseButton}
                 onPress={() => setShowManageTopicsModal(false)}
@@ -779,13 +835,12 @@ const confirmSetPublic = () => {
           </View>
         </Modal>
 
-        {/* Topic Selection Modal */}
         <TopicSelectionModal
           visible={showTopicModal}
           onClose={() => setShowTopicModal(false)}
           onTopicSelected={handleTopicSelected}
         />
-      {/* Public Warning Modal */}
+
         <Modal
           visible={showPublicWarningModal}
           transparent={true}
@@ -822,7 +877,16 @@ const confirmSetPublic = () => {
               </View>
             </View>
           </View>
-        </Modal>  
+        </Modal>
+
+        <CustomAlertModal
+          visible={alert.visible}
+          type={alert.type}
+          title={alert.title}
+          message={alert.message}
+          buttons={alert.buttons}
+          onClose={() => setAlert(prev => ({ ...prev, visible: false }))}
+        />
       </SafeAreaView>
     </LinearGradient>
   );
@@ -1029,7 +1093,7 @@ const styles = StyleSheet.create({
     color: '#94a3b8',
     fontSize: 16,
   },
-   topicsSection: {
+  topicsSection: {
     marginBottom: 24,
     backgroundColor: '#1e293b',
     borderRadius: 12,
@@ -1119,8 +1183,6 @@ const styles = StyleSheet.create({
     fontSize: 9,
     fontWeight: '600',
   },
-  
-  // Modal styles
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.8)',
@@ -1373,7 +1435,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
-
 });
 
 export default QuizOverview;

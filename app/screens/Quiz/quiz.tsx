@@ -1,4 +1,5 @@
-// File: app/Quiz/quiz.tsx - Enhanced Quiz Home Screen
+// File: app/Quiz/quiz.tsx - Enhanced Quiz Home Screen with Custom Alert Modal
+import { CustomAlertModal } from '@/components/Interface/custom-alert-modal';
 import JoinSessionModal from '@/components/Interface/join-session-modal';
 import BottomNavigation from "@/components/Interface/nav-bar";
 import { QuizService, type Quiz } from '@/services/quiz-service';
@@ -9,7 +10,6 @@ import { useFocusEffect, useRouter } from 'expo-router';
 import LottieView from 'lottie-react-native';
 import React, { useCallback, useState } from 'react';
 import {
-  Alert,
   Animated,
   Dimensions,
   FlatList,
@@ -30,6 +30,25 @@ const QuizHome = () => {
   const [quizzes, setQuizzes] = useState<Quiz[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  
+  // Alert modal state
+  const [alertConfig, setAlertConfig] = useState<{
+    visible: boolean;
+    type: 'info' | 'success' | 'error' | 'warning';
+    title: string;
+    message: string;
+    buttons: Array<{
+      text: string;
+      onPress: () => void;
+      style?: 'default' | 'cancel' | 'primary';
+    }>;
+  }>({
+    visible: false,
+    type: 'info',
+    title: '',
+    message: '',
+    buttons: [],
+  });
 
   useFocusEffect(
     useCallback(() => {
@@ -44,7 +63,19 @@ const QuizHome = () => {
       setQuizzes(data);
     } catch (error) {
       console.error('Error loading quizzes:', error);
-      Alert.alert('Error', 'Failed to load quizzes');
+      setAlertConfig({
+        visible: true,
+        type: 'error',
+        title: 'Error',
+        message: 'Failed to load quizzes. Please try again.',
+        buttons: [
+          {
+            text: 'OK',
+            onPress: () => setAlertConfig(prev => ({ ...prev, visible: false })),
+            style: 'primary',
+          },
+        ],
+      });
     } finally {
       setLoading(false);
     }
@@ -81,26 +112,58 @@ const QuizHome = () => {
   };
 
   const handleDeleteQuiz = (quizId: string, quizTitle: string) => {
-    Alert.alert(
-      'Delete Quiz',
-      `Are you sure you want to delete "${quizTitle}"?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
+    setAlertConfig({
+      visible: true,
+      type: 'warning',
+      title: 'Delete Quiz',
+      message: `Are you sure you want to delete "${quizTitle}"? This action cannot be undone.`,
+      buttons: [
+        {
+          text: 'Cancel',
+          onPress: () => setAlertConfig(prev => ({ ...prev, visible: false })),
+          style: 'cancel',
+        },
         {
           text: 'Delete',
-          style: 'destructive',
           onPress: async () => {
+            setAlertConfig(prev => ({ ...prev, visible: false }));
             try {
               await QuizService.deleteQuiz(quizId);
-              loadQuizzes();
+              await loadQuizzes();
+              setAlertConfig({
+                visible: true,
+                type: 'success',
+                title: 'Success',
+                message: 'Quiz deleted successfully!',
+                buttons: [
+                  {
+                    text: 'OK',
+                    onPress: () => setAlertConfig(prev => ({ ...prev, visible: false })),
+                    style: 'primary',
+                  },
+                ],
+              });
             } catch (error) {
               console.error('Error deleting quiz:', error);
-              Alert.alert('Error', 'Failed to delete quiz');
+              setAlertConfig({
+                visible: true,
+                type: 'error',
+                title: 'Error',
+                message: 'Failed to delete quiz. Please try again.',
+                buttons: [
+                  {
+                    text: 'OK',
+                    onPress: () => setAlertConfig(prev => ({ ...prev, visible: false })),
+                    style: 'primary',
+                  },
+                ],
+              });
             }
-          }
-        }
-      ]
-    );
+          },
+          style: 'primary',
+        },
+      ],
+    });
   };
 
   const getQuestionTypesPreview = (questions: any[]): string => {
@@ -161,9 +224,6 @@ const QuizHome = () => {
               <Text style={styles.quizTitle} numberOfLines={2}>
                 {item.title}
               </Text>
-              {/* <View style={styles.questionBadge}>
-                <Text style={styles.questionBadgeText}>{item.questions.length}</Text>
-              </View> */}
             </View>
 
             <View style={styles.actionButtons}>
@@ -335,6 +395,16 @@ const QuizHome = () => {
         <JoinSessionModal
           visible={joinModalVisible}
           onClose={() => setJoinModalVisible(false)}
+        />
+
+        {/* Custom Alert Modal */}
+        <CustomAlertModal
+          visible={alertConfig.visible}
+          type={alertConfig.type}
+          title={alertConfig.title}
+          message={alertConfig.message}
+          buttons={alertConfig.buttons}
+          onClose={() => setAlertConfig(prev => ({ ...prev, visible: false }))}
         />
       </SafeAreaView>
     </LinearGradient>
