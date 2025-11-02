@@ -2,19 +2,20 @@
 import { Ionicons } from "@expo/vector-icons";
 import React, { useState } from "react";
 import {
-    Alert,
-    Modal,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  Alert,
+  Modal,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
 
 interface NotebookProperty {
   key: string;
   value: string;
+  source?: 'inherited' | 'manual'; // Track if property is inherited from notebook or manually edited
 }
 
 interface PropertiesModalProps {

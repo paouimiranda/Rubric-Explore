@@ -1,4 +1,4 @@
-// services/notes-service.ts - Chunk-based refactor
+// services/notes-service.ts - WITH PROPERTY INHERITANCE & SYNC
 import {
   addDoc,
   collection,
@@ -14,7 +14,7 @@ import {
   where,
   writeBatch,
 } from "firebase/firestore";
-import { Chunk, CHUNK_CONFIG, Note, Notebook } from '../app/types/notebook';
+import { Chunk, CHUNK_CONFIG, Note, Notebook, NotebookProperty } from '../app/types/notebook';
 import { db } from "../firebase";
 
 const notesCol = collection(db, "notes");
@@ -206,6 +206,75 @@ async function reindexChunks(noteId: string, startIndex: number): Promise<void> 
   await batch.commit();
 }
 
+// ============= PROPERTY SYNC FUNCTION =============
+
+/**
+ * Syncs notebook properties to all notes in the notebook
+ * Preserves manually edited properties
+ */
+export async function syncNotePropertiesWithNotebook(
+  notebookId: string,
+  notebookProperties: NotebookProperty[],
+  uid: string
+): Promise<void> {
+  try {
+    console.log(`🔄 Syncing properties for notebook ${notebookId}`);
+    
+    // Get all notes in the notebook
+    const notes = await getNotesInNotebook(notebookId, uid);
+    
+    const batch = writeBatch(db);
+    
+    for (const note of notes) {
+      const noteRef = doc(db, "notes", note.id);
+      
+      // Get current note properties
+      const currentProperties = note.properties || [];
+      
+      // Create a map of manually edited properties (key -> property)
+      const manualPropertiesMap = new Map<string, NotebookProperty>();
+      currentProperties.forEach(prop => {
+        if (prop.source === 'manual') {
+          manualPropertiesMap.set(prop.key, prop);
+        }
+      });
+      
+      // Merge: Start with notebook properties marked as inherited
+      const mergedProperties: NotebookProperty[] = notebookProperties.map(prop => ({
+        key: prop.key,
+        value: prop.value,
+        source: 'inherited' as const
+      }));
+      
+      // Override with manual properties (preserve manual edits)
+      manualPropertiesMap.forEach((manualProp, key) => {
+        const index = mergedProperties.findIndex(p => p.key === key);
+        if (index >= 0) {
+          // Replace inherited with manual version
+          mergedProperties[index] = manualProp;
+        } else {
+          // Add manual property that doesn't exist in notebook
+          mergedProperties.push(manualProp);
+        }
+      });
+      
+      // Update the note
+      batch.update(noteRef, {
+        properties: mergedProperties,
+        updatedAt: serverTimestamp(),
+      });
+      
+      console.log(`  ✅ Synced note ${note.id}: ${mergedProperties.length} properties`);
+    }
+    
+    await batch.commit();
+    console.log(`✅ Successfully synced properties for ${notes.length} notes`);
+  } catch (error) {
+    console.error("Error syncing note properties:", error);
+    throw error;
+  }
+}
+
 // ============= NOTE OPERATIONS =============
 
 export async function getNotes(uid: string): Promise<Note[]> {
@@ -224,7 +293,7 @@ export async function getNotes(uid: string): Promise<Note[]> {
       totalCharacters: data.totalCharacters ?? 0,
       createdAt: data.createdAt?.toDate ? data.createdAt.toDate() : new Date(),
       updatedAt: data.updatedAt?.toDate ? data.updatedAt.toDate() : new Date(),
-      isPublic: data.isPublic ?? false, // ADD THIS LINE
+      isPublic: data.isPublic ?? false,
     } as Note;
   });
 }
@@ -244,11 +313,12 @@ export async function getNotebooks(uid: string): Promise<Notebook[]> {
       tags: data.tags ?? [],
       createdAt: data.createdAt?.toDate ? data.createdAt.toDate() : new Date(),
       updatedAt: data.updatedAt?.toDate ? data.updatedAt.toDate() : new Date(),
+      isPublic: data.isPublic ?? false,
     } as Notebook;
   });
 }
 
-// Create note with initial empty chunk
+// Create note with initial empty chunk and optional inherited properties
 export async function createNote(
   noteData: Omit<Note, 'id' | 'createdAt' | 'updatedAt' | 'uid' | 'chunkCount'>, 
   uid: string,
@@ -269,6 +339,8 @@ export async function createNote(
     
     // Create initial chunk
     await createChunk(docRef.id, 0, initialContent);
+    
+    console.log(`📝 Created note ${docRef.id} with ${noteData.properties?.length || 0} properties`);
     
     return docRef.id;
   } catch (error) {
@@ -368,7 +440,7 @@ export async function getNotesInNotebook(notebookId: string, uid: string): Promi
       totalCharacters: data.totalCharacters ?? 0,
       createdAt: data.createdAt?.toDate ? data.createdAt.toDate() : new Date(),
       updatedAt: data.updatedAt?.toDate ? data.updatedAt.toDate() : new Date(),
-      isPublic: data.isPublic ?? false, // ADD THIS LINE
+      isPublic: data.isPublic ?? false,
     } as Note;
   });
 }
@@ -501,4 +573,3 @@ export async function countPublicContent(uid: string): Promise<{
     };
   }
 }
-

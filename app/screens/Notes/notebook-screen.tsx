@@ -1,4 +1,4 @@
-// app/screens/Notes/notebook-screen.tsx
+// app/screens/Notes/notebook-screen.tsx - WITH PROPERTY INHERITANCE
 import { useAuth } from '@/app/contexts/AuthContext';
 import { db } from "@/firebase";
 import { Ionicons } from "@expo/vector-icons";
@@ -25,7 +25,7 @@ import {
 } from "react-native";
 
 // Import service functions
-import { createNote, deleteNote, getNotesInNotebook, updateNotebook } from '../../../services/notes-service';
+import { createNote, deleteNote, getNotesInNotebook, syncNotePropertiesWithNotebook, updateNotebook } from '../../../services/notes-service';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const HEADER_IMAGE_HEIGHT = 280;
@@ -33,6 +33,7 @@ const HEADER_IMAGE_HEIGHT = 280;
 interface NotebookProperty {
   key: string;
   value: string;
+  source?: 'inherited' | 'manual';
 }
 
 interface Notebook {
@@ -178,16 +179,28 @@ export default function NotebookScreen() {
   };
 
   const handleCreateNote = async () => {
-    if (!notebookId) return;
+    if (!notebookId || !notebook) return;
     
     try {
+      // Prepare inherited properties from notebook
+      const inheritedProperties: NotebookProperty[] = (notebook.properties || []).map(prop => ({
+        key: prop.key,
+        value: prop.value,
+        source: 'inherited' as const
+      }));
+      
       const noteData = {
         notebookId: notebookId as string,
         title: "Untitled Note",
         content: "",
-        isPublic: false, // NEW LINE
+        isPublic: false,
+        properties: inheritedProperties, // Set inherited properties
       };
+      
       const docId = await createNote(noteData, uid);
+      
+      console.log(`📝 Created note with ${inheritedProperties.length} inherited properties`);
+      
       router.push({
         pathname: "./note-editor",
         params: { noteId: docId, notebookId },
@@ -222,7 +235,7 @@ export default function NotebookScreen() {
   };
 
   const handleSaveSettings = async () => {
-    if (!notebookId || !uid) return;
+    if (!notebookId || !uid || !notebook) return;
     
     setSavingSettings(true);
     try {
@@ -250,6 +263,32 @@ export default function NotebookScreen() {
     }
   };
 
+  const handleSyncProperties = async () => {
+    if (!notebookId || !uid || !notebook) return;
+    
+    Alert.alert(
+      "Sync Properties",
+      "This will update all notes in this notebook with the current notebook properties. Manually edited properties will be preserved.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Sync",
+          onPress: async () => {
+            try {
+              const notebookProperties = notebook.properties || [];
+              await syncNotePropertiesWithNotebook(notebookId as string, notebookProperties, uid);
+              Alert.alert("Success", "Properties synced successfully");
+              fetchNotes(notebookId as string); // Refresh notes
+            } catch (error) {
+              console.error("Error syncing properties:", error);
+              Alert.alert("Error", "Failed to sync properties");
+            }
+          },
+        },
+      ]
+    );
+  };
+
   const openSettingsModal = () => {
     if (notebook) {
       setIsPublicToggle(notebook.isPublic);
@@ -259,6 +298,8 @@ export default function NotebookScreen() {
 
   const renderNote = ({ item }: { item: Note }) => {
     const primaryProperty = item.properties?.[0];
+    const inheritedCount = item.properties?.filter(p => p.source === 'inherited').length || 0;
+    const manualCount = item.properties?.filter(p => p.source === 'manual').length || 0;
     
     return (
       <TouchableOpacity
@@ -291,7 +332,11 @@ export default function NotebookScreen() {
           </View>
           {primaryProperty && (
             <View style={styles.propertyBadge}>
-              <Ionicons name="pricetag" size={10} color="#60a5fa" />
+              <Ionicons 
+                name={primaryProperty.source === 'inherited' ? 'link-outline' : 'pricetag'} 
+                size={10} 
+                color={primaryProperty.source === 'inherited' ? '#a78bfa' : '#60a5fa'} 
+              />
               <Text style={styles.propertyBadgeText}>
                 {primaryProperty.key}: {primaryProperty.value}
               </Text>
@@ -302,6 +347,11 @@ export default function NotebookScreen() {
             <Text style={styles.noteDate}>
               {item.updatedAt.toLocaleDateString()}
             </Text>
+            {(inheritedCount > 0 || manualCount > 0) && (
+              <Text style={styles.propertyCount}>
+                • {inheritedCount + manualCount} properties
+              </Text>
+            )}
           </View>
         </View>
 
@@ -399,7 +449,8 @@ export default function NotebookScreen() {
             <View style={styles.propertiesSection}>
               <View style={styles.propertiesSectionHeader}>
                 <Ionicons name="list-outline" size={14} color="#9ca3af" />
-                <Text style={styles.sectionLabel}>Properties</Text>
+                <Text style={styles.sectionLabel}>Default Properties</Text>
+                <Text style={styles.inheritanceHint}>(inherited by new notes)</Text>
               </View>
               <View style={styles.propertiesContainer}>
                 {notebook.properties.map((property, index) => (
@@ -587,6 +638,17 @@ export default function NotebookScreen() {
                       Public notebooks will be visible on your profile. Individual notes still need to be set to public separately.
                     </Text>
                   </View>
+                )}
+                
+                {/* Sync Properties Button */}
+                {notebook.properties && notebook.properties.length > 0 && (
+                  <TouchableOpacity
+                    style={styles.syncButton}
+                    onPress={handleSyncProperties}
+                  >
+                    <Ionicons name="sync-outline" size={20} color="#3b82f6" />
+                    <Text style={styles.syncButtonText}>Sync Properties to All Notes</Text>
+                  </TouchableOpacity>
                 )}
               </View>
 
@@ -830,6 +892,12 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
     marginLeft: 6,
   },
+  inheritanceHint: {
+    color: '#6b7280',
+    fontSize: 10,
+    fontStyle: 'italic',
+    marginLeft: 6,
+  },
   tagsContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -1019,6 +1087,11 @@ const styles = StyleSheet.create({
     fontSize: 13,
     marginLeft: 6,
   },
+  propertyCount: {
+    color: '#9ca3af',
+    fontSize: 12,
+    marginLeft: 4,
+  },
   noteActions: {
     justifyContent: 'center',
     alignItems: 'center',
@@ -1130,6 +1203,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
     borderColor: 'rgba(75, 85, 99, 0.3)',
+    marginBottom: 16,
   },
   settingInfo: {
     flexDirection: 'row',
@@ -1165,7 +1239,8 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(245, 158, 11, 0.1)',
     padding: 12,
     borderRadius: 12,
-    marginTop: 16,
+    marginTop: 0,
+    marginBottom: 16,
     borderWidth: 1,
     borderColor: 'rgba(245, 158, 11, 0.3)',
     gap: 12,
@@ -1175,6 +1250,22 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#f59e0b',
     lineHeight: 18,
+  },
+  syncButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(59, 130, 246, 0.1)',
+    padding: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(59, 130, 246, 0.3)',
+    gap: 8,
+  },
+  syncButtonText: {
+    color: '#3b82f6',
+    fontSize: 15,
+    fontWeight: '600',
   },
   modalActions: {
     flexDirection: 'row',

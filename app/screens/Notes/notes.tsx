@@ -1,3 +1,4 @@
+//notes.tsx == OVERVIEW OF ALL NOTEBOOKS. Can be considered the home page of the Notes module. This is where notebooks are created!
 import { JoinNoteIconButton } from '@/components/Interface/join-button';
 import BottomNavigation from "@/components/Interface/nav-bar";
 import { createNotebook, deleteNotebook, getNotebooks } from "@/services/notes-service";

@@ -239,16 +239,34 @@ const RichTextToolbar: React.FC<RichTextToolbarProps> = ({ getEditor, onMetadata
 
   const handleUndo = useCallback(() => {
     const editor = getEditor();
-    if (editor) {
-      editor.undo();
+    if (editor && editor.webviewBridge) {
+      editor.webviewBridge.injectJavaScript(`
+        (function() {
+          try {
+            document.execCommand('undo', false, null);
+          } catch (e) {
+            console.error('Undo error:', e);
+          }
+        })();
+        true;
+      `);
       setTimeout(() => checkFormattingState(), 100);
     }
   }, [getEditor, checkFormattingState]);
 
   const handleRedo = useCallback(() => {
     const editor = getEditor();
-    if (editor) {
-      editor.redo();
+    if (editor && editor.webviewBridge) {
+      editor.webviewBridge.injectJavaScript(`
+        (function() {
+          try {
+            document.execCommand('redo', false, null);
+          } catch (e) {
+            console.error('Redo error:', e);
+          }
+        })();
+        true;
+      `);
       setTimeout(() => checkFormattingState(), 100);
     }
   }, [getEditor, checkFormattingState]);
@@ -556,7 +574,6 @@ const RichTextToolbar: React.FC<RichTextToolbarProps> = ({ getEditor, onMetadata
         </ScrollView>
       </View>
 
-      {/* All modals remain the same... */}
       {/* Color Picker Modal */}
       <Modal
         visible={colorPickerVisible}

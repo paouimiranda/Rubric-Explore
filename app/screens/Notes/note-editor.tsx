@@ -90,7 +90,12 @@ export default function NoteEditor({
   }, []);
   
   const handlePropertiesUpdate = (updatedProperties: NotebookProperty[]) => {
-    setProperties(updatedProperties);
+    // Mark all updated properties as manually edited
+    const propertiesWithSource = updatedProperties.map(prop => ({
+      ...prop,
+      source: 'manual' as const
+    }));
+    setProperties(propertiesWithSource);
     setHasUnsavedChanges(true);
   };
 
@@ -378,14 +383,15 @@ export default function NoteEditor({
             />
 
             {/* Properties Section */}
-            {!effectiveIsSharedAccess && (
+            {properties.length > 0 && (
               <View style={styles.propertiesSection}>
                 {properties.map((property, index) => (
                   <TouchableOpacity
                     key={index}
                     style={styles.propertyRow}
-                    onPress={() => setPropertiesModalVisible(true)}
+                    onPress={() => !effectiveIsSharedAccess && setPropertiesModalVisible(true)}
                     activeOpacity={0.7}
+                    disabled={effectiveIsSharedAccess}
                   >
                     <Text style={styles.propertyKey}>
                       {truncateText(property.key, 20)}
@@ -396,6 +402,22 @@ export default function NoteEditor({
                   </TouchableOpacity>
                 ))}
                 
+                {!effectiveIsSharedAccess && (
+                  <TouchableOpacity
+                    style={styles.addPropertyButton}
+                    onPress={() => setPropertiesModalVisible(true)}
+                    activeOpacity={0.7}
+                  >
+                    <Ionicons name="add" size={16} color="#6b7280" />
+                    <Text style={styles.addPropertyText}>Add property</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            )}
+
+            {/* Add property button when no properties exist */}
+            {properties.length === 0 && !effectiveIsSharedAccess && (
+              <View style={styles.propertiesSection}>
                 <TouchableOpacity
                   style={styles.addPropertyButton}
                   onPress={() => setPropertiesModalVisible(true)}

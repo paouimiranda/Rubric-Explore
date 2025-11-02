@@ -2,6 +2,7 @@
 export interface NotebookProperty {
   key: string;
   value: string;
+  source?: 'inherited' | 'manual'; // Track if property is inherited from notebook or manually edited
 }
 
 export interface Notebook {
