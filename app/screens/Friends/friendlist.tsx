@@ -1,6 +1,7 @@
-// Updated friends.tsx with profile navigation
+// Updated friends.tsx with CustomAlertModal
 
 import ChatList from '@/components/Interface/chat-list';
+import { CustomAlertModal } from '@/components/Interface/custom-alert-modal';
 import FriendCard from '@/components/Interface/friend-card';
 import BottomNavigation from '@/components/Interface/nav-bar';
 import { getTotalUnreadCount } from '@/services/chat-service';
@@ -22,7 +23,6 @@ import { useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   RefreshControl,
   SafeAreaView,
   ScrollView,
@@ -57,7 +57,50 @@ export default function Friendlist() {
   const [searchLoading, setSearchLoading] = useState(false);
   const [unreadChatCount, setUnreadChatCount] = useState(0);
 
+  // Custom Alert Modal state
+  const [alertConfig, setAlertConfig] = useState<{
+    visible: boolean;
+    type: 'info' | 'success' | 'error' | 'warning';
+    title: string;
+    message: string;
+    buttons: Array<{
+      text: string;
+      onPress: () => void;
+      style?: 'default' | 'cancel' | 'primary';
+    }>;
+  }>({
+    visible: false,
+    type: 'info',
+    title: '',
+    message: '',
+    buttons: [],
+  });
+
   const currentUser = auth.currentUser;
+
+  // Helper function to show custom alert
+  const showAlert = (
+    type: 'info' | 'success' | 'error' | 'warning',
+    title: string,
+    message: string,
+    buttons: Array<{
+      text: string;
+      onPress: () => void;
+      style?: 'default' | 'cancel' | 'primary';
+    }>
+  ) => {
+    setAlertConfig({
+      visible: true,
+      type,
+      title,
+      message,
+      buttons,
+    });
+  };
+
+  const closeAlert = () => {
+    setAlertConfig(prev => ({ ...prev, visible: false }));
+  };
 
   useEffect(() => {
     if (currentUser) {
@@ -101,7 +144,12 @@ export default function Friendlist() {
       setFriends(userFriends);
     } catch (error) {
       console.error('Error loading friends:', error);
-      Alert.alert('Error', 'Failed to load friends');
+      showAlert(
+        'error',
+        'Error',
+        'Failed to load friends. Please try again.',
+        [{ text: 'OK', style: 'primary', onPress: () => closeAlert() }]
+      );
     } finally {
       setLoading(false);
     }
@@ -130,7 +178,12 @@ export default function Friendlist() {
       setSearchResults(results);
     } catch (error) {
       console.error('Error searching users:', error);
-      Alert.alert('Error', 'Failed to search users');
+      showAlert(
+        'error',
+        'Search Error',
+        'Failed to search users. Please try again.',
+        [{ text: 'OK', style: 'primary', onPress: () => closeAlert() }]
+      );
     } finally {
       setSearchLoading(false);
     }
@@ -141,30 +194,79 @@ export default function Friendlist() {
     
     try {
       await sendFriendRequest(currentUser.uid, userId);
-      Alert.alert('Success', `Friend request sent to ${username}`);
+      showAlert(
+        'success',
+        'Request Sent',
+        `Friend request sent to ${username}`,
+        [{ text: 'OK', style: 'primary', onPress: () => closeAlert() }]
+      );
       setSearchResults(prev => prev.filter(user => user.uid !== userId));
     } catch (error) {
-      Alert.alert('Error');
+      showAlert(
+        'error',
+        'Error',
+        'Failed to send friend request. Please try again.',
+        [{ text: 'OK', style: 'primary', onPress: () => closeAlert() }]
+      );
     }
   };
 
   const handleAcceptRequest = async (request: FriendRequest) => {
     try {
       await acceptFriendRequest(request.id, request.fromUserId, request.toUserId);
-      Alert.alert('Success', 'Friend request accepted');
+      showAlert(
+        'success',
+        'Friend Added',
+        `You and ${request.senderInfo.displayName} are now friends!`,
+        [{ text: 'OK', style: 'primary', onPress: () => closeAlert() }]
+      );
       loadFriends();
     } catch (error) {
-      Alert.alert('Error', 'Failed to accept friend request');
+      showAlert(
+        'error',
+        'Error',
+        'Failed to accept friend request. Please try again.',
+        [{ text: 'OK', style: 'primary', onPress: () => closeAlert() }]
+      );
     }
   };
 
   const handleRejectRequest = async (request: FriendRequest) => {
-    try {
-      await rejectFriendRequest(request.id, request.toUserId);
-      Alert.alert('Success', 'Friend request rejected');
-    } catch (error) {
-      Alert.alert('Error', 'Failed to reject friend request');
-    }
+    showAlert(
+      'warning',
+      'Reject Request',
+      `Are you sure you want to reject the friend request from ${request.senderInfo.displayName}?`,
+      [
+        { 
+          text: 'Cancel', 
+          style: 'cancel',
+          onPress: () => closeAlert()
+        },
+        {
+          text: 'Reject',
+          style: 'primary',
+          onPress: async () => {
+            closeAlert();
+            try {
+              await rejectFriendRequest(request.id, request.toUserId);
+              showAlert(
+                'success',
+                'Request Rejected',
+                'Friend request has been rejected.',
+                [{ text: 'OK', style: 'primary', onPress: () => closeAlert() }]
+              );
+            } catch (error) {
+              showAlert(
+                'error',
+                'Error',
+                'Failed to reject friend request. Please try again.',
+                [{ text: 'OK', style: 'primary', onPress: () => closeAlert() }]
+              );
+            }
+          },
+        },
+      ]
+    );
   };
 
   const onRefresh = async () => {
@@ -476,6 +578,16 @@ export default function Friendlist() {
 
         {/* Content */}
         {renderTabContent()}
+        
+        {/* Custom Alert Modal */}
+        <CustomAlertModal
+          visible={alertConfig.visible}
+          type={alertConfig.type}
+          title={alertConfig.title}
+          message={alertConfig.message}
+          buttons={alertConfig.buttons}
+          onClose={closeAlert}
+        />
         
         <BottomNavigation />
       </SafeAreaView>

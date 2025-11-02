@@ -1,4 +1,5 @@
 //notes.tsx == OVERVIEW OF ALL NOTEBOOKS. Can be considered the home page of the Notes module. This is where notebooks are created!
+import { CustomAlertModal } from '@/components/Interface/custom-alert-modal';
 import IconPicker from '@/components/Interface/icon-picker';
 import { JoinNoteIconButton } from '@/components/Interface/join-button';
 import BottomNavigation from "@/components/Interface/nav-bar";
@@ -10,7 +11,6 @@ import { router } from "expo-router";
 import LottieView from 'lottie-react-native';
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
-  Alert,
   Animated,
   Dimensions,
   FlatList,
@@ -55,6 +55,25 @@ export default function NotesHome() {
   const [showPropertyDropdown, setShowPropertyDropdown] = useState(false);
   const [showCoverImagePicker, setShowCoverImagePicker] = useState(false);
   const [showColorPicker, setShowColorPicker] = useState(false);
+
+  // Custom Alert Modal states
+  const [alertConfig, setAlertConfig] = useState<{
+    visible: boolean;
+    type: 'info' | 'success' | 'error' | 'warning';
+    title: string;
+    message: string;
+    buttons: Array<{
+      text: string;
+      onPress: () => void;
+      style?: 'default' | 'cancel' | 'primary';
+    }>;
+  }>({
+    visible: false,
+    type: 'info',
+    title: '',
+    message: '',
+    buttons: [],
+  });
 
   const availableTags = ["Personal", "School", "Work"];
   const defaultPropertyKeys = ["Course", "Instructor", "Status", "Custom"];
@@ -120,6 +139,30 @@ export default function NotesHome() {
       (G > 0 ? G : 0) * 0x100 +
       (B > 0 ? B : 0)
     ).toString(16).slice(1);
+  };
+
+  // Helper function to show custom alert
+  const showAlert = (
+    type: 'info' | 'success' | 'error' | 'warning',
+    title: string,
+    message: string,
+    buttons: Array<{
+      text: string;
+      onPress: () => void;
+      style?: 'default' | 'cancel' | 'primary';
+    }>
+  ) => {
+    setAlertConfig({
+      visible: true,
+      type,
+      title,
+      message,
+      buttons,
+    });
+  };
+
+  const closeAlert = () => {
+    setAlertConfig(prev => ({ ...prev, visible: false }));
   };
   
   const fetchNotebooks = async () => {
@@ -206,22 +249,43 @@ export default function NotesHome() {
   const handleDeleteNotebook = async (id: string) => {
     if (!uid) return;
     
-    Alert.alert("Delete Notebook", "Are you sure you want to delete this notebook?", [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Delete",
-        style: "destructive",
-        onPress: async () => {
-          try {
-            await deleteNotebook(id, uid);
-            fetchNotebooks();
-          } catch (err) {
-            console.error("Error deleting notebook:", err);
-            Alert.alert("Error", "Failed to delete notebook. You may not have permission.");
-          }
+    showAlert(
+      'warning',
+      'Delete Notebook',
+      'Are you sure you want to delete this notebook? This action cannot be undone.',
+      [
+        { 
+          text: 'Cancel', 
+          style: 'cancel',
+          onPress: () => closeAlert()
         },
-      },
-    ]);
+        {
+          text: 'Delete',
+          style: 'primary',
+          onPress: async () => {
+            closeAlert();
+            try {
+              await deleteNotebook(id, uid);
+              fetchNotebooks();
+              showAlert(
+                'success',
+                'Success',
+                'Notebook deleted successfully',
+                [{ text: 'OK', style: 'primary', onPress: () => closeAlert() }]
+              );
+            } catch (err) {
+              console.error("Error deleting notebook:", err);
+              showAlert(
+                'error',
+                'Error',
+                'Failed to delete notebook. You may not have permission.',
+                [{ text: 'OK', style: 'primary', onPress: () => closeAlert() }]
+              );
+            }
+          },
+        },
+      ]
+    );
   };
 
   const handleCreateNotebook = async () => {
@@ -248,7 +312,12 @@ export default function NotesHome() {
       });
     } catch (err) {
       console.error("Error creating notebook:", err);
-      Alert.alert("Error", "Failed to create notebook. Please try again.");
+      showAlert(
+        'error',
+        'Error',
+        'Failed to create notebook. Please try again.',
+        [{ text: 'OK', style: 'primary', onPress: () => closeAlert() }]
+      );
     } finally {
       setCreating(false)  
     }
@@ -936,16 +1005,27 @@ export default function NotesHome() {
             </View>
           </View>
         </Modal>
+
+        {/* Custom Alert Modal */}
+        <CustomAlertModal
+          visible={alertConfig.visible}
+          type={alertConfig.type}
+          title={alertConfig.title}
+          message={alertConfig.message}
+          buttons={alertConfig.buttons}
+          onClose={closeAlert}
+        />
+
         <IconPicker
-            visible={propertyIconPickerVisible}
-            onClose={() => setPropertyIconPickerVisible(false)}
-            onSelectIcon={(iconName, color) => {
-              setTempPropertyIcon(iconName);
-              setTempPropertyIconColor(color);
-            }}
-            currentIcon={tempPropertyIcon}
-            currentColor={tempPropertyIconColor}
-          />
+          visible={propertyIconPickerVisible}
+          onClose={() => setPropertyIconPickerVisible(false)}
+          onSelectIcon={(iconName, color) => {
+            setTempPropertyIcon(iconName);
+            setTempPropertyIconColor(color);
+          }}
+          currentIcon={tempPropertyIcon}
+          currentColor={tempPropertyIconColor}
+        />
       </SafeAreaView>
     </LinearGradient>
   );
@@ -1661,14 +1741,14 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   iconSelectorButton: {
-  width: 40,
-  height: 40,
-  borderRadius: 8,
-  backgroundColor: 'rgba(59, 130, 246, 0.1)',
-  justifyContent: 'center',
-  alignItems: 'center',
-  marginRight: 8,
-  borderWidth: 1,
-  borderColor: 'rgba(59, 130, 246, 0.2)',
-},
+    width: 40,
+    height: 40,
+    borderRadius: 8,
+    backgroundColor: 'rgba(59, 130, 246, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(59, 130, 246, 0.2)',
+  },
 });
