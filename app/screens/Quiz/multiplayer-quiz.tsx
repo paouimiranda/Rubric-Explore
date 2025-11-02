@@ -27,6 +27,7 @@ import {
   Image,
   Modal,
   SafeAreaView,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -654,60 +655,77 @@ const MultiplayerPlay = () => {
     );
   };
 
-  const renderPlayerScores = () => {
-    const sortedPlayers = [...players].sort((a, b) => b.score - a.score);
-    
-    return (
-      <View style={styles.playerScoresContainer}>
-        {sortedPlayers.slice(0, 3).map((player, index) => {
-          const isCurrentUser = player.uid === currentUser?.uid;
-          return (
-            <View key={player.uid} style={styles.playerScoreCard}>
-              <Text style={styles.playerScoreRank}>#{index + 1}</Text>
-              <Text style={[
-                styles.playerScoreName,
-                isCurrentUser && styles.currentUserName
-              ]}>
-                {player.displayName} {isCurrentUser && '(You)'}
-              </Text>
-              <Text style={styles.playerScoreValue}>{player.score}</Text>
-              {player.streak > 1 && (
-                <View style={styles.streakBadge}>
-                  <Ionicons name="flame" size={12} color="#f59e0b" />
-                  <Text style={styles.streakText}>{player.streak}</Text>
-                </View>
-              )}
-            </View>
-          );
-        })}
-      </View>
-    );
-  };
-
   const renderLeaderboardModal = () => (
-    <Modal visible={showLeaderboard} transparent animationType="fade">
-      <View style={styles.modalOverlay}>
-        <View style={styles.leaderboardCard}>
-          <Text style={styles.leaderboardTitle}>Current Standings</Text>
-          <FlatList
-            data={leaderboard}
-            keyExtractor={(item) => item.uid}
-            renderItem={({ item }) => {
-              const isCurrentUser = item.uid === currentUser?.uid;
-              return (
-                <View style={[
-                  styles.leaderboardItem,
-                  isCurrentUser && styles.currentUserLeaderboard
-                ]}>
-                  <Text style={styles.leaderboardRank}>#{item.rank}</Text>
-                  <Text style={styles.leaderboardName}>{item.displayName}</Text>
-                  <Text style={styles.leaderboardScore}>{item.score}</Text>
-                </View>
-              );
-            }}
-          />
-        </View>
-      </View>
+    <Modal visible={showLeaderboard} animationType="slide" presentationStyle="fullScreen">
+      <LinearGradient colors={['#0f172a', '#1e293b']} style={styles.container}>
+        <SafeAreaView style={styles.container}>
+          <View style={styles.fullScreenLeaderboardContainer}>
+            <Text style={styles.fullScreenLeaderboardTitle}>Current Standings</Text>
+            
+            {/* Mini Podium for Top 3 */}
+            {leaderboard.length >= 3 && (
+              <View style={styles.miniPodiumContainer}>
+                {(() => {
+                  const topThree = leaderboard.slice(0, 3);
+                  const reordered = [topThree[1], topThree[0], topThree[2]];
+                  const heights = [80, 120, 60];
+                  const colors = ['#f59e0b', '#eab308', '#fb923c'];
+                  const ranks = [2, 1, 3];
+
+                  return reordered.map((player, displayIndex) => {
+                    const isCurrentUser = player.uid === currentUser?.uid;
+                    const actualRank = ranks[displayIndex];
+
+                    return (
+                      <View key={player.uid} style={styles.miniPodiumSlot}>
+                        <View style={[
+                          styles.miniPodiumBar,
+                          { height: heights[displayIndex], backgroundColor: colors[displayIndex] }
+                        ]}>
+                          <Text style={styles.miniPodiumRank}>#{actualRank}</Text>
+                        </View>
+                        <Text style={[
+                          styles.miniPodiumName,
+                          isCurrentUser && styles.currentUserName
+                        ]}>
+                          {player.displayName}
+                        </Text>
+                        <Text style={styles.miniPodiumScore}>{player.score}</Text>
+                      </View>
+                    );
+                  });
+                })()}
+              </View>
+            )}
+
+            {/* Full Rankings */}
+            <View style={styles.leaderboardListContainer}>
+              <FlatList
+                data={leaderboard}
+                keyExtractor={(item) => item.uid}
+                renderItem={({ item }) => {
+                  const isCurrentUser = item.uid === currentUser?.uid;
+                  return (
+                    <View style={[
+                      styles.fullScreenLeaderboardItem,
+                      isCurrentUser && styles.currentUserLeaderboard
+                    ]}>
+                      <Text style={styles.leaderboardRank}>#{item.rank}</Text>
+                      <Text style={styles.leaderboardName}>{item.displayName}</Text>
+                      <Text style={styles.leaderboardScore}>{item.score}</Text>
+                    </View>
+                  );
+                }}
+                showsVerticalScrollIndicator={false}
+              />
+            </View>
+
+            <View style={styles.nextQuestionIndicator}>
+              <Text style={styles.nextQuestionText}>Next question coming up...</Text>
+            </View>
+          </View>
+        </SafeAreaView>
+      </LinearGradient>
     </Modal>
   );
 
@@ -869,9 +887,6 @@ const MultiplayerPlay = () => {
           <Text style={styles.timerText}>{timeLeft}s</Text>
         </View>
 
-        {/* Player Scores */}
-        {!showQuestionPreview && renderPlayerScores()}
-
         {showQuestionPreview && currentQuestion && (
           <View style={styles.questionPreviewContainer}>
             <Animated.View 
@@ -892,8 +907,16 @@ const MultiplayerPlay = () => {
           </View>
         )}
 
-        {/* Question */}
-        {!showCorrectAnswer && !showLeaderboard && !hasAnswered && !showQuestionPreview && renderQuestion()}
+        {/* Scrollable Question Content */}
+        {!showCorrectAnswer && !showLeaderboard && !hasAnswered && !showQuestionPreview && (
+          <ScrollView 
+            style={styles.scrollContainer}
+            contentContainerStyle={styles.scrollContent}
+            showsVerticalScrollIndicator={false}
+          >
+            {renderQuestion()}
+          </ScrollView>
+        )}
 
         {/* Waiting State - Full Screen */}
         {hasAnswered && !showCorrectAnswer && !showLeaderboard && (
@@ -1060,54 +1083,9 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: 'bold',
   },
-  playerScoresContainer: {
-    flexDirection: 'row',
-    paddingHorizontal: 20,
-    marginBottom: 16,
-    gap: 8,
-  },
-  playerScoreCard: {
-    flex: 1,
-    backgroundColor: '#1e293b',
-    borderRadius: 8,
-    padding: 8,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#334155',
-  },
-  playerScoreRank: {
-    color: '#8b5cf6',
-    fontSize: 12,
-    fontWeight: 'bold',
-  },
-  playerScoreName: {
-    color: '#ffffff',
-    fontSize: 12,
-    marginTop: 4,
-  },
-  currentUserName: {
-    color: '#10b981',
-  },
-  playerScoreValue: {
-    color: '#ffffff',
-    fontSize: 16,
-    fontWeight: 'bold',
-    marginTop: 4,
-  },
-  streakBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 2,
-    marginTop: 4,
-  },
-  streakText: {
-    color: '#f59e0b',
-    fontSize: 12,
-    fontWeight: 'bold',
-  },
   questionContainer: {
-    flex: 1,
     paddingHorizontal: 20,
+    paddingBottom: 20,
   },
   questionText: {
     fontSize: 24,
@@ -1119,12 +1097,13 @@ const styles = StyleSheet.create({
   },
   questionImage: {
     width: '100%',
-    height: 200,
+    height: 250,
     borderRadius: 12,
     marginBottom: 20,
+    resizeMode: 'contain',
   },
   questionContent: {
-    flex: 1,
+    // Removed flex: 1 to prevent overflow issues
   },
   optionsGrid: {
     gap: 12,
@@ -1219,7 +1198,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    flex: 1,
   },
   matchingColumn: {
     flex: 1,
@@ -1423,6 +1401,9 @@ const styles = StyleSheet.create({
     marginTop: 8,
     textAlign: 'center',
   },
+  currentUserName: {
+    color: '#10b981',
+  },
   podiumScore: {
     color: '#94a3b8',
     fontSize: 12,
@@ -1502,6 +1483,12 @@ const styles = StyleSheet.create({
   errorText: {
     color: '#ef4444',
     fontSize: 18,
+  },
+  scrollContainer: {
+    flex: 1,
+  },
+  scrollContent: {
+    paddingBottom: 100, // Space for submit button
   },
   fullScreenWaitingContainer: {
     position: 'absolute',
@@ -1592,9 +1579,9 @@ const styles = StyleSheet.create({
     flex: 1,
     textAlign: 'center',
   },
-  fullScreenLeaderboard: {
+  fullScreenLeaderboardContainer: {
     flex: 1,
-    paddingTop: 20,
+    paddingTop: 40,
   },
   fullScreenLeaderboardTitle: {
     color: '#ffffff',
@@ -1702,6 +1689,17 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
     zIndex: 1000,
+  },
+  streakBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+    marginTop: 4,
+  },
+  streakText: {
+    color: '#f59e0b',
+    fontSize: 12,
+    fontWeight: 'bold',
   },
 });
 

@@ -34,6 +34,8 @@ interface NotebookProperty {
   key: string;
   value: string;
   source?: 'inherited' | 'manual';
+  icon?: string; // Ionicon name (e.g., 'book-outline')
+  iconColor?: string; // Hex color code (default: '#6b7280')
 }
 
 interface Notebook {
@@ -186,7 +188,9 @@ export default function NotebookScreen() {
       const inheritedProperties: NotebookProperty[] = (notebook.properties || []).map(prop => ({
         key: prop.key,
         value: prop.value,
-        source: 'inherited' as const
+        source: 'inherited' as const,
+        icon: prop.icon || '',
+        iconColor: prop.iconColor || '',
       }));
       
       const noteData = {
@@ -455,7 +459,14 @@ export default function NotebookScreen() {
               <View style={styles.propertiesContainer}>
                 {notebook.properties.map((property, index) => (
                   <View key={index} style={styles.propertyRow}>
-                    <View style={styles.propertyDot} />
+                    {property.icon && (
+                      <Ionicons 
+                        name={property.icon as any} 
+                        size={16} 
+                        color={property.iconColor || '#6b7280'} 
+                        style={{ marginRight: 8 }}
+                      />
+                    )}
                     <Text style={styles.propertyKey}>{property.key}</Text>
                     <Text style={styles.propertySeparator}>·</Text>
                     <Text style={styles.propertyValue}>{property.value}</Text>

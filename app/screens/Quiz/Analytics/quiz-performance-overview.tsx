@@ -255,7 +255,7 @@ const QuizPerformanceOverview = () => {
               loop
               style={styles.lottieAnimation}
             />
-            <Text style={styles.loadingText}>Loading profile...</Text>
+            <Text style={styles.loadingText}>Loading analytics...</Text>
           </View>
         </SafeAreaView>
       </LinearGradient>

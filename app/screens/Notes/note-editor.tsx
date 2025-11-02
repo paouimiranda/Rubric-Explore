@@ -314,7 +314,7 @@ export default function NoteEditor({
   }
 
   return (
-    <LinearGradient colors={["#324762", "#0A1C3C"]} style={styles.container}>
+    <LinearGradient colors={["#324762", "#324762"]} style={styles.container}>
       <SafeAreaView style={styles.container}>
         {/* Minimalist Header */}
         <View style={styles.header}>
@@ -383,6 +383,7 @@ export default function NoteEditor({
             />
 
             {/* Properties Section */}
+            {/* Properties Section */}
             {properties.length > 0 && (
               <View style={styles.propertiesSection}>
                 {properties.map((property, index) => (
@@ -393,6 +394,16 @@ export default function NoteEditor({
                     activeOpacity={0.7}
                     disabled={effectiveIsSharedAccess}
                   >
+                    {/* Icon Display */}
+                    {property.icon && (
+                      <Ionicons 
+                        name={property.icon as any} 
+                        size={18} 
+                        color={property.iconColor || '#6b7280'} 
+                        style={{ marginRight: 8 }}
+                      />
+                    )}
+                    
                     <Text style={styles.propertyKey}>
                       {truncateText(property.key, 20)}
                     </Text>

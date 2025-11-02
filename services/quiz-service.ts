@@ -27,6 +27,7 @@ export interface Question {
 export interface Quiz {
   id?: string;
   title: string;
+  coverImage?: string;
   questions: Question[];
   uid: string;
   createdAt?: any;
@@ -120,6 +121,7 @@ export class QuizService {
       
       const quizData = {
         title: quiz.title,
+        coverImage: quiz.coverImage || '',
         questions: quiz.questions,
         category: quiz.category || '',
         tags: quiz.tags || [],

@@ -1,7 +1,8 @@
-// File: app/Quiz/quiz.tsx - Enhanced Quiz Home Screen with Custom Alert Modal
+// File: app/Quiz/quiz.tsx - Enhanced Quiz Home Screen with Cover Images
 import { CustomAlertModal } from '@/components/Interface/custom-alert-modal';
 import JoinSessionModal from '@/components/Interface/join-session-modal';
 import BottomNavigation from "@/components/Interface/nav-bar";
+import { getQuizImageSource } from '@/services/image-service';
 import { QuizService, type Quiz } from '@/services/quiz-service';
 import { useQuizStore } from '@/services/stores/quiz-store';
 import { Ionicons } from '@expo/vector-icons';
@@ -13,6 +14,7 @@ import {
   Animated,
   Dimensions,
   FlatList,
+  Image,
   RefreshControl,
   SafeAreaView,
   StyleSheet,
@@ -185,6 +187,7 @@ const QuizHome = () => {
 
   const QuizCard = ({ item }: { item: Quiz }) => {
     const [scaleAnim] = useState(new Animated.Value(1));
+    const coverImageSource = item.coverImage ? getQuizImageSource(item.coverImage) : null;
 
     const handlePressIn = () => {
       Animated.spring(scaleAnim, {
@@ -210,7 +213,7 @@ const QuizHome = () => {
           onPressOut={handlePressOut}
           activeOpacity={1}
         >
-          {/* Gradient Accent Bar */}
+          {/* Gradient Accent Bar - Always shown */}
           <LinearGradient
             colors={['#8b5cf6', '#ec4899', '#f59e0b']}
             start={{ x: 0, y: 0 }}
@@ -218,73 +221,91 @@ const QuizHome = () => {
             style={styles.accentBar}
           />
 
-          {/* Header Section */}
-          <View style={styles.cardHeader}>
-            <View style={styles.titleContainer}>
-              <Text style={styles.quizTitle} numberOfLines={2}>
-                {item.title}
+          {/* Cover Image Section - Optional */}
+          {coverImageSource && (
+            <View style={styles.coverImageContainer}>
+              <Image 
+                source={coverImageSource}
+                style={styles.coverImage}
+                resizeMode="cover"
+              />
+              <LinearGradient
+                colors={['transparent', 'rgba(30, 41, 59, 0.9)', '#1e293b']}
+                style={styles.imageGradientOverlay}
+              />
+            </View>
+          )}
+
+          {/* Content Section */}
+          <View style={[styles.contentSection, !coverImageSource && styles.contentSectionNoCover]}>
+            {/* Header Section */}
+            <View style={styles.cardHeader}>
+              <View style={styles.titleContainer}>
+                <Text style={styles.quizTitle} numberOfLines={2}>
+                  {item.title}
+                </Text>
+              </View>
+
+              <View style={styles.actionButtons}>
+                <TouchableOpacity
+                  onPress={() => handleEditQuiz(item.id!)}
+                  style={styles.iconButton}
+                >
+                  <Ionicons name="create-outline" size={20} color="#94a3b8" />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => handleDeleteQuiz(item.id!, item.title)}
+                  style={styles.iconButton}
+                >
+                  <Ionicons name="trash-outline" size={20} color="#f87171" />
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            {/* Stats Grid */}
+            <View style={styles.statsGrid}>
+              <View style={styles.statChip}>
+                <View style={[styles.statIcon, { backgroundColor: 'rgba(139, 92, 246, 0.15)' }]}>
+                  <Ionicons name="help-circle" size={14} color="#a78bfa" />
+                </View>
+                <Text style={styles.statLabel}>{item.questions.length} Questions</Text>
+              </View>
+
+              <View style={styles.statChip}>
+                <View style={[styles.statIcon, { backgroundColor: 'rgba(16, 185, 129, 0.15)' }]}>
+                  <Ionicons name="time" size={14} color="#34d399" />
+                </View>
+                <Text style={styles.statLabel}>{getTotalTimeEstimate(item.questions)}</Text>
+              </View>
+            </View>
+
+            {/* Question Types */}
+            <View style={styles.typesContainer}>
+              <Ionicons name="albums-outline" size={12} color="#64748b" />
+              <Text style={styles.typesText} numberOfLines={1}>
+                {getQuestionTypesPreview(item.questions)}
               </Text>
             </View>
 
-            <View style={styles.actionButtons}>
+            {/* Footer */}
+            <View style={styles.cardFooter}>
+              <Text style={styles.dateText}>
+                {item.createdAt?.toDate?.()?.toLocaleDateString?.() || 'Recently'}
+              </Text>
+              
               <TouchableOpacity
-                onPress={() => handleEditQuiz(item.id!)}
-                style={styles.iconButton}
+                style={styles.playButtonCompact}
+                onPress={() => handlePlayQuiz(item.id!)}
               >
-                <Ionicons name="create-outline" size={20} color="#94a3b8" />
+                <LinearGradient
+                  colors={['#10b981', '#059669']}
+                  style={styles.playButtonGradient}
+                >
+                  <Ionicons name="play" size={16} color="#ffffff" />
+                  <Text style={styles.playButtonCompactText}>Play</Text>
+                </LinearGradient>
               </TouchableOpacity>
-              <TouchableOpacity
-                onPress={() => handleDeleteQuiz(item.id!, item.title)}
-                style={styles.iconButton}
-              >
-                <Ionicons name="trash-outline" size={20} color="#f87171" />
-              </TouchableOpacity>
             </View>
-          </View>
-
-          {/* Stats Grid */}
-          <View style={styles.statsGrid}>
-            <View style={styles.statChip}>
-              <View style={[styles.statIcon, { backgroundColor: 'rgba(139, 92, 246, 0.15)' }]}>
-                <Ionicons name="help-circle" size={14} color="#a78bfa" />
-              </View>
-              <Text style={styles.statLabel}>{item.questions.length} Questions</Text>
-            </View>
-
-            <View style={styles.statChip}>
-              <View style={[styles.statIcon, { backgroundColor: 'rgba(16, 185, 129, 0.15)' }]}>
-                <Ionicons name="time" size={14} color="#34d399" />
-              </View>
-              <Text style={styles.statLabel}>{getTotalTimeEstimate(item.questions)}</Text>
-            </View>
-          </View>
-
-          {/* Question Types */}
-          <View style={styles.typesContainer}>
-            <Ionicons name="albums-outline" size={12} color="#64748b" />
-            <Text style={styles.typesText} numberOfLines={1}>
-              {getQuestionTypesPreview(item.questions)}
-            </Text>
-          </View>
-
-          {/* Footer */}
-          <View style={styles.cardFooter}>
-            <Text style={styles.dateText}>
-              {item.createdAt?.toDate?.()?.toLocaleDateString?.() || 'Recently'}
-            </Text>
-            
-            <TouchableOpacity
-              style={styles.playButtonCompact}
-              onPress={() => handlePlayQuiz(item.id!)}
-            >
-              <LinearGradient
-                colors={['#10b981', '#059669']}
-                style={styles.playButtonGradient}
-              >
-                <Ionicons name="play" size={16} color="#ffffff" />
-                <Text style={styles.playButtonCompactText}>Play</Text>
-              </LinearGradient>
-            </TouchableOpacity>
           </View>
         </TouchableOpacity>
       </Animated.View>
@@ -482,21 +503,39 @@ const styles = StyleSheet.create({
     shadowRadius: 12,
   },
   quizCardContent: {
-    padding: 20,
+    position: 'relative',
   },
-  accentBar: {
+  coverImageContainer: {
+    width: '100%',
+    height: 160,
+    position: 'relative',
+  },
+  coverImage: {
+    width: '100%',
+    height: '100%',
+  },
+  imageGradientOverlay: {
     position: 'absolute',
-    top: 0,
+    bottom: 0,
     left: 0,
     right: 0,
+    height: 10,
+  },
+  accentBar: {
     height: 4,
+    width: '100%',
+  },
+  contentSection: {
+    padding: 20,
+  },
+  contentSectionNoCover: {
+    paddingTop: 16,
   },
   cardHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
     marginBottom: 16,
-    marginTop: 4,
   },
   titleContainer: {
     flex: 1,
@@ -510,19 +549,6 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#ffffff',
     letterSpacing: -0.3,
-  },
-  questionBadge: {
-    backgroundColor: 'rgba(139, 92, 246, 0.2)',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(139, 92, 246, 0.3)',
-  },
-  questionBadgeText: {
-    color: '#a78bfa',
-    fontSize: 13,
-    fontWeight: '700',
   },
   actionButtons: {
     flexDirection: 'row',

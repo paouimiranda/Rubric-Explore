@@ -1,4 +1,5 @@
 //notes.tsx == OVERVIEW OF ALL NOTEBOOKS. Can be considered the home page of the Notes module. This is where notebooks are created!
+import IconPicker from '@/components/Interface/icon-picker';
 import { JoinNoteIconButton } from '@/components/Interface/join-button';
 import BottomNavigation from "@/components/Interface/nav-bar";
 import { createNotebook, deleteNotebook, getNotebooks } from "@/services/notes-service";
@@ -57,6 +58,11 @@ export default function NotesHome() {
 
   const availableTags = ["Personal", "School", "Work"];
   const defaultPropertyKeys = ["Course", "Instructor", "Status", "Custom"];
+
+  // Add state for icon picker
+  const [propertyIconPickerVisible, setPropertyIconPickerVisible] = useState(false);
+  const [tempPropertyIcon, setTempPropertyIcon] = useState("");
+  const [tempPropertyIconColor, setTempPropertyIconColor] = useState("#6b7280");
   
   const colorPalette = [
     { name: "Blue", color: "#3b82f6", tag: "All" },
@@ -116,7 +122,6 @@ export default function NotesHome() {
     ).toString(16).slice(1);
   };
   
-
   const fetchNotebooks = async () => {
     if (!uid) return;
     
@@ -262,9 +267,17 @@ export default function NotesHome() {
 
   const addProperty = () => {
     if (newPropertyKey && newPropertyValue) {
-      setProperties([...properties, { key: newPropertyKey, value: newPropertyValue }]);
+      const newProp: NotebookProperty = {
+        key: newPropertyKey,
+        value: newPropertyValue,
+        icon: tempPropertyIcon || '',
+        iconColor: tempPropertyIconColor !== '#6b7280' ? tempPropertyIconColor : '',
+      };
+      setProperties([...properties, newProp]);
       setNewPropertyKey("");
       setNewPropertyValue("");
+      setTempPropertyIcon("");
+      setTempPropertyIconColor("#6b7280");
     }
   };
 
@@ -812,7 +825,18 @@ export default function NotesHome() {
                 )}
               </View>
 
+
               <View style={styles.propertyRow}>
+                <TouchableOpacity
+                  style={styles.iconSelectorButton}
+                  onPress={() => setPropertyIconPickerVisible(true)}
+                >
+                  {tempPropertyIcon ? (
+                    <Ionicons name={tempPropertyIcon as any} size={20} color={tempPropertyIconColor} />
+                  ) : (
+                    <Ionicons name="add-circle-outline" size={20} color="#6b7280" />
+                  )}
+                </TouchableOpacity>
                 <View style={styles.propertyKeyContainer}>
                   <TextInput
                     style={[styles.modalInput, styles.propertyKeyInput]}
@@ -912,6 +936,16 @@ export default function NotesHome() {
             </View>
           </View>
         </Modal>
+        <IconPicker
+            visible={propertyIconPickerVisible}
+            onClose={() => setPropertyIconPickerVisible(false)}
+            onSelectIcon={(iconName, color) => {
+              setTempPropertyIcon(iconName);
+              setTempPropertyIconColor(color);
+            }}
+            currentIcon={tempPropertyIcon}
+            currentColor={tempPropertyIconColor}
+          />
       </SafeAreaView>
     </LinearGradient>
   );
@@ -1626,4 +1660,15 @@ const styles = StyleSheet.create({
     shadowRadius: 2,
     elevation: 2,
   },
+  iconSelectorButton: {
+  width: 40,
+  height: 40,
+  borderRadius: 8,
+  backgroundColor: 'rgba(59, 130, 246, 0.1)',
+  justifyContent: 'center',
+  alignItems: 'center',
+  marginRight: 8,
+  borderWidth: 1,
+  borderColor: 'rgba(59, 130, 246, 0.2)',
+},
 });

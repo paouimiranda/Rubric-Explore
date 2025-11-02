@@ -3,6 +3,8 @@ export interface NotebookProperty {
   key: string;
   value: string;
   source?: 'inherited' | 'manual'; // Track if property is inherited from notebook or manually edited
+  icon?: string; // Ionicon name (e.g., 'book-outline')
+  iconColor?: string; // Hex color code (default: '#6b7280')
 }
 
 export interface Notebook {

@@ -139,7 +139,7 @@ const QuizOverview: React.FC = () => {
       if (quiz) {
         loadQuizData({
           title: quiz.title,
-          image: quiz.questions[0]?.image || '',
+          image: quiz.coverImage || '',
           questions: quiz.questions,
           topics: quiz.topics || []
         });
@@ -167,6 +167,7 @@ const QuizOverview: React.FC = () => {
     const quiz: Omit<Quiz, 'uid' | 'id' | 'createdAt' | 'updatedAt'> = {
       title: quizTitle,
       questions,
+      coverImage: quizImage,
       topics,
       isPublic
     };
@@ -531,7 +532,7 @@ const QuizOverview: React.FC = () => {
   const renderQuestionItem = ({ item, index }: { item: Question; index: number }) => {
     const imageSource = item.image 
       ? getQuizImageSource(item.image) 
-      : getQuizImageSource(quizImage);
+      : null;
     
     return (
       <TouchableOpacity

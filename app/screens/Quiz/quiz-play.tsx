@@ -1,17 +1,18 @@
-// File: app/Quiz/quiz-play.tsx - Updated Quiz Play Screen
+// File: app/Quiz/quiz-play.tsx - Improved Quiz Play Screen with Better Scrolling
+import { CustomAlertModal } from '@/components/Interface/custom-alert-modal';
 import { QuizService, type Question, type QuestionResult, type Quiz } from '@/services/quiz-service';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  Alert,
   Animated,
   Dimensions,
   FlatList,
   Image,
   Modal,
   SafeAreaView,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -36,7 +37,7 @@ interface QuizResult {
   points: number;
 }
 
-const { width: screenWidth } = Dimensions.get('window');
+const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
 const MATCHING_COLORS = [
   '#ef4444', '#f59e0b', '#10b981', '#3b82f6', '#8b5cf6',
@@ -57,12 +58,14 @@ const QuizPlay = () => {
   const [showResults, setShowResults] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
   const [savingAttempt, setSavingAttempt] = useState(false);
+  const [showExitModal, setShowExitModal] = useState(false);
   
   // Timer and animations
   const timerRef = useRef<number | null>(null);
   const progressAnim = useRef(new Animated.Value(1)).current;
   const questionStartTime = useRef(Date.now());
   const quizStartTime = useRef(Date.now());
+  const scrollViewRef = useRef<ScrollView>(null);
   
   // Question-specific state
   const [selectedAnswers, setSelectedAnswers] = useState<number[]>([]);
@@ -81,6 +84,8 @@ const QuizPlay = () => {
   useEffect(() => {
     if (quiz && quiz.questions.length > 0) {
       initializeQuestion();
+      // Scroll to top when question changes
+      scrollViewRef.current?.scrollTo({ y: 0, animated: true });
     }
   }, [quiz, currentQuestionIndex]);
 
@@ -107,16 +112,21 @@ const QuizPlay = () => {
         })));
         quizStartTime.current = Date.now();
       } else {
-        Alert.alert('Error', 'Quiz not found');
         router.back();
       }
     } catch (error) {
       console.error('Error loading quiz:', error);
-      Alert.alert('Error', 'Failed to load quiz');
       router.back();
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleExitQuiz = () => {
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+    }
+    router.back();
   };
 
   const initializeQuestion = () => {
@@ -534,17 +544,29 @@ const QuizPlay = () => {
     const question = quiz.questions[currentQuestionIndex];
     
     return (
-      <View style={styles.questionContainer}>
-        <Text style={styles.questionText}>{question.question}</Text>
-        
-        {question.image && (
-          <Image source={{ uri: question.image }} style={styles.questionImage} />
-        )}
-        
-        {question.type === 'multiple_choice' && renderMultipleChoice(question)}
-        {question.type === 'fill_blank' && renderFillBlank(question)}
-        {question.type === 'matching' && renderMatching(question)}
-      </View>
+      <ScrollView 
+        ref={scrollViewRef}
+        style={styles.scrollContainer}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        bounces={true}
+      >
+        <View style={styles.questionContainer}>
+          <Text style={styles.questionText}>{question.question}</Text>
+          
+          {question.image && (
+            <Image 
+              source={{ uri: question.image }} 
+              style={styles.questionImage}
+              resizeMode="contain"
+            />
+          )}
+          
+          {question.type === 'multiple_choice' && renderMultipleChoice(question)}
+          {question.type === 'fill_blank' && renderFillBlank(question)}
+          {question.type === 'matching' && renderMatching(question)}
+        </View>
+      </ScrollView>
     );
   };
 
@@ -690,16 +712,7 @@ const QuizPlay = () => {
         {/* Header with progress */}
         <View style={styles.header}>
           <TouchableOpacity
-            onPress={() => {
-              Alert.alert(
-                'Exit Quiz',
-                'Are you sure you want to exit? Your progress will be lost.',
-                [
-                  { text: 'Cancel', style: 'cancel' },
-                  { text: 'Exit', style: 'destructive', onPress: () => router.back() }
-                ]
-              );
-            }}
+            onPress={() => setShowExitModal(true)}
             style={styles.exitBtn}
           >
             <Ionicons name="close" size={24} color="#ffffff" />
@@ -743,7 +756,7 @@ const QuizPlay = () => {
           <Text style={styles.timerText}>{timeLeft}s</Text>
         </View>
 
-        {/* Question */}
+        {/* Question - Now scrollable */}
         {!isPaused && renderQuestion()}
 
         {isPaused && (
@@ -759,7 +772,7 @@ const QuizPlay = () => {
           </View>
         )}
 
-        {/* Submit button */}
+        {/* Submit button - Fixed at bottom */}
         {!isPaused && (
           <View style={styles.bottomContainer}>
             <TouchableOpacity
@@ -779,6 +792,27 @@ const QuizPlay = () => {
         )}
 
         {renderResults()}
+
+        {/* Exit Confirmation Modal */}
+        <CustomAlertModal
+          visible={showExitModal}
+          type="warning"
+          title="Exit Quiz?"
+          message="Are you sure you want to exit? Your progress will be lost and won't be saved."
+          buttons={[
+            {
+              text: 'Cancel',
+              onPress: () => setShowExitModal(false),
+              style: 'cancel',
+            },
+            {
+              text: 'Exit',
+              onPress: handleExitQuiz,
+              style: 'primary',
+            },
+          ]}
+          onClose={() => setShowExitModal(false)}
+        />
       </SafeAreaView>
     </LinearGradient>
   );
@@ -790,7 +824,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 20,
-    paddingVertical: 16,
+    paddingVertical: 12,
   },
   exitBtn: {
     width: 40,
@@ -831,7 +865,7 @@ const styles = StyleSheet.create({
   },
   timerContainer: {
     marginHorizontal: 20,
-    marginBottom: 20,
+    marginBottom: 12,
     position: 'relative',
   },
   timerBar: {
@@ -847,25 +881,34 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: 'bold',
   },
-  questionContainer: {
+  scrollContainer: {
     flex: 1,
+  },
+  scrollContent: {
+    paddingBottom: 20,
+  },
+  questionContainer: {
     paddingHorizontal: 20,
+    paddingTop: 8,
   },
   questionText: {
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: 'bold',
     color: '#ffffff',
     textAlign: 'center',
     marginBottom: 20,
-    lineHeight: 30,
+    lineHeight: 28,
   },
   questionImage: {
     width: '100%',
-    height: 200,
+    height: 220,
     borderRadius: 12,
     marginBottom: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
   },
-  questionContent: { flex: 1 },
+  questionContent: { 
+    marginTop: 8,
+  },
   optionContent: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -903,27 +946,30 @@ const styles = StyleSheet.create({
   },
   matchingInstructions: {
     color: '#94a3b8',
-    fontSize: 16,
+    fontSize: 15,
     textAlign: 'center',
-    marginBottom: 20,
+    marginBottom: 16,
   },
   matchingContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
+    minHeight: 300,
+  },
+  matchingColumn: { 
     flex: 1,
   },
-  matchingColumn: { flex: 1 },
   columnHeader: {
     color: '#ffffff',
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: 'bold',
     textAlign: 'center',
     marginBottom: 12,
   },
   matchingArrow: {
     justifyContent: 'center',
-    paddingHorizontal: 12,
+    paddingHorizontal: 8,
+    paddingTop: 35,
   },
   matchingItem: {
     padding: 12,
@@ -932,6 +978,8 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: '#334155',
     position: 'relative',
+    minHeight: 50,
+    justifyContent: 'center',
   },
   leftMatchingItem: { backgroundColor: '#1e293b' },
   rightMatchingItem: { backgroundColor: '#1e293b' },
@@ -945,8 +993,9 @@ const styles = StyleSheet.create({
   },
   matchingItemText: {
     color: '#ffffff',
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '500',
+    paddingRight: 20,
   },
   matchedItemText: { color: '#d1fae5' },
   matchIndicator: {
@@ -954,7 +1003,10 @@ const styles = StyleSheet.create({
     top: 4,
     right: 4,
   },
-  bottomContainer: { padding: 20 },
+  bottomContainer: { 
+    padding: 20,
+    paddingTop: 12,
+  },
   submitBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -963,6 +1015,11 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     borderRadius: 12,
     gap: 8,
+    shadowColor: '#52C72B',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 5,
   },
   submitBtnText: {
     color: '#ffffff',

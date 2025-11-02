@@ -1,5 +1,6 @@
 // File: app/Quiz/quiz-preview.tsx
 import { getCurrentUserData } from '@/services/auth-service';
+import { getQuizImageSource } from '@/services/image-service';
 import { createMultiplayerSession } from '@/services/multiplayer-service';
 import { QuizService, type Question, type Quiz } from '@/services/quiz-service';
 import { Ionicons } from '@expo/vector-icons';
@@ -178,7 +179,7 @@ const QuizPreview = () => {
       case 'multiple_choice':
         return (
           <View style={styles.answerPreview}>
-            {question.options.slice(0, 2).map((option, index) => (
+            {question.options.map((option, index) => (
               <View key={index} style={styles.answerOption}>
                 <View
                   style={[
@@ -186,16 +187,11 @@ const QuizPreview = () => {
                     question.correctAnswers.includes(index) && styles.correctIndicator,
                   ]}
                 />
-                <Text style={styles.answerText} numberOfLines={1}>
+                <Text style={styles.answerText}>
                   {option || `Option ${index + 1}`}
                 </Text>
               </View>
             ))}
-            {question.options.length > 2 && (
-              <Text style={styles.moreAnswers}>
-                +{question.options.length - 2} more options
-              </Text>
-            )}
           </View>
         );
 
@@ -214,18 +210,13 @@ const QuizPreview = () => {
       case 'matching':
         return (
           <View style={styles.answerPreview}>
-            {question.matchPairs.slice(0, 2).map((pair, index) => (
+            {question.matchPairs.map((pair, index) => (
               <View key={index} style={styles.matchPair}>
                 <Text style={styles.matchLeft}>{pair.left}</Text>
                 <Ionicons name="arrow-forward" size={12} color="#64748b" />
                 <Text style={styles.matchRight}>{pair.right}</Text>
               </View>
             ))}
-            {question.matchPairs.length > 2 && (
-              <Text style={styles.moreAnswers}>
-                +{question.matchPairs.length - 2} more pairs
-              </Text>
-            )}
           </View>
         );
 
@@ -350,14 +341,46 @@ const QuizPreview = () => {
     );
   }
 
+  const coverImageSource = quiz.coverImage ? getQuizImageSource(quiz.coverImage) : null;
+
   return (
     <LinearGradient colors={['#0f172a', '#1e293b']} style={styles.container}>
       <SafeAreaView style={styles.container}>
-        <ScrollView contentContainerStyle={styles.scrollContent}>
-          <Text style={styles.quizTitle}>{quiz.title}</Text>
-          {/* <Text style={styles.quizDescription}>
-            {quiz.description || 'No description provided.'}
-          </Text> */}
+        {/* Fixed Back Button */}
+        <TouchableOpacity 
+          style={styles.fixedBackButton}
+          onPress={() => router.back()}
+        >
+          <Ionicons name="chevron-back" size={24} color="#ffffff" />
+        </TouchableOpacity>
+
+        <ScrollView 
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+        >
+          {/* Cover Image Header - Now inside ScrollView */}
+          {coverImageSource ? (
+            <View style={styles.coverHeaderContainer}>
+              <Image 
+                source={coverImageSource}
+                style={styles.coverHeaderImage}
+                resizeMode="cover"
+              />
+              <LinearGradient
+                colors={['transparent', 'rgba(15, 23, 42, 0.8)', '#0f172a']}
+                style={styles.coverHeaderGradient}
+              />
+              
+              {/* Title Overlay */}
+              <View style={styles.titleOverlay}>
+                <Text style={styles.quizTitleOverlay}>{quiz.title}</Text>
+              </View>
+            </View>
+          ) : (
+            <View style={styles.headerNoCover}>
+              <Text style={styles.quizTitle}>{quiz.title}</Text>
+            </View>
+          )}
 
           <QuizStats />
 
@@ -374,11 +397,6 @@ const QuizPreview = () => {
               <Ionicons name="play" size={20} color="#fff" />
               <Text style={styles.startButtonText}>Start Quiz</Text>
             </TouchableOpacity>
-{/* 
-            <TouchableOpacity style={styles.joinButton} onPress={handleJoinMultiplayer}>
-              <Ionicons name="people-outline" size={20} color="#fff" />
-              <Text style={styles.startButtonText}>Join Multiplayer</Text>
-            </TouchableOpacity> */}
 
             <TouchableOpacity style={styles.hostButton} onPress={handleHostMultiplayer}>
               <Ionicons name="rocket-outline" size={20} color="#fff" />
@@ -398,42 +416,66 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-  },
-  backBtn: {
+  fixedBackButton: {
+    position: 'absolute',
+    top: 16,
+    left: 16,
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
     justifyContent: 'center',
     alignItems: 'center',
+    zIndex: 10,
   },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#ffffff',
+  coverHeaderContainer: {
+    width: '100%',
+    height: 280,
+    position: 'relative',
+    marginBottom: 24,
   },
-  content: {
-    flex: 1,
-    paddingHorizontal: 20,
+  coverHeaderImage: {
+    width: '100%',
+    height: '100%',
   },
-  quizTitle: {
+  coverHeaderGradient: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 140,
+  },
+  titleOverlay: {
+    position: 'absolute',
+    bottom: 20,
+    left: 20,
+    right: 20,
+  },
+  quizTitleOverlay: {
     fontSize: 28,
     fontWeight: 'bold',
     color: '#ffffff',
-    textAlign: 'center',
-    marginBottom: 24,
     lineHeight: 34,
+    textShadowColor: 'rgba(0, 0, 0, 0.75)',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 4,
+  },
+  headerNoCover: {
+    paddingHorizontal: 20,
+    paddingTop: 60,
+    paddingBottom: 24,
+  },
+  quizTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#ffffff',
+    lineHeight: 30,
   },
   statsContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     marginBottom: 24,
+    paddingHorizontal: 20,
     gap: 12,
   },
   statCard: {
@@ -456,56 +498,18 @@ const styles = StyleSheet.create({
     color: '#94a3b8',
     marginTop: 4,
   },
-  actionButtons: {
-    flexDirection: 'row',
-    gap: 12,
-    marginBottom: 32,
-  },
-  playButton: {
-    flex: 2,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#10b981',
-    paddingVertical: 16,
-    borderRadius: 16,
-    gap: 8,
-  },
-  playButtonText: {
-    color: '#ffffff',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  multiplayerButton: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'transparent',
-    paddingVertical: 16,
-    borderRadius: 16,
-    borderWidth: 2,
-    borderColor: '#8b5cf6',
-    gap: 6,
-  },
-  multiplayerButtonText: {
-    color: '#8b5cf6',
-    fontSize: 14,
-    fontWeight: 'bold',
-  },
-  questionsSection: {
-    marginBottom: 32,
-  },
   sectionTitle: {
     fontSize: 20,
     fontWeight: 'bold',
     color: '#ffffff',
     marginBottom: 16,
+    paddingHorizontal: 20,
   },
   questionCard: {
     backgroundColor: '#1e293b',
     borderRadius: 12,
     marginBottom: 8,
+    marginHorizontal: 20,
     overflow: 'hidden',
     borderWidth: 1,
     borderColor: '#334155',
@@ -595,11 +599,6 @@ const styles = StyleSheet.create({
     color: '#d1d5db',
     flex: 1,
   },
-  moreAnswers: {
-    fontSize: 12,
-    color: '#64748b',
-    fontStyle: 'italic',
-  },
   fillBlankPreview: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -667,48 +666,40 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 12,
     marginTop: 20,
+    marginBottom: 20,
+    paddingHorizontal: 20,
   },
-
   startButton: {
+    flex: 1,
+    flexDirection: 'row',
     backgroundColor: '#8b5cf6',
     borderRadius: 12,
     paddingVertical: 14,
-    paddingHorizontal: 32,
+    paddingHorizontal: 20,
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 8,
     shadowColor: '#8b5cf6',
     shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.3,
     shadowRadius: 6,
     elevation: 4,
   },
-
   startButtonText: {
     color: '#ffffff',
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: 'bold',
-    textTransform: 'uppercase',
-    letterSpacing: 1,
   },
-
-  joinButton: {
-    backgroundColor: '#334155', // slate dark
-    borderRadius: 12,
-    paddingVertical: 14,
-    paddingHorizontal: 24,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: '#475569',
-  },
-
   hostButton: {
-    backgroundColor: '#22c55e', // emerald green for contrast
+    flex: 1,
+    flexDirection: 'row',
+    backgroundColor: '#22c55e',
     borderRadius: 12,
     paddingVertical: 14,
-    paddingHorizontal: 24,
+    paddingHorizontal: 20,
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 8,
     shadowColor: '#22c55e',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.3,
@@ -717,8 +708,6 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     flexGrow: 1,
-    padding: 20,
-    paddingBottom: 40, // light neutral background
+    paddingBottom: 20,
   },
 });
-
