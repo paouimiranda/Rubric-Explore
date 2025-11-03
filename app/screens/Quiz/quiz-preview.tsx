@@ -294,20 +294,32 @@ const QuizPreview = () => {
       <View style={styles.statsContainer}>
         <View style={styles.statCard}>
           <Ionicons name="help-circle-outline" size={24} color="#8b5cf6" />
-          <Text style={styles.statNumber}>{quiz.questions.length}</Text>
-          <Text style={styles.statLabel}>Questions</Text>
+          <Text style={styles.statNumber} numberOfLines={1} adjustsFontSizeToFit>
+            {quiz.questions.length}
+          </Text>
+          <Text style={styles.statLabel} numberOfLines={2} adjustsFontSizeToFit>
+            Questions
+          </Text>
         </View>
 
         <View style={styles.statCard}>
           <Ionicons name="time-outline" size={24} color="#10b981" />
-          <Text style={styles.statNumber}>{getTotalTime()}</Text>
-          <Text style={styles.statLabel}>Total Time</Text>
+          <Text style={styles.statNumber} numberOfLines={1} adjustsFontSizeToFit>
+            {getTotalTime()}
+          </Text>
+          <Text style={styles.statLabel} numberOfLines={2} adjustsFontSizeToFit>
+            Total Time
+          </Text>
         </View>
 
         <View style={styles.statCard}>
           <Ionicons name="layers-outline" size={24} color="#f59e0b" />
-          <Text style={styles.statNumber}>{Object.keys(questionTypes).length}</Text>
-          <Text style={styles.statLabel}>Question Types</Text>
+          <Text style={styles.statNumber} numberOfLines={1} adjustsFontSizeToFit>
+            {Object.keys(questionTypes).length}
+          </Text>
+          <Text style={styles.statLabel} numberOfLines={2} adjustsFontSizeToFit>
+            Types
+          </Text>
         </View>
       </View>
     );
@@ -486,17 +498,22 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderWidth: 1,
     borderColor: '#334155',
+    minHeight: 100,
   },
   statNumber: {
     fontSize: 20,
     fontWeight: 'bold',
     color: '#ffffff',
     marginTop: 8,
+    textAlign: 'center',
+    width: '100%',
   },
   statLabel: {
     fontSize: 12,
     color: '#94a3b8',
     marginTop: 4,
+    textAlign: 'center',
+    width: '100%',
   },
   sectionTitle: {
     fontSize: 20,

@@ -1,4 +1,5 @@
 //settings.tsx - IMPROVED UI with Logout
+import { CustomAlertModal } from '@/components/Interface/custom-alert-modal';
 import BottomNavigation from '@/components/Interface/nav-bar';
 import { BebasNeue_400Regular, useFonts } from '@expo-google-fonts/bebas-neue';
 import { Montserrat_300Light, Montserrat_400Regular, Montserrat_600SemiBold } from '@expo-google-fonts/montserrat';
@@ -12,7 +13,7 @@ import * as MediaLibrary from 'expo-media-library';
 import { useRouter } from 'expo-router';
 import { signOut } from 'firebase/auth';
 import React, { useEffect, useState } from 'react';
-import { Alert, Animated, LogBox, SafeAreaView, ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
+import { Animated, LogBox, SafeAreaView, ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
 import { auth } from '../../../firebase';
 import { useAuth } from '../../contexts/AuthContext';
 import TermsModal from '../Misc/t&c';
@@ -29,6 +30,8 @@ const translations: Record<string, Record<string, string>> = {
     logoutConfirm: 'Are you sure you want to log out?',
     cancel: 'Cancel',
     confirm: 'Log Out',
+    logoutError: 'Error',
+    logoutErrorMsg: 'Failed to log out. Please try again.',
   },
   tl: {
     settings: 'Mga Setting',
@@ -41,6 +44,8 @@ const translations: Record<string, Record<string, string>> = {
     logoutConfirm: 'Sigurado ka bang gusto mong mag-logout?',
     cancel: 'Kanselahin',
     confirm: 'Mag-logout',
+    logoutError: 'Error',
+    logoutErrorMsg: 'Hindi matagumpay ang pag-logout. Subukan muli.',
   },
 };
 
@@ -64,6 +69,25 @@ const SettingsScreen = () => {
   >([]);
 
   const [showPrivacyModal, setShowPrivacyModal] = useState(false);
+  
+  // Custom Alert Modal state
+  const [alertConfig, setAlertConfig] = useState<{
+    visible: boolean;
+    type: 'info' | 'success' | 'error' | 'warning';
+    title: string;
+    message: string;
+    buttons: Array<{
+      text: string;
+      onPress: () => void;
+      style?: 'default' | 'cancel' | 'primary';
+    }>;
+  }>({
+    visible: false,
+    type: 'info',
+    title: '',
+    message: '',
+    buttons: [],
+  });
 
   useEffect(() => {
     LogBox.ignoreLogs(['Text strings must be rendered within a <Text> component']);
@@ -107,18 +131,21 @@ const SettingsScreen = () => {
   }, [cameraPermission]);
 
   const handleLogout = async () => {
-    Alert.alert(
-      t.logout,
-      t.logoutConfirm,
-      [
+    setAlertConfig({
+      visible: true,
+      type: 'warning',
+      title: t.logout,
+      message: t.logoutConfirm,
+      buttons: [
         {
           text: t.cancel,
+          onPress: () => setAlertConfig(prev => ({ ...prev, visible: false })),
           style: 'cancel',
         },
         {
           text: t.confirm,
-          style: 'destructive',
           onPress: async () => {
+            setAlertConfig(prev => ({ ...prev, visible: false }));
             try {
               await signOut(auth);
               await AsyncStorage.removeItem('userData');
@@ -127,13 +154,26 @@ const SettingsScreen = () => {
               router.replace('/');
             } catch (error) {
               console.error('❌ Logout error:', error);
-              Alert.alert('Error', 'Failed to log out. Please try again.');
+              // Show error alert
+              setAlertConfig({
+                visible: true,
+                type: 'error',
+                title: t.logoutError,
+                message: t.logoutErrorMsg,
+                buttons: [
+                  {
+                    text: 'OK',
+                    onPress: () => setAlertConfig(prev => ({ ...prev, visible: false })),
+                    style: 'primary',
+                  }
+                ],
+              });
             }
           },
+          style: 'primary',
         },
       ],
-      { cancelable: true }
-    );
+    });
   };
 
   const t = translations[lang];
@@ -198,7 +238,7 @@ const SettingsScreen = () => {
             >
               <Ionicons name={iconName} size={22} color="#ffffff" />
             </LinearGradient>
-            <Text style={[styles.cardTitle, { color: textColor }]}>{title}</Text>
+            <Text style={[styles.cardTitle, { color: textColor, flex: 1, flexWrap: 'wrap' }]}>{title}</Text>
           </View>
           <Animated.View style={{ transform: [{ rotate: rotateIcon }] }}>
             <Ionicons name="chevron-down" size={20} color={textColor} />
@@ -427,11 +467,23 @@ const SettingsScreen = () => {
             </LinearGradient>
           </TouchableOpacity>
         </ScrollView>
+        
         {/* Privacy Policy Modal */}
         <TermsModal 
           visible={showPrivacyModal} 
           onClose={() => setShowPrivacyModal(false)} 
         />
+        
+        {/* Custom Alert Modal */}
+        <CustomAlertModal
+          visible={alertConfig.visible}
+          type={alertConfig.type}
+          title={alertConfig.title}
+          message={alertConfig.message}
+          buttons={alertConfig.buttons}
+          onClose={() => setAlertConfig(prev => ({ ...prev, visible: false }))}
+        />
+        
         <BottomNavigation />
       </SafeAreaView>
     </LinearGradient>

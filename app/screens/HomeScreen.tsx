@@ -1,7 +1,7 @@
 import BottomNavigation from '@/components/Interface/nav-bar';
 import { BebasNeue_400Regular, useFonts } from '@expo-google-fonts/bebas-neue';
 import { Montserrat_400Regular, Montserrat_700Bold } from '@expo-google-fonts/montserrat';
-import { BlurView } from 'expo-blur';
+
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
@@ -76,14 +76,6 @@ export default function HomeScreen() {
   const logoFadeAnim = useRef(new Animated.Value(shouldAnimate ? 0 : 1)).current;
   const logoRotateAnim = useRef(new Animated.Value(shouldAnimate ? 0 : 1)).current;
   
-  const [letterAnims, setLetterAnims] = useState(() => 
-    greeting.split('').map(() => new Animated.Value(shouldAnimate ? 0 : 1))
-  );
-
-  useEffect(() => {
-    setLetterAnims(greeting.split('').map(() => new Animated.Value(shouldAnimate ? 0 : 1)));
-  }, [greeting]);
-  
   const moduleAnims = useRef([
     new Animated.Value(shouldAnimate ? 0 : 1),
     new Animated.Value(shouldAnimate ? 0 : 1),
@@ -129,20 +121,6 @@ export default function HomeScreen() {
       }),
     ]).start();
 
-    const letterAnimations = letterAnims.map((anim, index) =>
-      Animated.timing(anim, {
-        toValue: 1,
-        duration: 300,
-        delay: index * 50,
-        useNativeDriver: true,
-      })
-    );
-
-    Animated.sequence([
-      Animated.delay(200),
-      Animated.parallel(letterAnimations),
-    ]).start();
-
     const moduleAnimations = moduleAnims.map((anim, index) =>
       Animated.spring(anim, {
         toValue: 1,
@@ -165,37 +143,21 @@ export default function HomeScreen() {
 
   const renderAnimatedText = () => (
     <View style={styles.textContainer}>
-      <View style={styles.welcomeContainer}>
-        {greeting.split('').map((letter, index) => (
-          <Animated.Text
-            key={index}
-            style={[
-              styles.welcome,
-              greeting === 'Good Afternoon' && styles.welcomeSmaller,
-              {
-                opacity: letterAnims[index],
-                transform: [
-                  {
-                    translateY: letterAnims[index].interpolate({
-                      inputRange: [0, 1],
-                      outputRange: [-20, 0],
-                    }),
-                  },
-                  {
-                    scale: letterAnims[index].interpolate({
-                      inputRange: [0, 0.5, 1],
-                      outputRange: [0.5, 1.2, 1],
-                    }),
-                  },
-                ],
-              },
-            ]}
-          >
-            {letter === ' ' ? '\u00A0' : letter}
-          </Animated.Text>
-        ))}
-      </View>
+      <Animated.Text
+        numberOfLines={1}
+        adjustsFontSizeToFit
+        minimumFontScale={0.5}
+        style={[
+          styles.welcome,
+          { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }
+        ]}
+      >
+        {greeting}
+      </Animated.Text>
       <Animated.Text 
+        numberOfLines={1}
+        adjustsFontSizeToFit
+        minimumFontScale={0.6}
         style={[
           styles.motto,
           { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }
@@ -298,7 +260,7 @@ export default function HomeScreen() {
         visible={showDisclaimer}
         onRequestClose={() => setShowDisclaimer(false)}
       >
-        <BlurView intensity={80} tint="dark" style={StyleSheet.absoluteFill}>
+        <View style={[StyleSheet.absoluteFill, styles.blurOverlay]}>
           <Animated.View style={[styles.disclaimerContainer, { opacity: disclaimerOpacity }]}>
             <LinearGradient
               colors={['#324762', '#0F2245']}
@@ -328,7 +290,7 @@ export default function HomeScreen() {
               </Pressable>
             </LinearGradient>
           </Animated.View>
-        </BlurView>
+        </View>
       </Modal>
     </LinearGradient>
   );
@@ -421,25 +383,18 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'flex-start',
   },
-  welcomeContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-  },
   welcome: {
     fontFamily: 'BebasNeue_400Regular',
     fontSize: width * 0.14,
     color: 'white',
-    lineHeight: 50,
-  },
-  welcomeSmaller: {
-    fontSize: width * 0.11,
-    lineHeight: 44,
+    width: '100%',
   },
   motto: {
     color: '#D3D3D3',
     marginTop: 2,
     fontSize: width * 0.04,
-    fontFamily: 'Montserrat_400Regular'
+    fontFamily: 'Montserrat_400Regular',
+    width: '100%',
   },
   divider: {
     borderBottomColor: '#D3D3D3',
@@ -485,12 +440,15 @@ const styles = StyleSheet.create({
     height: '50%',
     marginBottom: '4%',
   },
+  blurOverlay: {
+    backgroundColor: 'rgba(15, 44, 69, 0.95)',
+  },
   disclaimerContainer: {
-  flex: 1,
-  justifyContent: 'center',
-  alignItems: 'center',
-  paddingHorizontal: 25,
-},
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 25,
+  },
   disclaimerBox: {
     width: '100%',
     borderRadius: 20,
@@ -499,14 +457,14 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 10,
     elevation: 10,
-},
+  },
   disclaimerTitle: {
     fontSize: 22,
     fontFamily: 'Montserrat_700Bold',
     color: '#fff',
     marginBottom: 10,
     textAlign: 'center',
-},
+  },
   disclaimerText: {
     fontSize: 15,
     fontFamily: 'Montserrat_400Regular',
@@ -514,18 +472,17 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 22,
     marginBottom: 20,
-},
+  },
   disclaimerButton: {
     backgroundColor: '#4E80E1',
     borderRadius: 12,
     alignSelf: 'center',
     paddingVertical: 10,
     paddingHorizontal: 30,
-},
+  },
   disclaimerButtonText: {
     color: '#fff',
     fontSize: 16,
     fontFamily: 'Montserrat_700Bold',
-},
-
+  },
 });

@@ -328,3 +328,50 @@ export function getQuizImageSource(imageUri: string) {
   // Firebase or local URI
   return { uri: imageUri };
 }
+
+// ************************************
+//  SERVICE FILES FOR NOTES HERE!!
+// ************************************
+
+/**
+ * Upload notebook cover image to Firebase Storage
+ */
+export async function uploadNotebookCoverImage(
+  notebookId: string,
+  imageUri: string,
+  userId: string
+): Promise<ImageUploadResult> {
+  try {
+    const timestamp = Date.now();
+    const fileName = `cover_${timestamp}.jpg`;
+    const storagePath = `notebooks/${notebookId}/cover/${fileName}`;
+
+    const response = await fetch(imageUri);
+    const blob = await response.blob();
+
+    const storageRef = ref(storage, storagePath);
+
+    console.log('Uploading notebook cover to:', storagePath);
+    const snapshot = await uploadBytes(storageRef, blob, {
+      contentType: 'image/jpeg',
+      customMetadata: {
+        uploadedBy: userId,
+        uploadedAt: new Date().toISOString(),
+        type: 'notebook-cover'
+      },
+    });
+
+    const downloadURL = await getDownloadURL(snapshot.ref);
+
+    console.log('Notebook cover uploaded successfully:', downloadURL);
+
+    return {
+      url: downloadURL,
+      path: storagePath,
+      fileName: fileName,
+    };
+  } catch (error) {
+    console.error('Error uploading notebook cover:', error);
+    throw error;
+  }
+}

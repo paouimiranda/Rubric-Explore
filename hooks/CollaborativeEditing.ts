@@ -18,11 +18,11 @@ export interface CollaborativeState {
   contentInputRef: React.RefObject<TextInput | null>;
   activeChunkId: string | null;
   chunkCount: number;
-  // NEW: Undo/Redo methods
   undo: () => void;
   redo: () => void;
   canUndo: boolean;
   canRedo: boolean;
+  contentReady: boolean; // NEW: Track when content is fully loaded
 }
 
 interface TextChange {
@@ -44,10 +44,9 @@ export function useCollaborativeEditing(
   const [content, setContent] = useState(initialContent);
   const [activeChunkId, setActiveChunkId] = useState<string | null>(null);
   const [chunkCount, setChunkCount] = useState(0);
-  
-  // NEW: Undo/Redo state
   const [canUndo, setCanUndo] = useState(false);
   const [canRedo, setCanRedo] = useState(false);
+  const [contentReady, setContentReady] = useState(false); // NEW: Track content loading state
   
   const titleInputRef = useRef<TextInput | null>(null);
   const contentInputRef = useRef<TextInput | null>(null);
@@ -167,7 +166,6 @@ export function useCollaborativeEditing(
     }
   }, [noteId, user]);
 
-  // NEW: Update undo/redo state
   const updateUndoRedoState = useCallback(() => {
     if (!noteId) return;
     
@@ -184,6 +182,7 @@ export function useCollaborativeEditing(
   useEffect(() => {
     if (!noteId || !user?.uid) {
       setIsConnected(false);
+      setContentReady(false); // NEW: Reset content ready state
       return;
     }
 
@@ -233,7 +232,6 @@ export function useCollaborativeEditing(
                 previousValues.current.title = newTitle;
               }
               
-              // Update undo/redo state
               updateUndoRedoState();
             }, 100);
           };
@@ -290,7 +288,6 @@ export function useCollaborativeEditing(
                 console.log('⏭️ Skipping duplicate content update');
               }
               
-              // Update undo/redo state
               updateUndoRedoState();
             }, 300); // Longer debounce for better cursor stability
           };
@@ -318,6 +315,14 @@ export function useCollaborativeEditing(
 
         // Initialize undo/redo state
         updateUndoRedoState();
+
+        // NEW: Mark content as ready after initial load with slight delay to ensure everything is synced
+        setTimeout(() => {
+          if (mounted) {
+            console.log('✅ Content ready');
+            setContentReady(true);
+          }
+        }, 500);
 
         const updateAwareness = () => {
           if (mounted) {
@@ -349,6 +354,7 @@ export function useCollaborativeEditing(
       } catch (error) {
         console.error('❌ Error initializing chunk-based session:', error);
         setIsConnected(false);
+        setContentReady(false); // NEW: Reset on error
         if (mounted) {
           setTitle(initialTitle);
           setContent(initialContent);
@@ -496,24 +502,20 @@ export function useCollaborativeEditing(
     collaborativeService.updateUserAwareness(noteId, user.uid, cursor);
   }, [noteId, user?.uid, title, content, activeChunkId, getChunkForPosition]);
 
-  // NEW: Undo method
   const undo = useCallback(() => {
     if (!noteId) return;
     
     const success = collaborativeService.undo(noteId);
     if (success) {
-      // Content will be updated via Yjs observer
       updateUndoRedoState();
     }
   }, [noteId, updateUndoRedoState]);
 
-  // NEW: Redo method
   const redo = useCallback(() => {
     if (!noteId) return;
     
     const success = collaborativeService.redo(noteId);
     if (success) {
-      // Content will be updated via Yjs observer
       updateUndoRedoState();
     }
   }, [noteId, updateUndoRedoState]);
@@ -532,10 +534,10 @@ export function useCollaborativeEditing(
     contentInputRef,
     activeChunkId,
     chunkCount,
-    // NEW: Expose undo/redo
     undo,
     redo,
     canUndo,
     canRedo,
+    contentReady, // NEW: Export content ready state
   };
 }

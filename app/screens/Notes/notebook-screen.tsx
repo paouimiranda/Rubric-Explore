@@ -1,5 +1,6 @@
-// app/screens/Notes/notebook-screen.tsx - WITH PROPERTY INHERITANCE
+// app/screens/Notes/notebook-screen.tsx - WITH LOTTIE ANIMATIONS
 import { useAuth } from '@/app/contexts/AuthContext';
+import { CustomAlertModal } from '@/components/Interface/custom-alert-modal';
 import { db } from "@/firebase";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
@@ -8,9 +9,9 @@ import {
   doc,
   getDoc,
 } from "firebase/firestore";
-import React, { useCallback, useEffect, useState } from "react";
+import LottieView from 'lottie-react-native';
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
-  Alert,
   Dimensions,
   FlatList,
   Image,
@@ -34,8 +35,8 @@ interface NotebookProperty {
   key: string;
   value: string;
   source?: 'inherited' | 'manual';
-  icon?: string; // Ionicon name (e.g., 'book-outline')
-  iconColor?: string; // Hex color code (default: '#6b7280')
+  icon?: string;
+  iconColor?: string;
 }
 
 interface Notebook {
@@ -64,9 +65,22 @@ interface Note {
   isPublic?: boolean;
 }
 
+interface AlertState {
+  visible: boolean;
+  type: 'info' | 'success' | 'error' | 'warning';
+  title: string;
+  message: string;
+  buttons: Array<{
+    text: string;
+    onPress: () => void;
+    style?: 'default' | 'cancel' | 'primary';
+  }>;
+}
+
 export default function NotebookScreen() {
   const { user } = useAuth();
   const uid = user?.uid;
+  const lottieRef = useRef<LottieView>(null);
 
   // Add early return for unauthenticated users
   if (!uid) {
@@ -89,6 +103,15 @@ export default function NotebookScreen() {
   const [settingsModalVisible, setSettingsModalVisible] = useState(false);
   const [isPublicToggle, setIsPublicToggle] = useState(false);
   const [savingSettings, setSavingSettings] = useState(false);
+
+  // Custom alert state
+  const [alertState, setAlertState] = useState<AlertState>({
+    visible: false,
+    type: 'info',
+    title: '',
+    message: '',
+    buttons: [],
+  });
 
   // Default cover images mapping
   const defaultCoverImages = {
@@ -114,6 +137,25 @@ export default function NotebookScreen() {
     return null;
   };
 
+  const showAlert = (
+    type: AlertState['type'],
+    title: string,
+    message: string,
+    buttons: AlertState['buttons']
+  ) => {
+    setAlertState({
+      visible: true,
+      type,
+      title,
+      message,
+      buttons,
+    });
+  };
+
+  const closeAlert = () => {
+    setAlertState(prev => ({ ...prev, visible: false }));
+  };
+
   const fetchNotebook = async (id: string) => {
     try {
       const docRef = doc(db, "notebooks", id);
@@ -121,8 +163,21 @@ export default function NotebookScreen() {
       if (snap.exists()) {
         const data = snap.data();
         if (data.uid !== uid) {
-          Alert.alert("Error", "You don't have permission to view this notebook");
-          router.back();
+          showAlert(
+            'error',
+            'Access Denied',
+            "You don't have permission to view this notebook",
+            [
+              {
+                text: 'Go Back',
+                onPress: () => {
+                  closeAlert();
+                  router.back();
+                },
+                style: 'primary',
+              },
+            ]
+          );
           return;
         }
         const notebookData = {
@@ -137,7 +192,18 @@ export default function NotebookScreen() {
       }
     } catch (error) {
       console.error("Error fetching notebook:", error);
-      Alert.alert("Error", "Failed to load notebook");
+      showAlert(
+        'error',
+        'Error',
+        'Failed to load notebook',
+        [
+          {
+            text: 'OK',
+            onPress: closeAlert,
+            style: 'primary',
+          },
+        ]
+      );
     }
   };
 
@@ -147,7 +213,18 @@ export default function NotebookScreen() {
       setNotes(data as any);
     } catch (error) {
       console.error("Error fetching notes:", error);
-      Alert.alert("Error", "Failed to load notes");
+      showAlert(
+        'error',
+        'Error',
+        'Failed to load notes',
+        [
+          {
+            text: 'OK',
+            onPress: closeAlert,
+            style: 'primary',
+          },
+        ]
+      );
     }
   };
 
@@ -198,7 +275,7 @@ export default function NotebookScreen() {
         title: "Untitled Note",
         content: "",
         isPublic: false,
-        properties: inheritedProperties, // Set inherited properties
+        properties: inheritedProperties,
       };
       
       const docId = await createNote(noteData, uid);
@@ -211,28 +288,68 @@ export default function NotebookScreen() {
       });
     } catch (error) {
       console.error("Error creating note:", error);
-      Alert.alert("Error", "Failed to create note");
+      showAlert(
+        'error',
+        'Error',
+        'Failed to create note',
+        [
+          {
+            text: 'OK',
+            onPress: closeAlert,
+            style: 'primary',
+          },
+        ]
+      );
     }
   };
 
   const handleDeleteNote = async (noteId: string) => {
-    Alert.alert(
-      "Delete Note", 
-      "Are you sure you want to delete this note?", 
+    showAlert(
+      'warning',
+      'Delete Note',
+      'Are you sure you want to delete this note? This action cannot be undone.',
       [
-        { text: "Cancel", style: "cancel" },
         {
-          text: "Delete",
-          style: "destructive",
+          text: 'Cancel',
+          onPress: closeAlert,
+          style: 'cancel',
+        },
+        {
+          text: 'Delete',
           onPress: async () => {
+            closeAlert();
             try {
               await deleteNote(noteId, uid);
               fetchNotes(notebookId as string);
+              showAlert(
+                'success',
+                'Success',
+                'Note deleted successfully',
+                [
+                  {
+                    text: 'OK',
+                    onPress: closeAlert,
+                    style: 'primary',
+                  },
+                ]
+              );
             } catch (error) {
               console.error("Error deleting note:", error);
-              Alert.alert("Error", "Failed to delete note");
+              showAlert(
+                'error',
+                'Error',
+                'Failed to delete note',
+                [
+                  {
+                    text: 'OK',
+                    onPress: closeAlert,
+                    style: 'primary',
+                  },
+                ]
+              );
             }
           },
+          style: 'primary',
         },
       ]
     );
@@ -255,13 +372,32 @@ export default function NotebookScreen() {
       }
       
       setSettingsModalVisible(false);
-      Alert.alert(
-        "Success",
-        `Notebook is now ${isPublicToggle ? 'public' : 'private'}`
+      showAlert(
+        'success',
+        'Settings Updated',
+        `Notebook is now ${isPublicToggle ? 'public' : 'private'}`,
+        [
+          {
+            text: 'OK',
+            onPress: closeAlert,
+            style: 'primary',
+          },
+        ]
       );
     } catch (error) {
       console.error("Error updating notebook settings:", error);
-      Alert.alert("Error", "Failed to update notebook settings");
+      showAlert(
+        'error',
+        'Error',
+        'Failed to update notebook settings',
+        [
+          {
+            text: 'OK',
+            onPress: closeAlert,
+            style: 'primary',
+          },
+        ]
+      );
     } finally {
       setSavingSettings(false);
     }
@@ -270,24 +406,53 @@ export default function NotebookScreen() {
   const handleSyncProperties = async () => {
     if (!notebookId || !uid || !notebook) return;
     
-    Alert.alert(
-      "Sync Properties",
-      "This will update all notes in this notebook with the current notebook properties. Manually edited properties will be preserved.",
+    showAlert(
+      'info',
+      'Sync Properties',
+      'This will update all notes in this notebook with the current notebook properties. Manually edited properties will be preserved.',
       [
-        { text: "Cancel", style: "cancel" },
         {
-          text: "Sync",
+          text: 'Cancel',
+          onPress: closeAlert,
+          style: 'cancel',
+        },
+        {
+          text: 'Sync',
           onPress: async () => {
+            closeAlert();
             try {
               const notebookProperties = notebook.properties || [];
               await syncNotePropertiesWithNotebook(notebookId as string, notebookProperties, uid);
-              Alert.alert("Success", "Properties synced successfully");
-              fetchNotes(notebookId as string); // Refresh notes
+              fetchNotes(notebookId as string);
+              showAlert(
+                'success',
+                'Success',
+                'Properties synced successfully',
+                [
+                  {
+                    text: 'OK',
+                    onPress: closeAlert,
+                    style: 'primary',
+                  },
+                ]
+              );
             } catch (error) {
               console.error("Error syncing properties:", error);
-              Alert.alert("Error", "Failed to sync properties");
+              showAlert(
+                'error',
+                'Error',
+                'Failed to sync properties',
+                [
+                  {
+                    text: 'OK',
+                    onPress: closeAlert,
+                    style: 'primary',
+                  },
+                ]
+              );
             }
           },
+          style: 'primary',
         },
       ]
     );
@@ -512,8 +677,14 @@ export default function NotebookScreen() {
     return (
       <LinearGradient colors={["#324762", "#0A1C3C"]} style={styles.loadingContainer}>
         <SafeAreaView style={styles.loadingContent}>
-          <View style={styles.loadingCircle}>
-            <Ionicons name="book-outline" size={48} color="#3b82f6" />
+          <View style={styles.lottieContainer}>
+            <LottieView
+              ref={lottieRef}
+              source={require('@/assets/animations/quiz-loading.json')}
+              autoPlay
+              loop
+              style={styles.lottieAnimation}
+            />
           </View>
           <Text style={styles.loadingText}>Loading notebook...</Text>
         </SafeAreaView>
@@ -687,6 +858,16 @@ export default function NotebookScreen() {
             </View>
           </View>
         </Modal>
+
+        {/* Custom Alert Modal */}
+        <CustomAlertModal
+          visible={alertState.visible}
+          type={alertState.type}
+          title={alertState.title}
+          message={alertState.message}
+          buttons={alertState.buttons}
+          onClose={closeAlert}
+        />
       </SafeAreaView>
     </LinearGradient>
   );
@@ -705,14 +886,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 20,
   },
-  loadingCircle: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    backgroundColor: 'rgba(59, 130, 246, 0.1)',
-    justifyContent: 'center',
-    alignItems: 'center',
+  lottieContainer: {
+    width: 200,
+    height: 200,
     marginBottom: 20,
+  },
+  lottieAnimation: {
+    width: '100%',
+    height: '100%',
   },
   loadingText: {
     color: '#9ca3af',
@@ -945,13 +1126,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 6,
-  },
-  propertyDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: '#3b82f6',
-    marginRight: 10,
   },
   propertyKey: {
     color: '#9ca3af',

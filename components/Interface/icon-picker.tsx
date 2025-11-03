@@ -1,13 +1,14 @@
 // components/Interface/icon-picker.tsx
 import { Ionicons } from "@expo/vector-icons";
+import { LinearGradient } from 'expo-linear-gradient';
 import React, { useState } from "react";
 import {
-    Modal,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View
+  Modal,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
 } from "react-native";
 
 interface IconPickerProps {
@@ -86,11 +87,11 @@ const ICON_CATEGORIES = {
 
 const ICON_COLORS = [
   { name: 'Gray', color: '#6b7280' },
-  { name: 'Blue', color: '#3b82f6' },
+  { name: 'Blue', color: '#4facfe' },
   { name: 'Green', color: '#10b981' },
-  { name: 'Red', color: '#ef4444' },
-  { name: 'Yellow', color: '#f59e0b' },
-  { name: 'Purple', color: '#8b5cf6' },
+  { name: 'Red', color: '#f5576c' },
+  { name: 'Yellow', color: '#fee140' },
+  { name: 'Purple', color: '#667eea' },
   { name: 'Pink', color: '#ec4899' },
   { name: 'Indigo', color: '#6366f1' },
   { name: 'Teal', color: '#14b8a6' },
@@ -108,7 +109,6 @@ export default function IconPicker({
 }: IconPickerProps) {
   const [selectedIcon, setSelectedIcon] = useState<string>(currentIcon || '');
   const [selectedColor, setSelectedColor] = useState<string>(currentColor);
-  const [activeCategory, setActiveCategory] = useState<string>('Academic');
 
   const handleConfirm = () => {
     if (selectedIcon) {
@@ -122,15 +122,7 @@ export default function IconPicker({
     onClose();
   };
 
-  const categories = Object.keys(ICON_CATEGORIES);
-  const currentIcons = ICON_CATEGORIES[activeCategory as keyof typeof ICON_CATEGORIES] || [];
 
-  // Debug: Log current icons
-  React.useEffect(() => {
-    console.log('Active category:', activeCategory);
-    console.log('Current icons count:', currentIcons.length);
-    console.log('First 5 icons:', currentIcons.slice(0, 5));
-  }, [activeCategory, currentIcons]);
 
   return (
     <Modal
@@ -141,78 +133,76 @@ export default function IconPicker({
     >
       <View style={styles.overlay}>
         <View style={styles.container}>
+          {/* Gradient Background */}
+          <LinearGradient
+            colors={['#0A1C3C', '#1a2f4f', '#324762']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.gradientBackground}
+          />
+
           {/* Header */}
           <View style={styles.header}>
-            <Text style={styles.title}>Select Icon</Text>
-            <TouchableOpacity onPress={onClose} style={styles.closeButton}>
-              <Ionicons name="close" size={24} color="#9ca3af" />
+            <View style={styles.headerContent}>
+              <View style={styles.iconBadge}>
+                <LinearGradient
+                  colors={['#667eea', '#764ba2']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.iconBadgeGradient}
+                >
+                  <Ionicons name="color-palette" size={28} color="#fff" />
+                </LinearGradient>
+              </View>
+              <Text style={styles.title}>Choose Your Icon</Text>
+            </View>
+            <TouchableOpacity onPress={onClose} style={styles.closeButton} activeOpacity={0.7}>
+              <Ionicons name="close" size={24} color="#fff" />
             </TouchableOpacity>
           </View>
 
-
-
-          {/* Category Tabs */}
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            style={styles.categoriesContainer}
-            contentContainerStyle={styles.categoriesContent}
+          {/* All Icons with Category Headers */}
+          <ScrollView 
+            style={styles.iconsContainer} 
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={styles.scrollContent}
           >
-            {categories.map((category) => (
-              <TouchableOpacity
-                key={category}
-                style={[
-                  styles.categoryTab,
-                  activeCategory === category && styles.categoryTabActive,
-                ]}
-                onPress={() => setActiveCategory(category)}
-              >
-                <Text
-                  style={[
-                    styles.categoryText,
-                    activeCategory === category && styles.categoryTextActive,
-                  ]}
-                >
-                  {category}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-
-          {/* Icons Grid */}
-          <ScrollView style={styles.iconsContainer} showsVerticalScrollIndicator={false}>
-            <View style={styles.iconsGrid}>
-              {currentIcons.map((iconName, idx) => {
-                // Verify icon exists by trying to render it
-                try {
-                  return (
+            {Object.entries(ICON_CATEGORIES).map(([category, icons]) => (
+              <View key={category} style={styles.categorySection}>
+                <View style={styles.categoryHeaderContainer}>
+                  <View style={styles.categoryDivider} />
+                  <Text style={styles.categoryHeader}>{category}</Text>
+                  <View style={styles.categoryDivider} />
+                </View>
+                <View style={styles.iconsGrid}>
+                  {icons.map((iconName, idx) => (
                     <TouchableOpacity
                       key={`${iconName}-${idx}`}
-                      style={[
-                        styles.iconButton,
-                        selectedIcon === iconName && styles.iconButtonSelected,
-                      ]}
+                      style={[styles.iconButton]}
                       onPress={() => setSelectedIcon(iconName)}
+                      activeOpacity={0.8}
                     >
-                      <Ionicons
-                        // @ts-ignore - Ionicons type checking
-                        name={iconName}
-                        size={24}
-                        color={selectedIcon === iconName ? selectedColor : '#9ca3af'}
-                      />
+                      <View style={[
+                        styles.iconButtonInner,
+                        selectedIcon === iconName && styles.iconButtonSelected,
+                      ]}>
+                        <Ionicons
+                          // @ts-ignore - Ionicons type checking
+                          name={iconName}
+                          size={24}
+                          color={selectedIcon === iconName ? selectedColor : '#9ca3af'}
+                        />
+                      </View>
                     </TouchableOpacity>
-                  );
-                } catch (error) {
-                  console.warn(`Icon ${iconName} not found`);
-                  return null;
-                }
-              })}
-            </View>
+                  ))}
+                </View>
+              </View>
+            ))}
           </ScrollView>
 
           {/* Color Picker */}
           <View style={styles.colorSection}>
-            <Text style={styles.sectionLabel}>Icon Color</Text>
+            <Text style={styles.sectionLabel}>Select Color</Text>
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
@@ -221,26 +211,29 @@ export default function IconPicker({
               {ICON_COLORS.map((colorOption) => (
                 <TouchableOpacity
                   key={colorOption.color}
-                  style={[
-                    styles.colorButton,
-                    selectedColor === colorOption.color && styles.colorButtonSelected,
-                  ]}
+                  style={styles.colorButtonWrapper}
                   onPress={() => setSelectedColor(colorOption.color)}
+                  activeOpacity={0.8}
                 >
-                  <View
-                    style={[
-                      styles.colorCircle,
-                      { backgroundColor: colorOption.color },
-                    ]}
-                  />
-                  {selectedColor === colorOption.color && (
-                    <Ionicons
-                      name="checkmark"
-                      size={16}
-                      color="#fff"
-                      style={styles.colorCheckmark}
+                  <View style={styles.colorButton}>
+                    <View
+                      style={[
+                        styles.colorCircle,
+                        { backgroundColor: colorOption.color },
+                        selectedColor === colorOption.color && styles.colorButtonSelected,
+                      ]}
                     />
-                  )}
+                    {selectedColor === colorOption.color && (
+                      <View style={styles.colorCheckmarkContainer}>
+                        <Ionicons
+                          name="checkmark"
+                          size={18}
+                          color="#fff"
+                          style={styles.colorCheckmark}
+                        />
+                      </View>
+                    )}
+                  </View>
                 </TouchableOpacity>
               ))}
             </ScrollView>
@@ -249,13 +242,12 @@ export default function IconPicker({
           {/* Preview & Actions */}
           <View style={styles.footer}>
             <View style={styles.previewContainer}>
-              <Text style={styles.previewLabel}>Preview:</Text>
               {selectedIcon ? (
-                <View style={styles.previewIcon}>
+                <View style={styles.previewIconWrapper}>
                   <Ionicons 
                     // @ts-ignore - Ionicons type checking
                     name={selectedIcon} 
-                    size={28} 
+                    size={32} 
                     color={selectedColor} 
                   />
                 </View>
@@ -267,28 +259,38 @@ export default function IconPicker({
             <View style={styles.actions}>
               {currentIcon && (
                 <TouchableOpacity
-                  style={[styles.actionButton, styles.removeButton]}
+                  style={styles.removeButton}
                   onPress={handleRemoveIcon}
+                  activeOpacity={0.8}
                 >
-                  <Text style={styles.removeButtonText}>Remove</Text>
+                  <View style={styles.removeButtonInner}>
+                    <Ionicons name="trash-outline" size={20} color="#f5576c" />
+                    <Text style={styles.removeButtonText}>Remove</Text>
+                  </View>
                 </TouchableOpacity>
               )}
               <TouchableOpacity
-                style={[styles.actionButton, styles.cancelButton]}
+                style={styles.cancelButton}
                 onPress={onClose}
+                activeOpacity={0.8}
               >
-                <Text style={styles.cancelButtonText}>Cancel</Text>
+                <View style={styles.cancelButtonInner}>
+                  <Text style={styles.cancelButtonText}>Cancel</Text>
+                </View>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[
-                  styles.actionButton,
-                  styles.confirmButton,
-                  !selectedIcon && styles.confirmButtonDisabled,
-                ]}
+                style={[styles.confirmButton, !selectedIcon && styles.confirmButtonDisabled]}
                 onPress={handleConfirm}
                 disabled={!selectedIcon}
+                activeOpacity={0.8}
               >
-                <Text style={styles.confirmButtonText}>Confirm</Text>
+                <View style={[
+                  styles.confirmButtonGradient,
+                  { backgroundColor: selectedIcon ? selectedColor : '#4b5563' }
+                ]}>
+                  <Ionicons name="checkmark-circle" size={20} color="#fff" />
+                  <Text style={styles.confirmButtonText}>Confirm</Text>
+                </View>
               </TouchableOpacity>
             </View>
           </View>
@@ -301,155 +303,194 @@ export default function IconPicker({
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    backgroundColor: 'rgba(0, 0, 0, 0.85)',
     justifyContent: 'center',
     alignItems: 'center',
     padding: 20,
   },
   container: {
-    backgroundColor: '#1e293b',
-    borderRadius: 20,
+    borderRadius: 24,
     width: '100%',
     maxWidth: 500,
-    maxHeight: '90%',
-    borderWidth: 1,
-    borderColor: 'rgba(59, 130, 246, 0.2)',
+    height: '85%',
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.4,
+    shadowRadius: 16,
+    elevation: 12,
+  },
+  gradientBackground: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 20,
+    padding: 24,
+    paddingBottom: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(75, 85, 99, 0.3)',
+    borderBottomColor: 'rgba(255, 255, 255, 0.1)',
   },
-  title: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#ffffff',
+  headerContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
   },
-  closeButton: {
-    width: 32,
-    height: 32,
+  iconBadge: {
+    width: 56,
+    height: 56,
     borderRadius: 16,
-    backgroundColor: 'rgba(156, 163, 175, 0.1)',
+    shadowColor: '#667eea',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  iconBadgeGradient: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 16,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  searchContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#334155',
-    margin: 16,
-    marginBottom: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderRadius: 12,
-    gap: 8,
-    display: 'none', // Hidden but keeping styles
-  },
-  searchInput: {
-    flex: 1,
+  title: {
+    fontSize: 22,
+    fontWeight: '700',
     color: '#ffffff',
-    fontSize: 15,
-    display: 'none', // Hidden but keeping styles
+    letterSpacing: 0.5,
   },
-  categoriesContainer: {
-    maxHeight: 50,
-    marginBottom: 12,
-  },
-  categoriesContent: {
-    paddingHorizontal: 16,
-    gap: 8,
-  },
-  categoryTab: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+  closeButton: {
+    width: 40,
+    height: 40,
     borderRadius: 20,
-    backgroundColor: 'rgba(51, 65, 85, 0.5)',
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
     borderWidth: 1,
-    borderColor: 'rgba(75, 85, 99, 0.3)',
-  },
-  categoryTabActive: {
-    backgroundColor: '#3b82f6',
-    borderColor: '#3b82f6',
-  },
-  categoryText: {
-    color: '#9ca3af',
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  categoryTextActive: {
-    color: '#ffffff',
-    fontWeight: '600',
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   iconsContainer: {
+    flexGrow: 1,
+    flexShrink: 1,
+  },
+  scrollContent: {
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: 20,
+  },
+  categorySection: {
+    marginBottom: 24,
+  },
+  categoryHeaderContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+    gap: 12,
+  },
+  categoryDivider: {
     flex: 1,
-    paddingHorizontal: 16,
-    minHeight: 200, // Ensure minimum height
+    height: 1,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  categoryHeader: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#4facfe',
+    textTransform: 'uppercase',
+    letterSpacing: 1.2,
   },
   iconsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
-    paddingBottom: 16,
-    justifyContent: 'flex-start',
+    gap: 10,
   },
   iconButton: {
-    width: 48,
-    height: 48,
-    borderRadius: 12,
-    backgroundColor: '#334155',
+    width: 52,
+    height: 52,
+  },
+  iconButtonInner: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 14,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 2,
-    borderColor: 'transparent',
+    overflow: 'hidden',
   },
   iconButtonSelected: {
-    backgroundColor: 'rgba(59, 130, 246, 0.15)',
-    borderColor: '#3b82f6',
+    borderColor: 'rgba(255, 255, 255, 0.3)',
+    backgroundColor: 'rgba(255, 255, 255, 0.12)',
   },
   colorSection: {
-    paddingHorizontal: 16,
-    paddingTop: 16,
+    paddingHorizontal: 20,
+    paddingVertical: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.03)',
     borderTopWidth: 1,
-    borderTopColor: 'rgba(75, 85, 99, 0.3)',
+    borderTopColor: 'rgba(255, 255, 255, 0.1)',
   },
   sectionLabel: {
-    fontSize: 14,
-    fontWeight: '600',
+    fontSize: 13,
+    fontWeight: '700',
     color: '#9ca3af',
-    marginBottom: 12,
+    marginBottom: 16,
+    textTransform: 'uppercase',
+    letterSpacing: 1.2,
   },
   colorsContainer: {
-    gap: 8,
-    paddingBottom: 16,
+    gap: 12,
+    paddingBottom: 4,
+  },
+  colorButtonWrapper: {
+    marginRight: 4,
   },
   colorButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 52,
+    height: 52,
+    borderRadius: 26,
     justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
     borderWidth: 2,
-    borderColor: 'transparent',
+    borderColor: 'rgba(255, 255, 255, 0.1)',
     position: 'relative',
   },
   colorButtonSelected: {
-    borderColor: '#ffffff',
+    borderColor: 'rgba(255, 255, 255, 0.5)',
   },
   colorCircle: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+  },
+  colorCheckmarkContainer: {
+    position: 'absolute',
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: 'rgba(0, 0, 0, 0.4)',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   colorCheckmark: {
-    position: 'absolute',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
   },
   footer: {
-    padding: 16,
+    padding: 20,
+    paddingTop: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.03)',
     borderTopWidth: 1,
-    borderTopColor: 'rgba(75, 85, 99, 0.3)',
+    borderTopColor: 'rgba(255, 255, 255, 0.1)',
   },
   previewContainer: {
     flexDirection: 'row',
@@ -457,22 +498,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingVertical: 12,
     marginBottom: 12,
-    backgroundColor: 'rgba(51, 65, 85, 0.3)',
-    borderRadius: 12,
-    gap: 12,
   },
-  previewLabel: {
-    color: '#9ca3af',
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  previewIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(59, 130, 246, 0.1)',
-    justifyContent: 'center',
-    alignItems: 'center',
+  previewIconWrapper: {
+    padding: 8,
   },
   noIconText: {
     color: '#6b7280',
@@ -481,44 +509,76 @@ const styles = StyleSheet.create({
   },
   actions: {
     flexDirection: 'row',
-    gap: 8,
-  },
-  actionButton: {
-    flex: 1,
-    paddingVertical: 12,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
+    gap: 10,
   },
   removeButton: {
-    backgroundColor: 'rgba(239, 68, 68, 0.2)',
+    flex: 1,
+    height: 56,
+    borderRadius: 16,
+    overflow: 'hidden',
+  },
+  removeButtonInner: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: 'rgba(245, 87, 108, 0.15)',
     borderWidth: 1,
-    borderColor: 'rgba(239, 68, 68, 0.3)',
+    borderColor: 'rgba(245, 87, 108, 0.3)',
+    borderRadius: 16,
   },
   removeButtonText: {
-    color: '#ef4444',
+    color: '#f5576c',
     fontSize: 15,
-    fontWeight: '600',
+    fontWeight: '700',
   },
   cancelButton: {
-    backgroundColor: 'rgba(107, 114, 128, 0.2)',
+    flex: 1,
+    height: 56,
+    borderRadius: 16,
+    overflow: 'hidden',
+  },
+  cancelButtonInner: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
     borderWidth: 1,
-    borderColor: 'rgba(107, 114, 128, 0.3)',
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: 16,
   },
   cancelButtonText: {
-    color: '#9ca3af',
+    color: '#d1d5db',
     fontSize: 15,
-    fontWeight: '600',
+    fontWeight: '700',
   },
   confirmButton: {
-    backgroundColor: '#3b82f6',
+    flex: 1,
+    height: 56,
+    borderRadius: 16,
+    overflow: 'hidden',
+    shadowColor: '#4facfe',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
   },
   confirmButtonDisabled: {
     opacity: 0.5,
+    shadowOpacity: 0,
+  },
+  confirmButtonGradient: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    borderRadius: 16,
   },
   confirmButtonText: {
     color: '#ffffff',
     fontSize: 15,
-    fontWeight: '600',
+    fontWeight: '700',
   },
 });

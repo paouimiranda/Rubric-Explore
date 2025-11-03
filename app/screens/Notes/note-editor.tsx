@@ -13,6 +13,7 @@ import {
   doc,
   getDoc
 } from "firebase/firestore";
+import LottieView from 'lottie-react-native';
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   Alert,
@@ -302,12 +303,25 @@ export default function NoteEditor({
     return text.substring(0, maxLength) + '...';
   };
 
-  if (loading) {
+  // Show loading screen while note metadata is loading OR content is not ready
+  if (loading || !collaborative.contentReady) {
     return (
       <LinearGradient colors={["#324762", "#0A1C3C"]} style={styles.loadingContainer}>
         <SafeAreaView style={styles.loadingContent}>
-          <Ionicons name="document-text-outline" size={64} color="#4b5563" />
-          <Text style={styles.loadingText}>Loading note...</Text>
+          <LottieView
+            source={require('@/assets/animations/quiz-loading.json')}
+            autoPlay
+            loop
+            style={styles.lottieAnimation}
+          />
+          <Text style={styles.loadingText}>
+            {loading ? 'Loading note...' : 'Loading content...'}
+          </Text>
+          {collaborative.chunkCount > 0 && (
+            <Text style={styles.loadingSubtext}>
+              Loading {collaborative.chunkCount} chunk{collaborative.chunkCount !== 1 ? 's' : ''}
+            </Text>
+          )}
         </SafeAreaView>
       </LinearGradient>
     );
@@ -382,7 +396,6 @@ export default function NoteEditor({
               spellCheck={true}
             />
 
-            {/* Properties Section */}
             {/* Properties Section */}
             {properties.length > 0 && (
               <View style={styles.propertiesSection}>
@@ -463,7 +476,6 @@ export default function NoteEditor({
               onMetadataPress={() => setMetadataModalVisible(true)}
               noteId={routeNoteId as string}
               userId={uid!}
-              // NEW: Pass Yjs undo/redo props
               onUndo={collaborative.undo}
               onRedo={collaborative.redo}
               canUndo={collaborative.canUndo}
@@ -707,11 +719,24 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    paddingHorizontal: 20,
+  },
+  lottieAnimation: {
+    width: 200,
+    height: 200,
   },
   loadingText: {
+    color: '#ffffff',
+    fontSize: 18,
+    fontWeight: '600',
+    marginTop: 24,
+    textAlign: 'center',
+  },
+  loadingSubtext: {
     color: '#9ca3af',
-    fontSize: 16,
-    marginTop: 16,
+    fontSize: 14,
+    marginTop: 8,
+    textAlign: 'center',
   },
   header: {
     flexDirection: 'row',
@@ -896,4 +921,4 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#1f2937',
   },
-});
+})

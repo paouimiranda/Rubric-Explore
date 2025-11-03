@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "Multimodal_App",
-    "slug": "Multimodal_App",
+    "name": "Rubric",
+    "slug": "Rubric",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",

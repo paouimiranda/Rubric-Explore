@@ -1,8 +1,9 @@
-//notes.tsx == OVERVIEW OF ALL NOTEBOOKS. Can be considered the home page of the Notes module. This is where notebooks are created!
+//notes.tsx - Updated UI with improved search bar and gradient buttons
+import CreateNotebookModal from '@/components/Interface/create-notebook-modal';
 import { CustomAlertModal } from '@/components/Interface/custom-alert-modal';
-import IconPicker from '@/components/Interface/icon-picker';
 import { JoinNoteIconButton } from '@/components/Interface/join-button';
 import BottomNavigation from "@/components/Interface/nav-bar";
+import { uploadNotebookCoverImage } from '@/services/image-service';
 import { createNotebook, deleteNotebook, getNotebooks } from "@/services/notes-service";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
@@ -15,7 +16,6 @@ import {
   Dimensions,
   FlatList,
   Image,
-  Modal,
   SafeAreaView,
   ScrollView,
   StyleSheet,
@@ -35,6 +35,7 @@ const { width } = Dimensions.get('window');
 export default function NotesHome() { 
   const { user, loading: authLoading } = useAuth();
   const uid = user?.uid;
+  const lottieRef = useRef<LottieView>(null);
 
   const [notebooks, setNotebooks] = useState<Notebook[]>([]);
   const [search, setSearch] = useState("");
@@ -42,19 +43,7 @@ export default function NotesHome() {
   const [loading, setLoading] = useState<boolean>(true);
   const [creating, setCreating] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>('list');
-
-  // modal state
   const [modalVisible, setModalVisible] = useState(false);
-  const [newTitle, setNewTitle] = useState("");
-  const [newCoverImage, setNewCoverImage] = useState("");
-  const [newColor, setNewColor] = useState("#3b82f6");
-  const [newPropertyKey, setNewPropertyKey] = useState("");
-  const [newPropertyValue, setNewPropertyValue] = useState("");
-  const [properties, setProperties] = useState<NotebookProperty[]>([]);
-  const [selectedTags, setSelectedTags] = useState<string[]>([]);
-  const [showPropertyDropdown, setShowPropertyDropdown] = useState(false);
-  const [showCoverImagePicker, setShowCoverImagePicker] = useState(false);
-  const [showColorPicker, setShowColorPicker] = useState(false);
 
   // Custom Alert Modal states
   const [alertConfig, setAlertConfig] = useState<{
@@ -76,26 +65,14 @@ export default function NotesHome() {
   });
 
   const availableTags = ["Personal", "School", "Work"];
-  const defaultPropertyKeys = ["Course", "Instructor", "Status", "Custom"];
+  
+  const tagColors = {
+    "All": "#3b82f6",
+    "Personal": "#10b981",
+    "School": "#f59e0b",
+    "Work": "#8b5cf6",
+  };
 
-  // Add state for icon picker
-  const [propertyIconPickerVisible, setPropertyIconPickerVisible] = useState(false);
-  const [tempPropertyIcon, setTempPropertyIcon] = useState("");
-  const [tempPropertyIconColor, setTempPropertyIconColor] = useState("#6b7280");
-  
-  const colorPalette = [
-    { name: "Blue", color: "#3b82f6", tag: "All" },
-    { name: "Green", color: "#10b981", tag: "Personal" },
-    { name: "Orange", color: "#f59e0b", tag: "School" },
-    { name: "Purple", color: "#8b5cf6", tag: "Work" },
-    { name: "Red", color: "#ef4444", tag: null },
-    { name: "Pink", color: "#ec4899", tag: null },
-    { name: "Indigo", color: "#6366f1", tag: null },
-    { name: "Teal", color: "#14b8a6", tag: null },
-    { name: "Yellow", color: "#eab308", tag: null },
-    { name: "Gray", color: "#6b7280", tag: null },
-  ];
-  
   const defaultCoverImages = [
     { id: 'notebook1', source: require('@/assets/covers/notebook1.jpg'), name: 'Classic Notebook' },
     { id: 'notebook2', source: require('@/assets/covers/notebook2.jpg'), name: 'Modern Blue' },
@@ -105,13 +82,6 @@ export default function NotesHome() {
     { id: 'notebook6', source: require('@/assets/covers/notebook6.jpg'), name: 'Nature Green' },
     { id: 'custom', source: null, name: 'Custom URL' },
   ];
-  
-  const tagColors = {
-    "All": "#3b82f6",
-    "Personal": "#10b981",
-    "School": "#f59e0b",
-    "Work": "#8b5cf6",
-  };
 
   const lightenColor = (color: string, percent: number) => {
     const num = parseInt(color.replace("#", ""), 16);
@@ -185,18 +155,6 @@ export default function NotesHome() {
     }
   }, [uid]);
 
-  useEffect(() => {
-    if (selectedTags.length > 0) {
-      const firstTag = selectedTags[0];
-      const tagColor = tagColors[firstTag as keyof typeof tagColors];
-      if (tagColor) {
-        setNewColor(tagColor);
-      }
-    } else {
-      setNewColor("#3b82f6");
-    }
-  }, [selectedTags]);
-
   useFocusEffect(
     useCallback(() => {
       if (!authLoading && uid) {
@@ -212,16 +170,18 @@ export default function NotesHome() {
         colors={['#0f2c45ff','#324762' ]}
         start={{x: 0, y: 0}}
         end={{ x: 0, y: 1 }}
-        style={{ 
-          flex: 1}}>
+        style={{ flex: 1 }}>
         <SafeAreaView style={styles.container}>
           <View style={styles.loadingContainer}>
-            <LottieView
-              autoPlay={true}
-              source={require('@/assets/animations/quiz-loading.json')}
-              loop={true}
-              style={{width: 0.90, height: 0.90}}
+            <View style={styles.lottieContainer}>
+              <LottieView
+                ref={lottieRef}
+                source={require('@/assets/animations/quiz-loading.json')}
+                autoPlay
+                loop
+                style={styles.lottieAnimation}
               />
+            </View>
             <Text style={styles.loadingText}>Loading...</Text>
           </View>
         </SafeAreaView>
@@ -235,11 +195,13 @@ export default function NotesHome() {
         colors={['#0f2c45ff','#324762' ]}
         start={{x: 0, y: 0}}
         end={{ x: 0, y: 1 }}
-        style={{ 
-          flex: 1}}>
+        style={{ flex: 1 }}>
         <SafeAreaView style={styles.container}>
           <View style={styles.loadingContainer}>
-            <Text style={styles.loadingText}>Please log in to view your notebooks</Text>
+            <View style={styles.errorCircle}>
+              <Ionicons name="lock-closed-outline" size={48} color="#ef4444" />
+            </View>
+            <Text style={styles.errorText}>Please log in to view your notebooks</Text>
           </View>
         </SafeAreaView>
       </LinearGradient>
@@ -288,24 +250,39 @@ export default function NotesHome() {
     );
   };
 
-  const handleCreateNotebook = async () => {
+  const handleCreateNotebook = async (notebookData: {
+    title: string;
+    description: string;
+    coverImage: string;
+    color: string;
+    properties: NotebookProperty[];
+    tags: string[];
+    isPublic: boolean;
+  }) => {
     if (!uid) return;
     setCreating(true);
     
     try {
-      const notebookData = {
-        title: newTitle || "Untitled Notebook",
-        description: "",
-        coverImage: newCoverImage,
-        color: newColor,
-        properties,
-        tags: selectedTags,
-        isPublic: false, // Default to private
-      };
+      let finalCoverImage = notebookData.coverImage;
       
-      const docId = await createNotebook(notebookData, uid);
+      // If it's a local file (custom upload), upload it to Firebase first
+      if (notebookData.coverImage.startsWith('file://')) {
+        const tempId = `temp_${Date.now()}`;
+        const uploadResult = await uploadNotebookCoverImage(
+          tempId, 
+          notebookData.coverImage, 
+          uid
+        );
+        finalCoverImage = uploadResult.url;
+      }
+      
+      // Create notebook with the final cover image URL
+      const docId = await createNotebook(
+        { ...notebookData, coverImage: finalCoverImage }, 
+        uid
+      );
+      
       setModalVisible(false);
-      resetDialog();
       router.push({
         pathname: "./notebook-screen",
         params: { notebookId: docId },
@@ -319,66 +296,8 @@ export default function NotesHome() {
         [{ text: 'OK', style: 'primary', onPress: () => closeAlert() }]
       );
     } finally {
-      setCreating(false)  
+      setCreating(false);
     }
-  };
-
-  const resetDialog = () => {
-    setNewTitle("");
-    setNewCoverImage("");
-    setNewColor("#3b82f6");
-    setNewPropertyKey("");
-    setNewPropertyValue("");
-    setProperties([]);
-    setSelectedTags([]);
-    setShowColorPicker(false);
-  };
-
-  const addProperty = () => {
-    if (newPropertyKey && newPropertyValue) {
-      const newProp: NotebookProperty = {
-        key: newPropertyKey,
-        value: newPropertyValue,
-        icon: tempPropertyIcon || '',
-        iconColor: tempPropertyIconColor !== '#6b7280' ? tempPropertyIconColor : '',
-      };
-      setProperties([...properties, newProp]);
-      setNewPropertyKey("");
-      setNewPropertyValue("");
-      setTempPropertyIcon("");
-      setTempPropertyIconColor("#6b7280");
-    }
-  };
-
-  const toggleTag = (tag: string) => {
-    if (selectedTags.includes(tag)) {
-      setSelectedTags(selectedTags.filter(t => t !== tag));
-    } else {
-      setSelectedTags([...selectedTags, tag]);
-    }
-  };
-
-  const selectPropertyKey = (key: string) => {
-    if (key === "Custom") {
-      setNewPropertyKey("");
-    } else {
-      setNewPropertyKey(key);
-    }
-    setShowPropertyDropdown(false);
-  };
-
-  const selectCoverImage = (imageId: string) => {
-    if (imageId === 'custom') {
-      setNewCoverImage("");
-    } else {
-      setNewCoverImage(imageId);
-    }
-    setShowCoverImagePicker(false);
-  };
-
-  const selectColor = (color: string) => {
-    setNewColor(color);
-    setShowColorPicker(false);
   };
 
   const getCoverImageSource = (coverImage?: string) => {
@@ -692,8 +611,7 @@ export default function NotesHome() {
       colors={['#0f2c45ff','#324762' ]}
       start={{x: 0, y: 0}}
       end={{ x: 0, y: 1 }}
-      style={{ 
-        flex: 1}}>
+      style={{ flex: 1}}>
       <SafeAreaView style={styles.container}>
         <FlatList
           data={filtered}
@@ -709,30 +627,64 @@ export default function NotesHome() {
           ListHeaderComponent={
             <>
               <View style={styles.searchRow}>
-                <View style={styles.searchContainer}>
-                  <Ionicons name="search" size={20} color="#ffffffff" style={styles.searchIcon} />
-                  <TextInput
-                    style={styles.searchInput}
-                    placeholder="Search notebooks..."
-                    placeholderTextColor="#9ca3af"
-                    value={search}
-                    onChangeText={setSearch}
-                  />             
+                {/* Enhanced Search Container with Gradient Border */}
+                <View style={styles.searchOuterContainer}>
+                  <LinearGradient
+                    colors={['#ec4899', '#f472b6', '#fb7185']}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={styles.searchGradientBorder}
+                  >
+                    <View style={styles.searchInnerContainer}>
+                      <Ionicons name="search" size={20} color="#f472b6" style={styles.searchIcon} />
+                      <TextInput
+                        style={styles.searchInput}
+                        placeholder="Search"
+                        placeholderTextColor="#6b7280"
+                        value={search}
+                        onChangeText={setSearch}
+                      />
+                      {search.length > 0 && (
+                        <TouchableOpacity onPress={() => setSearch('')}>
+                          <Ionicons name="close-circle" size={20} color="#6b7280" />
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                  </LinearGradient>
                 </View>
                 
+                {/* View Toggle Button with Gradient */}
                 <TouchableOpacity 
-                  style={styles.viewToggleButton}
+                  style={styles.actionButtonContainer}
                   onPress={cycleViewMode}
+                  activeOpacity={0.8}
                 >
-                  <Ionicons name={getViewIcon()} size={24} color="#ffffff" />
+                  <LinearGradient
+                    colors={['#f59e0b', '#fbbf24']}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={styles.actionButton}
+                  >
+                    <Ionicons name={getViewIcon()} size={22} color="#ffffff" />
+                  </LinearGradient>
                 </TouchableOpacity>
                 
-                <JoinNoteIconButton 
-                  style={{ marginLeft: 10 }}
-                  onNoteJoined={(noteId, permission) => {
-                    // Handle successful join
-                  }}
-                />              
+                {/* Join Note Button with Gradient */}
+                <View style={styles.actionButtonContainer}>
+                  <LinearGradient
+                    colors={['#8b5cf6', '#a78bfa']}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={styles.actionButton}
+                  >
+                    <JoinNoteIconButton 
+                      style={styles.joinButtonOverride}
+                      onNoteJoined={(noteId, permission) => {
+                        // Handle successful join
+                      }}
+                    />
+                  </LinearGradient>
+                </View>
               </View>
               
               <ScrollView
@@ -782,229 +734,32 @@ export default function NotesHome() {
           }
         />
 
-        <TouchableOpacity style={[styles.fab, {zIndex: 999, elevation: 5}]} onPress={() => setModalVisible(true)}>
-          <Ionicons name="add" size={28} color="#ffffff" />
+        {/* FAB with Gradient */}
+        <TouchableOpacity 
+          style={styles.fabContainer} 
+          onPress={() => setModalVisible(true)}
+          activeOpacity={0.9}
+        >
+          <LinearGradient
+            colors={['#14b8a6', '#10b981', '#84cc16', '#facc15']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.fab}
+          >
+            <Ionicons name="add" size={32} color="#ffffff" />
+          </LinearGradient>
         </TouchableOpacity>
+        
         <BottomNavigation/>
         
         {/* Create Notebook Modal */}
-        <Modal animationType="fade" transparent visible={modalVisible}>
-          <View style={styles.modalOverlay}>
-            <View style={styles.modalContent}>
-              <Text style={styles.modalTitle}>New Notebook</Text>
-
-              <TextInput
-                style={styles.modalInput}
-                placeholder="Title"
-                placeholderTextColor="#9ca3af"
-                value={newTitle}
-                onChangeText={setNewTitle}
-              />
-
-              <View style={styles.colorContainer}>
-                <Text style={styles.inputLabel}>Color</Text>
-                <View style={styles.colorRow}>
-                  <View style={styles.selectedColorDisplay}>
-                    <View style={[styles.selectedColorCircle, { backgroundColor: newColor }]} />
-                    <Text style={styles.selectedColorText}>
-                      {colorPalette.find(c => c.color === newColor)?.name || "Custom"}
-                    </Text>
-                  </View>
-                  <TouchableOpacity 
-                    style={styles.colorPickerButton}
-                    onPress={() => setShowColorPicker(!showColorPicker)}
-                  >
-                    <Ionicons name="color-palette" size={20} color="#fff" />
-                  </TouchableOpacity>
-                </View>
-                
-                {showColorPicker && (
-                  <View style={styles.colorPicker}>
-                    <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                      {colorPalette.map((colorOption) => (
-                        <TouchableOpacity
-                          key={colorOption.color}
-                          style={[
-                            styles.colorOption,
-                            newColor === colorOption.color && styles.selectedColorOption
-                          ]}
-                          onPress={() => selectColor(colorOption.color)}
-                        >
-                          <View style={[styles.colorOptionCircle, { backgroundColor: colorOption.color }]} />
-                          <Text style={styles.colorOptionName}>{colorOption.name}</Text>
-                          {colorOption.tag && (
-                            <Text style={styles.colorTagLabel}>{colorOption.tag}</Text>
-                          )}
-                        </TouchableOpacity>
-                      ))}
-                    </ScrollView>
-                  </View>
-                )}
-              </View>
-
-              <View style={styles.coverImageContainer}>
-                <Text style={styles.inputLabel}>Cover Image</Text>
-                <View style={styles.coverImageRow}>
-                  <TextInput
-                    style={[styles.modalInput, styles.coverImageInput]}
-                    placeholder="Enter URL or select default"
-                    placeholderTextColor="#9ca3af"
-                    value={newCoverImage.startsWith('http') ? newCoverImage : ''}
-                    onChangeText={setNewCoverImage}
-                  />
-                  <TouchableOpacity 
-                    style={styles.coverImageButton}
-                    onPress={() => setShowCoverImagePicker(!showCoverImagePicker)}
-                  >
-                    <Ionicons name="images" size={20} color="#fff" />
-                  </TouchableOpacity>
-                </View>
-                
-                {newCoverImage && (
-                  <View style={styles.coverPreview}>
-                    <Image 
-                      source={getCoverImageSource(newCoverImage) || require('@/assets/covers/notebook1.jpg')} 
-                      style={styles.coverPreviewImage}
-                    />
-                  </View>
-                )}
-                
-                {showCoverImagePicker && (
-                  <View style={styles.coverImagePicker}>
-                    <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                      {defaultCoverImages.map((image) => (
-                        <TouchableOpacity
-                          key={image.id}
-                          style={styles.coverOption}
-                          onPress={() => selectCoverImage(image.id)}
-                        >
-                          {image.source ? (
-                            <Image source={image.source} style={styles.coverOptionImage} />
-                          ) : (
-                            <View style={styles.customCoverOption}>
-                              <Ionicons name="link" size={24} color="#9ca3af" />
-                              <Text style={styles.customCoverText}>URL</Text>
-                            </View>
-                          )}
-                          <Text style={styles.coverOptionName}>{image.name}</Text>
-                        </TouchableOpacity>
-                      ))}
-                    </ScrollView>
-                  </View>
-                )}
-              </View>
-
-
-              <View style={styles.propertyRow}>
-                <TouchableOpacity
-                  style={styles.iconSelectorButton}
-                  onPress={() => setPropertyIconPickerVisible(true)}
-                >
-                  {tempPropertyIcon ? (
-                    <Ionicons name={tempPropertyIcon as any} size={20} color={tempPropertyIconColor} />
-                  ) : (
-                    <Ionicons name="add-circle-outline" size={20} color="#6b7280" />
-                  )}
-                </TouchableOpacity>
-                <View style={styles.propertyKeyContainer}>
-                  <TextInput
-                    style={[styles.modalInput, styles.propertyKeyInput]}
-                    placeholder="Property Key"
-                    placeholderTextColor="#9ca3af"
-                    value={newPropertyKey}
-                    onChangeText={setNewPropertyKey}
-                  />
-                  <TouchableOpacity 
-                    style={styles.dropdownButton}
-                    onPress={() => setShowPropertyDropdown(!showPropertyDropdown)}
-                  >
-                    <Ionicons name="chevron-down" size={16} color="#9ca3af" />
-                  </TouchableOpacity>
-                  
-                  {showPropertyDropdown && (
-                    <View style={styles.dropdownMenu}>
-                      {defaultPropertyKeys.map((key) => (
-                        <TouchableOpacity
-                          key={key}
-                          style={styles.dropdownItem}
-                          onPress={() => selectPropertyKey(key)}
-                        >
-                          <Text style={styles.dropdownItemText}>{key}</Text>
-                        </TouchableOpacity>
-                      ))}
-                    </View>
-                  )}
-                </View>
-                <TextInput
-                  style={[styles.modalInput, { flex: 1, marginLeft: 4 }]}
-                  placeholder="Property Value"
-                  placeholderTextColor="#9ca3af"
-                  value={newPropertyValue}
-                  onChangeText={setNewPropertyValue}
-                />
-              </View>
-              <TouchableOpacity style={styles.addPropertyBtn} onPress={addProperty}>
-                <Text style={{ color: "#fff", fontWeight: "600" }}>+ Add Property</Text>
-              </TouchableOpacity>
-
-              <ScrollView style={{ maxHeight: 100, marginVertical: 8 }}>
-                {properties.map((p, idx) => (
-                  <Text key={idx} style={{ color: "#d1d5db" }}>
-                    {p.key}: {p.value}
-                  </Text>
-                ))}
-              </ScrollView>
-
-              <Text style={styles.sectionTitle}>Tags</Text>
-              <View style={styles.tagSelectionContainer}>
-                {availableTags.map((tag) => {
-                  const isSelected = selectedTags.includes(tag);
-                  const tagColor = tagColors[tag as keyof typeof tagColors];
-                  return (
-                    <TouchableOpacity
-                      key={tag}
-                      style={[
-                        styles.modalTagChip,
-                        isSelected 
-                          ? { backgroundColor: tagColor, borderColor: tagColor }
-                          : { backgroundColor: "transparent", borderColor: tagColor }
-                      ]}
-                      onPress={() => toggleTag(tag)}
-                    >
-                      <Text style={[
-                        styles.modalTagText,
-                        isSelected 
-                          ? { color: "#ffffff" }
-                          : { color: tagColor }
-                      ]}>
-                        {tag}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-
-              <View style={styles.modalActions}>
-                <TouchableOpacity
-                  style={[styles.modalBtn, { backgroundColor: "#6b7280" }]}
-                  onPress={() => {
-                    resetDialog();
-                    setModalVisible(false);
-                  }}
-                >
-                  <Text style={styles.modalBtnText}>Cancel</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.modalBtn, { backgroundColor: newColor, opacity: creating ? 0.5 : 1 }]}
-                  onPress={handleCreateNotebook}
-                  disabled={creating}
-                >
-                  <Text style={styles.modalBtnText}>{creating ? "Creating..." : "Create"}</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          </View>
-        </Modal>
+        <CreateNotebookModal
+          visible={modalVisible}
+          onClose={() => setModalVisible(false)}
+          onCreate={handleCreateNotebook}
+          creating={creating}
+          userId={uid}
+        />
 
         {/* Custom Alert Modal */}
         <CustomAlertModal
@@ -1014,17 +769,6 @@ export default function NotesHome() {
           message={alertConfig.message}
           buttons={alertConfig.buttons}
           onClose={closeAlert}
-        />
-
-        <IconPicker
-          visible={propertyIconPickerVisible}
-          onClose={() => setPropertyIconPickerVisible(false)}
-          onSelectIcon={(iconName, color) => {
-            setTempPropertyIcon(iconName);
-            setTempPropertyIconColor(color);
-          }}
-          currentIcon={tempPropertyIcon}
-          currentColor={tempPropertyIconColor}
         />
       </SafeAreaView>
     </LinearGradient>
@@ -1039,30 +783,72 @@ const styles = StyleSheet.create({
     paddingBottom: 8,
   },
 
-  searchContainer: {
-    flexDirection: "row",
-    flex: 1,
-    alignItems: "center",
-    backgroundColor: "#2563eb",
-    marginHorizontal: '1%',
+  // IMPROVED SEARCH BAR STYLES
+  searchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
     marginTop: 8,
-    marginBottom: '3%',
+    marginBottom: 16,
+    gap: 10,
+  },
+  searchOuterContainer: {
+    flex: 1,
+  },
+  searchGradientBorder: {
+    borderRadius: 14,
+    padding: 2,
+    shadowColor: "#ec4899",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  searchInnerContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#1e293b",
     borderRadius: 12,
     paddingHorizontal: 16,
     height: 48,
-    maxWidth: '65%',
   },
-  searchIcon: { marginRight: 8 },
-  searchInput: { flex: 1, color: "#ffffff", fontSize: 12, },
+  searchIcon: { 
+    marginRight: 10,
+  },
+  searchInput: { 
+    flex: 1, 
+    color: "#ffffff", 
+    fontSize: 15,
+    fontWeight: '500',
+  },
 
-  viewToggleButton: {
-    backgroundColor: "#ff8223ff",
+  // ACTION BUTTONS (View Toggle & Join Note)
+  actionButtonContainer: {
     borderRadius: 12,
+    overflow: 'hidden',
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    elevation: 5,
+  },
+  actionButton: {
     width: 48,
     height: 48,
     justifyContent: "center",
     alignItems: "center",
-    marginLeft: 8,
+    borderRadius: 12,
+  },
+  joinButtonOverride: {
+    backgroundColor: 'transparent',
+    width: 48,
+    height: 48,
+    borderRadius: 0,
+    shadowColor: 'transparent',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0,
+    shadowRadius: 0,
+    elevation: 0,
   },
 
   tagsRow: { marginBottom: 8 },
@@ -1077,80 +863,6 @@ const styles = StyleSheet.create({
   tagText: { fontSize: 14, fontWeight: "500" },
   tagTextActive: { color: "#ffffff" },
 
-  // LIST VIEW STYLES
-  notebookCard: {
-    borderRadius: 12,
-    marginBottom: 16,
-    overflow: "hidden",
-    position: 'relative',
-  },
-  notebookCover: { width: "100%", height: 120 },
-  notebookCoverPlaceholder: {
-    width: "100%",
-    height: 120,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  publicBadgeOverlay: {
-    position: 'absolute',
-    top: 8,
-    right: 8,
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(82, 199, 43, 0.9)',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-    gap: 4,
-  },
-  publicBadgeOverlayText: {
-    fontSize: 10,
-    fontWeight: '600',
-    color: '#ffffff',
-  },
-  notebookContent: { padding: 12 },
-  notebookTitle: { fontSize: 18, fontWeight: "bold", color: "#fff" },
-  notebookProperty: { fontSize: 14, color: "#e5e7eb", marginTop: 4 },
-  notebookDate: { fontSize: 12, color: "#d1d5db", marginTop: 2 },
-  notebookFooter: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginTop: 8,
-  },
-  colorIndicator: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    borderWidth: 2,
-    borderColor: "#ffffff",
-  },
-  tagsContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  miniTag: {
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 8,
-    marginLeft: 4,
-  },
-  miniTagText: {
-    fontSize: 10,
-    color: "#ffffff",
-    fontWeight: "500",
-  },
-
-
-  // COMPACT VIEW STYLES
-  compactCard: {
-    flexDirection: "row",
-    backgroundColor: "#1e293b",
-    borderRadius: 10,
-    marginBottom: 10,
-    overflow: "hidden",
-    padding: 10,
-  },
   gridRow: {
     justifyContent: "space-between"
   },
@@ -1164,286 +876,66 @@ const styles = StyleSheet.create({
   emptyText: { fontSize: 20, fontWeight: "bold", color: "#9ca3af", marginTop: 16 },
   emptySubtext: { fontSize: 14, color: "#6b7280", marginTop: 8, textAlign: "center" },
 
-  fab: {
+  // IMPROVED FAB WITH GRADIENT
+  fabContainer: {
     position: "absolute",
     bottom: 100,
     right: 24,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: "#3b82f6",
-    justifyContent: "center",
-    alignItems: "center",
+    borderRadius: 32,
+    overflow: 'hidden',
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
+    shadowOpacity: 0.25,
     shadowRadius: 8,
+    elevation: 6,
+    zIndex: 999,
   },
-
-  modalOverlay: {
-    flex: 1,
-    justifyContent: "center",
-    backgroundColor: "rgba(0,0,0,0.6)",
-    padding: 20,
-  },
-  modalContent: {
-    backgroundColor: "#1e293b",
-    borderRadius: 12,
-    padding: 20,
-    maxHeight: "90%",
-  },
-  modalTitle: { fontSize: 20, fontWeight: "bold", color: "#fff", marginBottom: 12 },
-  modalInput: {
-    backgroundColor: "#334155",
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    color: "#fff",
-    marginBottom: 8,
-  },
-
-  colorContainer: {
-    marginBottom: 8,
-  },
-  colorRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  selectedColorDisplay: {
-    flexDirection: "row",
-    alignItems: "center",
-    flex: 1,
-    backgroundColor: "#334155",
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
-  selectedColorCircle: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    marginRight: 8,
-    borderWidth: 2,
-    borderColor: "#ffffff",
-  },
-  selectedColorText: {
-    color: "#fff",
-    fontSize: 16,
-  },
-  colorPickerButton: {
-    backgroundColor: "#475569",
-    borderRadius: 8,
-    padding: 10,
-    marginLeft: 8,
-  },
-  colorPicker: {
-    marginTop: 8,
-    backgroundColor: "#475569",
-    borderRadius: 8,
-    padding: 12,
-  },
-  colorOption: {
-    alignItems: "center",
-    marginRight: 16,
-    padding: 8,
-    borderRadius: 8,
-  },
-  selectedColorOption: {
-    backgroundColor: "#334155",
-  },
-  colorOptionCircle: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    marginBottom: 4,
-    borderWidth: 2,
-    borderColor: "#ffffff",
-  },
-  colorOptionName: {
-    fontSize: 12,
-    color: "#d1d5db",
-    textAlign: "center",
-    fontWeight: "500",
-  },
-  colorTagLabel: {
-    fontSize: 10,
-    color: "#9ca3af",
-    textAlign: "center",
-    marginTop: 2,
-  },
-
-  propertyRow: { flexDirection: "row", marginBottom: 8 },
-  propertyKeyContainer: {
-    flex: 1,
-    marginRight: 4,
-    position: 'relative',
-  },
-  propertyKeyInput: {
-    paddingRight: 40,
-  },
-  dropdownButton: {
-    position: 'absolute',
-    right: 12,
-    top: 10,
-    padding: 4,
-  },
-  dropdownMenu: {
-    position: 'absolute',
-    top: 50,
-    left: 0,
-    right: 0,
-    backgroundColor: '#475569',
-    borderRadius: 8,
-    elevation: 5,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    zIndex: 1000,
-  },
-  dropdownItem: {
-    padding: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#64748b',
-  },
-  dropdownItemText: {
-    color: '#fff',
-    fontSize: 14,
-  },
-  addPropertyBtn: {
-    backgroundColor: "#475569",
-    borderRadius: 8,
-    padding: 10,
-    alignItems: "center",
-    marginBottom: 8,
-  },
-  modalActions: {
-    flexDirection: "row",
-    justifyContent: "flex-end",
-    marginTop: 12,
-  },
-  modalBtn: {
-    borderRadius: 8,
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-    marginLeft: 8,
-  },
-  modalBtnText: { color: "#fff", fontWeight: "600" },
-
-  inputLabel: {
-    fontSize: 14,
-    fontWeight: "500",
-    color: "#d1d5db",
-    marginBottom: 4,
-  },
-  coverImageContainer: {
-    marginBottom: 8,
-  },
-  coverImageRow: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  coverImageInput: {
-    flex: 1,
-    marginRight: 8,
-    marginBottom: 0,
-  },
-  coverImageButton: {
-    backgroundColor: "#475569",
-    borderRadius: 8,
-    padding: 10,
+  fab: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
     justifyContent: "center",
     alignItems: "center",
   },
-  coverPreview: {
-    marginTop: 8,
-    alignItems: "center",
-  },
-  coverPreviewImage: {
-    width: 100,
-    height: 60,
-    borderRadius: 8,
-  },
-  coverImagePicker: {
-    marginTop: 12,
-    backgroundColor: "#475569",
-    borderRadius: 8,
-    padding: 12,
-  },
-  coverOption: {
-    alignItems: "center",
-    marginRight: 12,
-    width: 80,
-  },
-  coverOptionImage: {
-    width: 60,
-    height: 40,
-    borderRadius: 6,
-    marginBottom: 4,
-  },
-  customCoverOption: {
-    width: 60,
-    height: 40,
-    borderRadius: 6,
-    backgroundColor: "#334155",
-    justifyContent: "center",
-    alignItems: "center",
-    marginBottom: 4,
-  },
-  customCoverText: {
-    fontSize: 10,
-    color: "#9ca3af",
-    marginTop: 2,
-  },
-  coverOptionName: {
-    fontSize: 10,
-    color: "#d1d5db",
-    textAlign: "center",
-  },
 
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#fff",
-    marginTop: 16,
-    marginBottom: 8,
-  },
-  tagSelectionContainer: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-    marginBottom: 16,
-  },
-  modalTagChip: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-    borderWidth: 2,
-  },
-  modalTagText: {
-    fontSize: 14,
-    fontWeight: "500",
-  },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
   },
+  lottieContainer: {
+    width: 200,
+    height: 200,
+    marginBottom: 20,
+  },
+  lottieAnimation: {
+    width: '100%',
+    height: '100%',
+  },
   loadingText: {
     color: '#9ca3af',
     fontSize: 16,
-    marginTop: 16,
+    fontWeight: '500',
   },
-  searchRow: {
-    flexDirection: 'row',
+  errorCircle: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+    justifyContent: 'center',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    marginBottom: 10,
+    marginBottom: 20,
+  },
+  errorText: {
+    color: '#ef4444',
+    fontSize: 18,
+    fontWeight: '600',
+    textAlign: 'center',
+    marginTop: 16,
+    paddingHorizontal: 32,
   },
   
-    // LIST VIEW STYLES
+  // LIST VIEW STYLES
   listCardContainer: {
     marginBottom: 16,
     borderRadius: 16,
@@ -1739,16 +1231,5 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 2,
     elevation: 2,
-  },
-  iconSelectorButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 8,
-    backgroundColor: 'rgba(59, 130, 246, 0.1)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 8,
-    borderWidth: 1,
-    borderColor: 'rgba(59, 130, 246, 0.2)',
   },
 });

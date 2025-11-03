@@ -72,6 +72,13 @@ export default function ProfileScreen() {
     }, [viewingUserId])
   );
 
+  useEffect(() => {
+    // Reload data whenever preview mode changes
+    if (viewingUserId && isOwnProfile) {
+      loadProfileData();
+    }
+  }, [previewMode]);
+
   const loadProfileData = async () => {
     try {
       setLoading(true);
@@ -525,8 +532,8 @@ export default function ProfileScreen() {
                 <TouchableOpacity
                   style={[styles.previewButton, previewMode && styles.previewButtonActive]}
                   onPress={() => {
+                    setLoading(true); // Set loading immediately to prevent flash
                     setPreviewMode(!previewMode);
-                    loadProfileData();
                   }}
                   activeOpacity={0.8}
                 >

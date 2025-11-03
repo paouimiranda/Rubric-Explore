@@ -1,4 +1,4 @@
-// Updated friends.tsx with CustomAlertModal
+// Updated friends.tsx with CustomAlertModal and Lottie Loading
 
 import ChatList from '@/components/Interface/chat-list';
 import { CustomAlertModal } from '@/components/Interface/custom-alert-modal';
@@ -20,9 +20,9 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
-import React, { useEffect, useState } from 'react';
+import LottieView from 'lottie-react-native';
+import React, { useEffect, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
   RefreshControl,
   SafeAreaView,
   ScrollView,
@@ -47,6 +47,8 @@ interface SearchResult extends SearchUser {}
 
 export default function Friendlist() {
   const router = useRouter();
+  const lottieRef = useRef<LottieView>(null);
+  
   const [activeTab, setActiveTab] = useState<TabType>('friends');
   const [search, setSearch] = useState('');
   const [friends, setFriends] = useState<Friend[]>([]);
@@ -335,7 +337,15 @@ export default function Friendlist() {
             {search.trim() ? (
               searchLoading ? (
                 <View style={styles.loadingContainer}>
-                  <ActivityIndicator size="large" color="#3b82f6" />
+                  <View style={styles.lottieContainer}>
+                    <LottieView
+                      ref={lottieRef}
+                      source={require('@/assets/animations/quiz-loading.json')}
+                      autoPlay
+                      loop
+                      style={styles.lottieAnimation}
+                    />
+                  </View>
                   <Text style={styles.loadingText}>Searching users...</Text>
                 </View>
               ) : searchResults.length > 0 ? (
@@ -367,7 +377,15 @@ export default function Friendlist() {
             ) : (
               loading ? (
                 <View style={styles.loadingContainer}>
-                  <ActivityIndicator size="large" color="#3b82f6" />
+                  <View style={styles.lottieContainer}>
+                    <LottieView
+                      ref={lottieRef}
+                      source={require('@/assets/animations/quiz-loading.json')}
+                      autoPlay
+                      loop
+                      style={styles.lottieAnimation}
+                    />
+                  </View>
                   <Text style={styles.loadingText}>Loading friends...</Text>
                 </View>
               ) : getFilteredFriends().length > 0 ? (
@@ -837,11 +855,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingTop: 80,
   },
+  lottieContainer: {
+    width: 200,
+    height: 200,
+    marginBottom: 20,
+  },
+  lottieAnimation: {
+    width: '100%',
+    height: '100%',
+  },
   loadingText: {
     color: '#9ca3af',
     fontSize: 15,
     fontWeight: '500',
-    marginTop: 12,
   },
   emptyContainer: {
     flex: 1,

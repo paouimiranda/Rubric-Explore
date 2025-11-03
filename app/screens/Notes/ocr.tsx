@@ -1,4 +1,5 @@
 // components/OCRModal.tsx
+import { CustomAlertModal } from '@/components/Interface/custom-alert-modal';
 import { Montserrat_400Regular, Montserrat_600SemiBold, Montserrat_700Bold, useFonts } from '@expo-google-fonts/montserrat';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
@@ -6,7 +7,6 @@ import { LinearGradient } from 'expo-linear-gradient';
 import React, { useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   Clipboard,
   Dimensions,
   Image,
@@ -39,6 +39,18 @@ interface OCRModalProps {
   onInsertText: (text: string) => void;
 }
 
+interface AlertState {
+  visible: boolean;
+  type: 'info' | 'success' | 'error' | 'warning';
+  title: string;
+  message: string;
+  buttons: Array<{
+    text: string;
+    onPress: () => void;
+    style?: 'default' | 'cancel' | 'primary';
+  }>;
+}
+
 interface ExtractTextResponse {
   success: boolean;
   text: string;
@@ -56,13 +68,44 @@ function useOCR() {
     error: null,
   });
 
+  const [alertState, setAlertState] = useState<AlertState>({
+    visible: false,
+    type: 'info',
+    title: '',
+    message: '',
+    buttons: [],
+  });
+
+  const [imagePickerAlert, setImagePickerAlert] = useState(false);
+
+  const showAlert = (
+    type: AlertState['type'],
+    title: string,
+    message: string,
+    buttons: AlertState['buttons'] = [{ text: 'OK', onPress: () => {}, style: 'primary' }]
+  ) => {
+    setAlertState({
+      visible: true,
+      type,
+      title,
+      message,
+      buttons,
+    });
+  };
+
+  const hideAlert = () => {
+    setAlertState(prev => ({ ...prev, visible: false }));
+  };
+
   const requestPermission = async (): Promise<boolean> => {
     if (Platform.OS === 'ios') {
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert(
+        showAlert(
+          'warning',
           'Permission Required',
           'Sorry, we need camera roll permissions to upload images.',
+          [{ text: 'OK', onPress: () => {}, style: 'primary' }]
         );
         return false;
       }
@@ -71,6 +114,8 @@ function useOCR() {
   };
 
   const pickImage = async (source: 'camera' | 'library') => {
+    setImagePickerAlert(false);
+    
     const hasPermission = await requestPermission();
     if (!hasPermission) return;
 
@@ -80,7 +125,12 @@ function useOCR() {
       if (source === 'camera') {
         const cameraPermission = await ImagePicker.requestCameraPermissionsAsync();
         if (cameraPermission.status !== 'granted') {
-          Alert.alert('Permission Required', 'Camera permission is needed to take photos.');
+          showAlert(
+            'warning',
+            'Permission Required',
+            'Camera permission is needed to take photos.',
+            [{ text: 'OK', onPress: () => {}, style: 'primary' }]
+          );
           return;
         }
         
@@ -182,23 +232,25 @@ function useOCR() {
   };
 
   const showImagePickerOptions = () => {
-    Alert.alert(
-      'Select Image',
-      'Choose how you want to select an image',
-      [
-        { text: 'Camera', onPress: () => pickImage('camera') },
-        { text: 'Photo Library', onPress: () => pickImage('library') },
-        { text: 'Cancel', style: 'cancel' },
-      ],
-    );
+    setImagePickerAlert(true);
   };
 
   const copyToClipboard = async () => {
     try {
       await Clipboard.setString(ocrState.extractedText);
-      Alert.alert('Copied!', 'Text has been copied to clipboard');
+      showAlert(
+        'success',
+        'Copied!',
+        'Text has been copied to clipboard',
+        [{ text: 'OK', onPress: () => {}, style: 'primary' }]
+      );
     } catch (error) {
-      Alert.alert('Error', 'Failed to copy text to clipboard');
+      showAlert(
+        'error',
+        'Error',
+        'Failed to copy text to clipboard',
+        [{ text: 'OK', onPress: () => {}, style: 'primary' }]
+      );
     }
   };
 
@@ -218,6 +270,11 @@ function useOCR() {
     showImagePickerOptions,
     copyToClipboard,
     clearOCRData,
+    alertState,
+    hideAlert,
+    imagePickerAlert,
+    setImagePickerAlert,
+    pickImage,
   };
 }
 
@@ -234,6 +291,11 @@ export default function OCRModal({ isVisible, onClose, onInsertText }: OCRModalP
     showImagePickerOptions,
     copyToClipboard,
     clearOCRData,
+    alertState,
+    hideAlert,
+    imagePickerAlert,
+    setImagePickerAlert,
+    pickImage,
   } = useOCR();
 
   const insertOCRText = () => {
@@ -245,216 +307,254 @@ export default function OCRModal({ isVisible, onClose, onInsertText }: OCRModalP
   };
 
   return (
-    <Modal
-      animationType="slide"
-      transparent
-      visible={isVisible}
-      onRequestClose={onClose}
-    >
-      <View style={styles.ocrModalOverlay}>
-        <LinearGradient
-          colors={['#0A1C3C', '#324762']}
-          style={styles.ocrModalContent}
-        >
-          {/* Header */}
-          <View style={styles.ocrHeader}>
-            <View style={styles.headerLeft}>
-              <LinearGradient
-                colors={['#667eea', '#764ba2']}
-                style={styles.headerIconBadge}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-              >
-                <Ionicons name="scan" size={24} color="#ffffff" />
-              </LinearGradient>
-              <Text style={styles.ocrTitle}>Text Extraction</Text>
-            </View>
-            <TouchableOpacity style={styles.ocrCloseButton} onPress={onClose}>
-              <Ionicons name="close-circle" size={32} color="rgba(255,255,255,0.8)" />
-            </TouchableOpacity>
-          </View>
-
-          {/* Content */}
-          <ScrollView style={styles.ocrScrollView} showsVerticalScrollIndicator={false}>
-            {/* Image Selection Card */}
-            <View style={styles.card}>
-              <TouchableOpacity
-                onPress={showImagePickerOptions}
-                disabled={ocrState.isProcessing}
-                activeOpacity={0.8}
-              >
+    <>
+      <Modal
+        animationType="slide"
+        transparent
+        visible={isVisible}
+        onRequestClose={onClose}
+      >
+        <View style={styles.ocrModalOverlay}>
+          <LinearGradient
+            colors={['#0A1C3C', '#324762']}
+            style={styles.ocrModalContent}
+          >
+            {/* Header */}
+            <View style={styles.ocrHeader}>
+              <View style={styles.headerLeft}>
                 <LinearGradient
-                  colors={ocrState.isProcessing ? ['#475569', '#64748b'] : ['#667eea', '#764ba2']}
-                  style={styles.uploadButton}
+                  colors={['#667eea', '#764ba2']}
+                  style={styles.headerIconBadge}
                   start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 0 }}
+                  end={{ x: 1, y: 1 }}
                 >
-                  <Ionicons 
-                    name={ocrState.selectedImage ? "images" : "camera"} 
-                    size={24} 
-                    color="#fff" 
-                  />
-                  <Text style={styles.uploadText}>
-                    {ocrState.selectedImage ? 'Change Image' : 'Select Image'}
-                  </Text>
+                  <Ionicons name="scan" size={24} color="#ffffff" />
                 </LinearGradient>
+                <Text style={styles.ocrTitle}>Text Extraction</Text>
+              </View>
+              <TouchableOpacity style={styles.ocrCloseButton} onPress={onClose}>
+                <Ionicons name="close-circle" size={32} color="rgba(255,255,255,0.8)" />
               </TouchableOpacity>
-              
-              {ocrState.selectedImage && (
-                <View style={styles.imagePreviewContainer}>
-                  <Image 
-                    source={{ uri: ocrState.selectedImage.uri }} 
-                    style={styles.previewImage} 
-                  />
-                  <View style={styles.imageOverlay}>
-                    <LinearGradient
-                      colors={['transparent', 'rgba(0,0,0,0.6)']}
-                      style={styles.imageGradient}
+            </View>
+
+            {/* Content */}
+            <ScrollView style={styles.ocrScrollView} showsVerticalScrollIndicator={false}>
+              {/* Image Selection Card */}
+              <View style={styles.card}>
+                <TouchableOpacity
+                  onPress={showImagePickerOptions}
+                  disabled={ocrState.isProcessing}
+                  activeOpacity={0.8}
+                >
+                  <LinearGradient
+                    colors={ocrState.isProcessing ? ['#475569', '#64748b'] : ['#667eea', '#764ba2']}
+                    style={styles.uploadButton}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 0 }}
+                  >
+                    <Ionicons 
+                      name={ocrState.selectedImage ? "images" : "camera"} 
+                      size={24} 
+                      color="#fff" 
                     />
+                    <Text style={styles.uploadText}>
+                      {ocrState.selectedImage ? 'Change Image' : 'Select Image'}
+                    </Text>
+                  </LinearGradient>
+                </TouchableOpacity>
+                
+                {ocrState.selectedImage && (
+                  <View style={styles.imagePreviewContainer}>
+                    <Image 
+                      source={{ uri: ocrState.selectedImage.uri }} 
+                      style={styles.previewImage} 
+                    />
+                    <View style={styles.imageOverlay}>
+                      <LinearGradient
+                        colors={['transparent', 'rgba(0,0,0,0.6)']}
+                        style={styles.imageGradient}
+                      />
+                    </View>
+                  </View>
+                )}
+              </View>
+
+              {/* Processing Indicator */}
+              {ocrState.isProcessing && (
+                <View style={styles.loadingCard}>
+                  <LinearGradient
+                    colors={['#667eea', '#764ba2']}
+                    style={styles.loadingIconBadge}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                  >
+                    <ActivityIndicator size="large" color="#ffffff" />
+                  </LinearGradient>
+                  <Text style={styles.loadingTitle}>Extracting Text</Text>
+                  <Text style={styles.loadingText}>AI is analyzing your image...</Text>
+                </View>
+              )}
+
+              {/* Error Display */}
+              {ocrState.error && (
+                <View style={styles.errorCard}>
+                  <LinearGradient
+                    colors={['#ef4444', '#dc2626']}
+                    style={styles.errorIconBadge}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                  >
+                    <Ionicons name="alert-circle" size={24} color="#ffffff" />
+                  </LinearGradient>
+                  <Text style={styles.errorText}>{ocrState.error}</Text>
+                </View>
+              )}
+
+              {/* Results Section */}
+              {ocrState.extractedText && !ocrState.isProcessing && (
+                <View style={styles.card}>
+                  {/* Result Header */}
+                  <View style={styles.resultHeader}>
+                    <View style={styles.resultHeaderLeft}>
+                      <LinearGradient
+                        colors={['#10b981', '#059669']}
+                        style={styles.successBadge}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 1 }}
+                      >
+                        <Ionicons name="checkmark-circle" size={20} color="#ffffff" />
+                      </LinearGradient>
+                      <View>
+                        <Text style={styles.resultTitle}>Text Extracted</Text>
+                        <Text style={styles.wordCount}>{ocrState.wordCount} words</Text>
+                      </View>
+                    </View>
+                    <TouchableOpacity
+                      style={styles.copyButton}
+                      onPress={copyToClipboard}
+                    >
+                      <Ionicons name="copy" size={18} color="#667eea" />
+                    </TouchableOpacity>
+                  </View>
+                  
+                  {/* Extracted Text */}
+                  <View style={styles.textContainer}>
+                    <ScrollView style={styles.textScrollView}>
+                      <Text style={styles.extractedText} selectable>
+                        {ocrState.extractedText}
+                      </Text>
+                    </ScrollView>
+                  </View>
+
+                  {/* Action Buttons */}
+                  <View style={styles.actionButtons}>
+                    <TouchableOpacity
+                      style={styles.clearButton}
+                      onPress={clearOCRData}
+                    >
+                      <Ionicons name="trash" size={18} color="#ef4444" />
+                      <Text style={styles.clearButtonText}>Clear</Text>
+                    </TouchableOpacity>
+                    
+                    <TouchableOpacity
+                      onPress={insertOCRText}
+                      activeOpacity={0.8}
+                      style={styles.insertButtonWrapper}
+                    >
+                      <LinearGradient
+                        colors={['#10b981', '#059669']}
+                        style={styles.insertButton}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 0 }}
+                      >
+                        <Ionicons name="add-circle" size={18} color="#ffffff" />
+                        <Text style={styles.insertButtonText}>Insert to Note</Text>
+                      </LinearGradient>
+                    </TouchableOpacity>
                   </View>
                 </View>
               )}
-            </View>
+              
+              {/* Empty State */}
+              {!ocrState.extractedText && !ocrState.isProcessing && !ocrState.error && !ocrState.selectedImage && (
+                <View style={styles.emptyState}>
+                  <LinearGradient
+                    colors={['rgba(102, 126, 234, 0.2)', 'rgba(118, 75, 162, 0.2)']}
+                    style={styles.emptyIconBadge}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                  >
+                    <Ionicons name="document-text" size={48} color="#667eea" />
+                  </LinearGradient>
+                  <Text style={styles.emptyTitle}>Extract Text from Images</Text>
+                  <Text style={styles.emptyText}>
+                    Select an image to extract text using AI-powered OCR technology
+                  </Text>
+                </View>
+              )}
 
-            {/* Processing Indicator */}
-            {ocrState.isProcessing && (
-              <View style={styles.loadingCard}>
-                <LinearGradient
-                  colors={['#667eea', '#764ba2']}
-                  style={styles.loadingIconBadge}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                >
-                  <ActivityIndicator size="large" color="#ffffff" />
-                </LinearGradient>
-                <Text style={styles.loadingTitle}>Extracting Text</Text>
-                <Text style={styles.loadingText}>AI is analyzing your image...</Text>
-              </View>
-            )}
-
-            {/* Error Display */}
-            {ocrState.error && (
-              <View style={styles.errorCard}>
-                <LinearGradient
-                  colors={['#ef4444', '#dc2626']}
-                  style={styles.errorIconBadge}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                >
-                  <Ionicons name="alert-circle" size={24} color="#ffffff" />
-                </LinearGradient>
-                <Text style={styles.errorText}>{ocrState.error}</Text>
-              </View>
-            )}
-
-            {/* Results Section */}
-            {ocrState.extractedText && !ocrState.isProcessing && (
-              <View style={styles.card}>
-                {/* Result Header */}
-                <View style={styles.resultHeader}>
-                  <View style={styles.resultHeaderLeft}>
-                    <LinearGradient
-                      colors={['#10b981', '#059669']}
-                      style={styles.successBadge}
-                      start={{ x: 0, y: 0 }}
-                      end={{ x: 1, y: 1 }}
-                    >
-                      <Ionicons name="checkmark-circle" size={20} color="#ffffff" />
-                    </LinearGradient>
-                    <View>
-                      <Text style={styles.resultTitle}>Text Extracted</Text>
-                      <Text style={styles.wordCount}>{ocrState.wordCount} words</Text>
-                    </View>
+              {/* Info Card */}
+              <View style={styles.infoCard}>
+                <View style={styles.infoHeader}>
+                  <Ionicons name="information-circle" size={20} color="#667eea" />
+                  <Text style={styles.infoHeaderText}>Powered by AI</Text>
+                </View>
+                <View style={styles.infoList}>
+                  <View style={styles.infoItem}>
+                    <Ionicons name="checkmark" size={16} color="#10b981" />
+                    <Text style={styles.infoItemText}>Advanced AI vision models</Text>
                   </View>
-                  <TouchableOpacity
-                    style={styles.copyButton}
-                    onPress={copyToClipboard}
-                  >
-                    <Ionicons name="copy" size={18} color="#667eea" />
-                  </TouchableOpacity>
+                  <View style={styles.infoItem}>
+                    <Ionicons name="checkmark" size={16} color="#10b981" />
+                    <Text style={styles.infoItemText}>Handwritten & printed text</Text>
+                  </View>
+                  <View style={styles.infoItem}>
+                    <Ionicons name="checkmark" size={16} color="#10b981" />
+                    <Text style={styles.infoItemText}>JPG, PNG image formats</Text>
+                  </View>
                 </View>
-                
-                {/* Extracted Text */}
-                <View style={styles.textContainer}>
-                  <ScrollView style={styles.textScrollView}>
-                    <Text style={styles.extractedText} selectable>
-                      {ocrState.extractedText}
-                    </Text>
-                  </ScrollView>
-                </View>
+              </View>
+            </ScrollView>
+          </LinearGradient>
+        </View>
+      </Modal>
 
-                {/* Action Buttons */}
-                <View style={styles.actionButtons}>
-                  <TouchableOpacity
-                    style={styles.clearButton}
-                    onPress={clearOCRData}
-                  >
-                    <Ionicons name="trash" size={18} color="#ef4444" />
-                    <Text style={styles.clearButtonText}>Clear</Text>
-                  </TouchableOpacity>
-                  
-                  <TouchableOpacity
-                    onPress={insertOCRText}
-                    activeOpacity={0.8}
-                    style={styles.insertButtonWrapper}
-                  >
-                    <LinearGradient
-                      colors={['#10b981', '#059669']}
-                      style={styles.insertButton}
-                      start={{ x: 0, y: 0 }}
-                      end={{ x: 1, y: 0 }}
-                    >
-                      <Ionicons name="add-circle" size={18} color="#ffffff" />
-                      <Text style={styles.insertButtonText}>Insert to Note</Text>
-                    </LinearGradient>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            )}
-            
-            {/* Empty State */}
-            {!ocrState.extractedText && !ocrState.isProcessing && !ocrState.error && !ocrState.selectedImage && (
-              <View style={styles.emptyState}>
-                <LinearGradient
-                  colors={['rgba(102, 126, 234, 0.2)', 'rgba(118, 75, 162, 0.2)']}
-                  style={styles.emptyIconBadge}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                >
-                  <Ionicons name="document-text" size={48} color="#667eea" />
-                </LinearGradient>
-                <Text style={styles.emptyTitle}>Extract Text from Images</Text>
-                <Text style={styles.emptyText}>
-                  Select an image to extract text using AI-powered OCR technology
-                </Text>
-              </View>
-            )}
+      {/* Custom Alert Modal */}
+      <CustomAlertModal
+        visible={alertState.visible}
+        type={alertState.type}
+        title={alertState.title}
+        message={alertState.message}
+        buttons={alertState.buttons}
+        onClose={hideAlert}
+      />
 
-            {/* Info Card */}
-            <View style={styles.infoCard}>
-              <View style={styles.infoHeader}>
-                <Ionicons name="information-circle" size={20} color="#667eea" />
-                <Text style={styles.infoHeaderText}>Powered by AI</Text>
-              </View>
-              <View style={styles.infoList}>
-                <View style={styles.infoItem}>
-                  <Ionicons name="checkmark" size={16} color="#10b981" />
-                  <Text style={styles.infoItemText}>Google Gemini AI technology</Text>
-                </View>
-                <View style={styles.infoItem}>
-                  <Ionicons name="checkmark" size={16} color="#10b981" />
-                  <Text style={styles.infoItemText}>Handwritten & printed text</Text>
-                </View>
-                <View style={styles.infoItem}>
-                  <Ionicons name="checkmark" size={16} color="#10b981" />
-                  <Text style={styles.infoItemText}>JPG, PNG image formats</Text>
-                </View>
-              </View>
-            </View>
-          </ScrollView>
-        </LinearGradient>
-      </View>
-    </Modal>
+      {/* Image Picker Alert */}
+      <CustomAlertModal
+        visible={imagePickerAlert}
+        type="info"
+        title="Select Image"
+        message="Choose how you want to select an image"
+        buttons={[
+          {
+            text: 'Camera',
+            onPress: () => pickImage('camera'),
+            style: 'primary',
+          },
+          {
+            text: 'Library',
+            onPress: () => pickImage('library'),
+            style: 'primary',
+          },
+          {
+            text: 'Cancel',
+            onPress: () => setImagePickerAlert(false),
+            style: 'cancel',
+          },
+        ]}
+        onClose={() => setImagePickerAlert(false)}
+      />
+    </>
   );
 }
 
