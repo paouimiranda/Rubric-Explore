@@ -1,4 +1,4 @@
-// hooks/useCollaborativeEditing.ts - Optimized for cursor preservation with undo/redo
+// hooks/useCollaborativeEditing.ts - Fixed initialization order
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { TextInput } from 'react-native';
 import { CHUNK_CONFIG } from '../app/types/notebook';
@@ -22,7 +22,7 @@ export interface CollaborativeState {
   redo: () => void;
   canUndo: boolean;
   canRedo: boolean;
-  contentReady: boolean; // NEW: Track when content is fully loaded
+  contentReady: boolean;
 }
 
 interface TextChange {
@@ -46,7 +46,7 @@ export function useCollaborativeEditing(
   const [chunkCount, setChunkCount] = useState(0);
   const [canUndo, setCanUndo] = useState(false);
   const [canRedo, setCanRedo] = useState(false);
-  const [contentReady, setContentReady] = useState(false); // NEW: Track content loading state
+  const [contentReady, setContentReady] = useState(false);
   
   const titleInputRef = useRef<TextInput | null>(null);
   const contentInputRef = useRef<TextInput | null>(null);
@@ -54,6 +54,11 @@ export function useCollaborativeEditing(
   const previousValues = useRef({ title: '', content: '' });
   const isApplyingYjsUpdate = useRef({ title: false, content: false });
   const sessionRef = useRef<CollaborativeSession | null>(null);
+  
+  // CRITICAL FIX: Track if we've initialized to prevent duplicate initialization
+  const hasInitialized = useRef(false);
+  const initializationAttempts = useRef(0);
+  const MAX_INIT_ATTEMPTS = 3;
 
   // Calculate text changes for granular updates
   const calculateTextChanges = (oldText: string, newText: string): TextChange[] => {
@@ -174,15 +179,23 @@ export function useCollaborativeEditing(
   }, [noteId]);
 
   /**
-   * OPTIMIZED YJS OBSERVERS
-   * - Longer debounce (300ms) to reduce cursor disruption
-   * - Smart batching for rapid updates
-   * - Only triggers React updates when content actually changes
+   * CRITICAL FIX: Only initialize when we have both noteId AND user
+   * This prevents premature initialization with empty values
    */
   useEffect(() => {
+    // Reset state when noteId changes
     if (!noteId || !user?.uid) {
+      console.log('🚫 Missing noteId or user, resetting state');
       setIsConnected(false);
-      setContentReady(false); // NEW: Reset content ready state
+      setContentReady(false);
+      hasInitialized.current = false;
+      initializationAttempts.current = 0;
+      return;
+    }
+
+    // Skip if already initialized for this note
+    if (hasInitialized.current) {
+      console.log('✅ Already initialized, skipping');
       return;
     }
 
@@ -191,7 +204,8 @@ export function useCollaborativeEditing(
 
     const initSession = async () => {
       try {
-        console.log('🔗 Initializing chunk-based collaborative session for:', noteId);
+        initializationAttempts.current++;
+        console.log(`🔗 Attempt ${initializationAttempts.current}: Initializing session for:`, noteId);
         
         const userInfo = {
           uid: user.uid,
@@ -201,9 +215,33 @@ export function useCollaborativeEditing(
         const collaborativeSession = await collaborativeService.createSession(noteId, userInfo);
         
         if (!mounted) {
+          console.log('⚠️ Component unmounted during init, destroying session');
           collaborativeSession.destroy();
           return;
         }
+
+        // CRITICAL FIX: Verify chunks loaded successfully
+        const hasChunks = collaborativeSession.chunkSessions.size > 0;
+        console.log(`📦 Session created - Chunks: ${collaborativeSession.chunkSessions.size}, Has chunks: ${hasChunks}`);
+
+        if (!hasChunks && initializationAttempts.current < MAX_INIT_ATTEMPTS) {
+          console.warn(`⚠️ No chunks loaded on attempt ${initializationAttempts.current}, retrying...`);
+          collaborativeSession.destroy();
+          
+          setTimeout(() => {
+            if (mounted && !hasInitialized.current) {
+              initSession();
+            }
+          }, 500);
+          return;
+        }
+
+        if (!hasChunks) {
+          throw new Error('Failed to load chunks after multiple attempts');
+        }
+
+        // Mark as initialized BEFORE setting state to prevent race conditions
+        hasInitialized.current = true;
 
         sessionRef.current = collaborativeSession;
         setSession(collaborativeSession);
@@ -225,7 +263,6 @@ export function useCollaborativeEditing(
             titleUpdateTimeout = setTimeout(() => {
               const newTitle = collaborativeSession.titleSession!.contentText.toString();
               
-              // Only update if content actually changed
               if (newTitle !== previousValues.current.title) {
                 console.log('📝 Applying Y.js title update');
                 setTitle(newTitle);
@@ -238,25 +275,32 @@ export function useCollaborativeEditing(
 
           collaborativeSession.titleSession.contentText.observe(titleObserver);
           
-          const currentTitle = collaborativeSession.titleSession.contentText.toString();
-          if (currentTitle.length === 0 && initialTitle) {
+          // CRITICAL FIX: Get Y.js title first, use initial as fallback
+          const yjsTitle = collaborativeSession.titleSession.contentText.toString();
+          console.log('🏷️ Title state - Y.js:', yjsTitle || '(empty)', '| Initial:', initialTitle || '(empty)');
+          
+          if (yjsTitle.length > 0) {
+            // Y.js has content - always use it (from Firestore)
+            console.log('✅ Using title from Y.js');
+            setTitle(yjsTitle);
+            previousValues.current.title = yjsTitle;
+          } else if (initialTitle && initialTitle.length > 0) {
+            // Y.js empty but we have initial - populate Y.js
+            console.log('📝 Populating Y.js with initial title');
             isApplyingYjsUpdate.current.title = true;
             collaborativeSession.titleSession.contentText.insert(0, initialTitle);
             isApplyingYjsUpdate.current.title = false;
             setTitle(initialTitle);
             previousValues.current.title = initialTitle;
           } else {
-            setTitle(currentTitle || initialTitle);
-            previousValues.current.title = currentTitle || initialTitle;
+            // Both empty
+            console.log('📝 No title available');
+            setTitle('');
+            previousValues.current.title = '';
           }
         }
 
-        /**
-         * CURSOR-FRIENDLY CONTENT OBSERVERS
-         * - 300ms debounce (better for cursor stability)
-         * - Batches all updates during typing bursts
-         * - Only updates React state when content differs
-         */
+        // Content observers
         collaborativeSession.chunkSessions.forEach((chunkSession) => {
           let observerTimeout: ReturnType<typeof setTimeout> | null = null;
           let updateCount = 0;
@@ -271,14 +315,12 @@ export function useCollaborativeEditing(
             
             updateCount++;
             
-            // CURSOR-FRIENDLY: Longer debounce reduces interruptions
             observerTimeout = setTimeout(() => {
               console.log(`📡 Yjs observer fired (batched ${updateCount} updates)`);
               updateCount = 0;
               
               const mergedContent = collaborativeService.getMergedContent(noteId);
               
-              // Critical: Only update if content actually changed
               if (mergedContent !== lastAppliedContent && mergedContent !== previousValues.current.content) {
                 console.log('📦 Applying Y.js content update from chunks');
                 setContent(mergedContent);
@@ -289,17 +331,25 @@ export function useCollaborativeEditing(
               }
               
               updateUndoRedoState();
-            }, 300); // Longer debounce for better cursor stability
+            }, 300);
           };
 
           chunkSession.contentText.observe(contentObserver);
           chunkObservers.set(chunkSession.chunkId, contentObserver);
         });
 
-        // Initialize content
-        const mergedContent = collaborativeService.getMergedContent(noteId);
+        // CRITICAL FIX: Initialize content with better logic
+        const yjsContent = collaborativeService.getMergedContent(noteId);
+        console.log('📄 Content state - Y.js:', yjsContent.length, 'chars | Initial:', initialContent?.length || 0, 'chars');
         
-        if (mergedContent.length === 0 && initialContent) {
+        if (yjsContent.length > 0) {
+          // Y.js has content - always prefer (from Firestore)
+          console.log('✅ Using content from Y.js chunks');
+          setContent(yjsContent);
+          previousValues.current.content = yjsContent;
+        } else if (initialContent && initialContent.length > 0) {
+          // Y.js empty but we have initial - populate first chunk
+          console.log('📝 Populating Y.js with initial content');
           const firstChunk = Array.from(collaborativeSession.chunkSessions.values())[0];
           if (firstChunk) {
             isApplyingYjsUpdate.current.content = true;
@@ -307,22 +357,24 @@ export function useCollaborativeEditing(
             isApplyingYjsUpdate.current.content = false;
             setContent(initialContent);
             previousValues.current.content = initialContent;
+          } else {
+            console.error('❌ No first chunk available');
+            setContent('');
+            previousValues.current.content = '';
           }
         } else {
-          setContent(mergedContent || initialContent);
-          previousValues.current.content = mergedContent || initialContent;
+          // Both empty - new note
+          console.log('📝 No content available (new note)');
+          setContent('');
+          previousValues.current.content = '';
         }
 
         // Initialize undo/redo state
         updateUndoRedoState();
 
-        // NEW: Mark content as ready after initial load with slight delay to ensure everything is synced
-        setTimeout(() => {
-          if (mounted) {
-            console.log('✅ Content ready');
-            setContentReady(true);
-          }
-        }, 500);
+        // Mark content as ready immediately (no artificial delay)
+        console.log('✅ Content initialization complete');
+        setContentReady(true);
 
         const updateAwareness = () => {
           if (mounted) {
@@ -349,13 +401,32 @@ export function useCollaborativeEditing(
           });
           
           collaborativeSession.destroy();
+          hasInitialized.current = false;
+          initializationAttempts.current = 0;
         };
 
       } catch (error) {
-        console.error('❌ Error initializing chunk-based session:', error);
+        console.error('❌ Error initializing session:', error);
         setIsConnected(false);
-        setContentReady(false); // NEW: Reset on error
-        if (mounted) {
+        setContentReady(false);
+        hasInitialized.current = false;
+        
+        // Retry logic for recoverable errors
+        const isRecoverableError = error instanceof Error && 
+          (error.message.includes('network') || 
+           error.message.includes('timeout') ||
+           error.message.includes('chunks'));
+        
+        if (isRecoverableError && initializationAttempts.current < MAX_INIT_ATTEMPTS) {
+          console.log(`🔄 Retrying initialization (attempt ${initializationAttempts.current + 1}/${MAX_INIT_ATTEMPTS})`);
+          setTimeout(() => {
+            if (mounted && !hasInitialized.current) {
+              initSession();
+            }
+          }, 1000);
+        } else if (mounted) {
+          // Permanent error - use fallback values
+          console.log('⚠️ Using fallback values after initialization failure');
           setTitle(initialTitle);
           setContent(initialContent);
           previousValues.current = { title: initialTitle, content: initialContent };
@@ -371,7 +442,7 @@ export function useCollaborativeEditing(
         cleanupFn();
       }
     };
-  }, [noteId, user?.uid, updateUndoRedoState]);
+  }, [noteId, user?.uid, updateUndoRedoState]); // CRITICAL: Don't include initialTitle/initialContent in deps
 
   const handleTitleChange = useCallback((newTitle: string, selectionStart?: number, selectionEnd?: number) => {
     console.log('✏️ Handling title change');
@@ -538,6 +609,6 @@ export function useCollaborativeEditing(
     redo,
     canUndo,
     canRedo,
-    contentReady, // NEW: Export content ready state
+    contentReady,
   };
 }

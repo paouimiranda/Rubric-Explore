@@ -157,54 +157,69 @@ class ChunkBasedCollaborativeService {
 
   // Load all chunk sessions for a note
   private async loadChunkSessions(
-    noteId: string, 
-    userId: string,
-    session: CollaborativeSession
-  ): Promise<void> {
-    try {
-      const { getNoteChunks } = await import('./notes-service');
-      const chunks = await getNoteChunks(noteId);
+  noteId: string, 
+  userId: string,
+  session: CollaborativeSession
+): Promise<void> {
+  try {
+    const { getNoteChunks } = await import('./notes-service');
+    const chunks = await getNoteChunks(noteId);
 
-      console.log(`Loading ${chunks.length} chunk sessions for note ${noteId}`);
+    console.log(`📦 Loading ${chunks.length} chunk sessions for note ${noteId}`);
 
-      for (const chunk of chunks) {
-        const ydoc = new Y.Doc();
-        const contentText = ydoc.getText('content');
-        
-        // Create UndoManager for each chunk
-        // CRITICAL: Don't specify trackedOrigins
-        const undoManager = new Y.UndoManager(contentText, {
-          captureTimeout: 500,
-        });
-        
-        const provider = this.createSafeFirestoreProvider(
-          noteId, 
-          chunk.id, 
-          ydoc, 
-          userId
-        );
-
-        await this.loadInitialChunk(noteId, chunk.id, ydoc);
-
-        const chunkSession: ChunkSession = {
-          ydoc,
-          contentText,
-          undoManager,
-          provider,
-          chunkId: chunk.id,
-          index: chunk.index,
-          destroy: () => {
-            undoManager.destroy();
-            provider.destroy();
-          }
-        };
-
-        session.chunkSessions.set(chunk.id, chunkSession);
-      }
-    } catch (error) {
-      console.error('Error loading chunk sessions:', error);
+    // CRITICAL FIX: Verify chunks exist
+    if (chunks.length === 0) {
+      console.warn('⚠️ No chunks found for note:', noteId);
+      throw new Error('No chunks found - note may need migration');
     }
+
+    // Load chunks sequentially to ensure proper initialization
+    for (const chunk of chunks) {
+      console.log(`📦 Loading chunk ${chunk.id} (index: ${chunk.index})`);
+      
+      const ydoc = new Y.Doc();
+      const contentText = ydoc.getText('content');
+      
+      const undoManager = new Y.UndoManager(contentText, {
+        captureTimeout: 500,
+      });
+      
+      const provider = this.createSafeFirestoreProvider(
+        noteId, 
+        chunk.id, 
+        ydoc, 
+        userId
+      );
+
+      // CRITICAL FIX: Wait for initial load and verify
+      await this.loadInitialChunk(noteId, chunk.id, ydoc);
+      
+      // Verify the chunk loaded properly
+      const loadedContent = contentText.toString();
+      console.log(`✅ Chunk ${chunk.id} loaded: ${loadedContent.length} characters`);
+
+      const chunkSession: ChunkSession = {
+        ydoc,
+        contentText,
+        undoManager,
+        provider,
+        chunkId: chunk.id,
+        index: chunk.index,
+        destroy: () => {
+          undoManager.destroy();
+          provider.destroy();
+        }
+      };
+
+      session.chunkSessions.set(chunk.id, chunkSession);
+    }
+
+    console.log(`✅ All ${chunks.length} chunks loaded successfully`);
+  } catch (error) {
+    console.error('❌ Error loading chunk sessions:', error);
+    throw error; // Re-throw to be caught by createSession
   }
+}
 
   // Create Firestore provider for title or chunk
   private createSafeFirestoreProvider(
@@ -386,33 +401,44 @@ class ChunkBasedCollaborativeService {
   }
 
   // Load initial chunk content from Firestore
-  private async loadInitialChunk(noteId: string, chunkId: string, ydoc: Y.Doc) {
-    try {
-      const chunkRef = doc(db, `notes/${noteId}/chunks/${chunkId}`);
-      const snap = await getDoc(chunkRef);
+  private async loadInitialChunk(noteId: string, chunkId: string, ydoc: Y.Doc): Promise<void> {
+  try {
+    console.log(`📥 Loading initial data for chunk: ${chunkId}`);
+    
+    const chunkRef = doc(db, `notes/${noteId}/chunks/${chunkId}`);
+    const snap = await getDoc(chunkRef);
 
-      if (snap.exists()) {
-        const data = snap.data();
-        const contentText = ydoc.getText('content');
+    if (!snap.exists()) {
+      console.warn(`⚠️ Chunk document not found: ${chunkId}`);
+      return; // Empty chunk is okay for new notes
+    }
 
-        if (data.yjs_state && Array.isArray(data.yjs_state)) {
-          try {
-            const state = new Uint8Array(data.yjs_state);
-            Y.applyUpdate(ydoc, state, 'initial_load');
-          } catch (error) {
-            console.error('Error loading chunk Y.js state:', error);
-            if (contentText.length === 0 && data.content) {
-              contentText.insert(0, data.content);
-            }
-          }
-        } else if (contentText.length === 0 && data.content) {
+    const data = snap.data();
+    const contentText = ydoc.getText('content');
+
+    if (data.yjs_state && Array.isArray(data.yjs_state)) {
+      try {
+        const state = new Uint8Array(data.yjs_state);
+        Y.applyUpdate(ydoc, state, 'initial_load');
+        console.log(`✅ Loaded Y.js state for chunk ${chunkId}: ${contentText.length} chars`);
+      } catch (error) {
+        console.error(`❌ Error loading Y.js state for chunk ${chunkId}:`, error);
+        // Fallback to plain content
+        if (contentText.length === 0 && data.content) {
           contentText.insert(0, data.content);
+          console.log(`✅ Fallback: Loaded plain content for chunk ${chunkId}`);
         }
       }
-    } catch (error) {
-      console.error('Error loading initial chunk:', error);
+    } else if (contentText.length === 0 && data.content) {
+      // No Y.js state, use plain content
+      contentText.insert(0, data.content);
+      console.log(`✅ Loaded plain content for chunk ${chunkId}: ${data.content.length} chars`);
     }
+  } catch (error) {
+    console.error(`❌ Error loading initial chunk ${chunkId}:`, error);
+    throw error; // Re-throw to be caught by loadChunkSessions
   }
+}
 
   // Get merged content from all chunks
   getMergedContent(noteId: string): string {

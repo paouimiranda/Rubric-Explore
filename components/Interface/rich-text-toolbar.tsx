@@ -70,9 +70,13 @@ const RichTextToolbar: React.FC<RichTextToolbarProps> = ({ getEditor, onMetadata
   const [isStrikethrough, setIsStrikethrough] = useState(false);
 
   const stateCheckRef = useRef<NodeJS.Timeout>();
+  const isMountedRef = useRef(true);
 
   // Check formatting state by evaluating JavaScript and parsing result
   const checkFormattingState = useCallback(async () => {
+    // FIX: Add safety checks before accessing editor
+    if (!isMountedRef.current) return;
+    
     const editor = getEditor();
     if (!editor || !editor.webviewBridge) return;
 
@@ -99,9 +103,14 @@ const RichTextToolbar: React.FC<RichTextToolbarProps> = ({ getEditor, onMetadata
 
       editor.webviewBridge.injectJavaScript(script);
       
-      // Poll for the result
+      // Poll for the result - add mounted check
       setTimeout(() => {
-        editor.webviewBridge.injectJavaScript(`
+        if (!isMountedRef.current) return;
+        
+        const currentEditor = getEditor();
+        if (!currentEditor || !currentEditor.webviewBridge) return;
+        
+        currentEditor.webviewBridge.injectJavaScript(`
           (function() {
             if (window.${callbackName}) {
               window.ReactNativeWebView.postMessage(JSON.stringify({
@@ -121,6 +130,8 @@ const RichTextToolbar: React.FC<RichTextToolbarProps> = ({ getEditor, onMetadata
 
   // Poll for formatting state
   useEffect(() => {
+    isMountedRef.current = true;
+    
     const startPolling = () => {
       if (stateCheckRef.current) {
         clearInterval(stateCheckRef.current);
@@ -133,9 +144,12 @@ const RichTextToolbar: React.FC<RichTextToolbarProps> = ({ getEditor, onMetadata
 
     startPolling();
 
+    // FIX: Proper cleanup on unmount
     return () => {
+      isMountedRef.current = false;
       if (stateCheckRef.current) {
         clearInterval(stateCheckRef.current);
+        stateCheckRef.current = undefined;
       }
     };
   }, [checkFormattingState]);
@@ -152,7 +166,7 @@ const RichTextToolbar: React.FC<RichTextToolbarProps> = ({ getEditor, onMetadata
       try {
         const data = typeof event === 'string' ? JSON.parse(event) : JSON.parse(event?.nativeEvent?.data || event?.data || '{}');
         
-        if (data.type === '__formatting__') {
+        if (data.type === '__formatting__' && isMountedRef.current) {
           setIsBold(!!data.bold);
           setIsItalic(!!data.italic);
           setIsUnderline(!!data.underline);

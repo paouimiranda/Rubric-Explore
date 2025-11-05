@@ -42,7 +42,7 @@ const BottomNavigation = () => {
       <View style={styles.middleButtonContainer}>
         <TouchableOpacity 
           style={styles.middleButton} 
-          onPress={() => safeNavigate(`/screens/Explore/explore`)}
+          onPress={() => router.push(`/screens/Explore/explore`)}
           activeOpacity={0.8}
         >
           <Image 
