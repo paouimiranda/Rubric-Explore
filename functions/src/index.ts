@@ -5,6 +5,7 @@ import * as admin from "firebase-admin";
 import * as functions from "firebase-functions";
 import nodemailer from "nodemailer";
 
+
 admin.initializeApp();
 const db = admin.firestore();
 
@@ -794,6 +795,237 @@ app.post("/extractTextFromImage", async (req, res) => {
     return res.status(500).send({ 
       error: error.message || 'Failed to extract text from image' 
     });
+  }
+});
+
+// ✅ Send Email Verification (called during registration)
+app.post("/sendEmailVerification", async (req, res) => {
+  try {
+    const { email, uid } = req.body;
+    if (!email || !uid) return res.status(400).send({ error: "Missing email or uid" });
+
+    // Generate a verification token (store in Firestore)
+    const verificationToken = Math.random().toString(36).substring(2, 15) + 
+                             Math.random().toString(36).substring(2, 15);
+    
+    await db.collection("email_verifications").doc(uid).set({
+      email,
+      token: verificationToken,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      expiresAt: Date.now() + 24 * 60 * 60 * 1000, // 24 hours
+      verified: false,
+    });
+
+    const verificationLink = `https://api-m2tvqc6zqq-uc.a.run.app/verifyEmail?token=${verificationToken}&uid=${uid}`;
+
+    await transporter.sendMail({
+      from: '"Rubric" <rubric.capstone@gmail.com>',
+      to: email,
+      subject: "Verify Your Email Address - Rubric",
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2 style="color: #1A2D4B;">Welcome to Rubric!</h2>
+          <p>Thank you for registering. Please verify your email address to activate your account.</p>
+          <div style="text-align: center; margin: 30px 0;">
+            <a href="${verificationLink}" 
+               style="display:inline-block;
+                      padding:15px 30px;
+                      background: linear-gradient(to right, #52F7E2, #5EEF96);
+                      color:#263A56;
+                      text-decoration:none;
+                      border-radius:8px;
+                      font-weight:bold;">
+              Verify Email Address
+            </a>
+          </div>
+          <p style="color: #666; font-size: 14px;">
+            This link will expire in 24 hours. If you didn't create an account, you can safely ignore this email.
+          </p>
+          <p style="color: #666; font-size: 12px; margin-top: 30px;">
+            If the button doesn't work, copy and paste this link into your browser:<br>
+            <span style="color: #1A2D4B;">${verificationLink}</span>
+          </p>
+        </div>
+      `,
+    });
+
+    return res.status(200).send({ 
+      success: true, 
+      message: "Verification email sent successfully" 
+    });
+  } catch (error: any) {
+    console.error("Error sending verification email:", error);
+    return res.status(500).send({ error: error.message });
+  }
+});
+
+// ✅ Handle Email Verification (when user clicks link)
+app.get("/verifyEmail", async (req, res) => {
+  try {
+    const { token, uid } = req.query;
+
+    if (!token || !uid) {
+      return res.status(400).send(`
+        <html>
+          <body style="font-family: Arial; text-align: center; padding: 50px;">
+            <h2 style="color: #ef4444;">Invalid Verification Link</h2>
+            <p>The verification link is missing required parameters.</p>
+          </body>
+        </html>
+      `);
+    }
+
+    // Get verification record
+    const verificationDoc = await db.collection("email_verifications").doc(uid as string).get();
+    
+    if (!verificationDoc.exists) {
+      return res.status(404).send(`
+        <html>
+          <body style="font-family: Arial; text-align: center; padding: 50px;">
+            <h2 style="color: #ef4444;">Verification Not Found</h2>
+            <p>This verification link is invalid or has already been used.</p>
+          </body>
+        </html>
+      `);
+    }
+
+    const verificationData = verificationDoc.data();
+    
+    // Check if already verified
+    if (verificationData?.verified) {
+      return res.redirect("https://rubric-app-8f65c.web.app/already-verified");
+    }
+
+    // Check if token matches
+    if (verificationData?.token !== token) {
+      return res.status(400).send(`
+        <html>
+          <body style="font-family: Arial; text-align: center; padding: 50px;">
+            <h2 style="color: #ef4444;">Invalid Token</h2>
+            <p>The verification token is incorrect.</p>
+          </body>
+        </html>
+      `);
+    }
+
+    // Check if expired
+    if (Date.now() > verificationData?.expiresAt) {
+      return res.status(400).send(`
+        <html>
+          <body style="font-family: Arial; text-align: center; padding: 50px;">
+            <h2 style="color: #ef4444;">Link Expired</h2>
+            <p>This verification link has expired. Please request a new one.</p>
+          </body>
+        </html>
+      `);
+    }
+
+    // Update user's isVerified field
+    await db.collection("users").doc(uid as string).update({
+      isVerified: true,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+
+    // Mark verification as complete
+    await db.collection("email_verifications").doc(uid as string).update({
+      verified: true,
+      verifiedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+
+    // Redirect to success page (you can customize this)
+    return res.redirect("https://rubric-app-8f65c.web.app/email-verified");
+  } catch (error: any) {
+    console.error("Error verifying email:", error);
+    return res.status(500).send(`
+      <html>
+        <body style="font-family: Arial; text-align: center; padding: 50px;">
+          <h2 style="color: #ef4444;">Verification Failed</h2>
+          <p>An error occurred while verifying your email. Please try again later.</p>
+        </body>
+      </html>
+    `);
+  }
+});
+
+// Resend Verification Email
+app.post("/resendVerificationEmail", async (req, res) => {
+  try {
+    const { uid } = req.body;
+    if (!uid) return res.status(400).send({ error: "Missing uid" });
+
+    // Get user data
+    const userDoc = await db.collection("users").doc(uid).get();
+    if (!userDoc.exists) {
+      return res.status(404).send({ error: "User not found" });
+    }
+
+    const userData = userDoc.data();
+    if (userData?.isVerified) {
+      return res.status(400).send({ error: "Email already verified" });
+    }
+
+    // Check if verification exists and is recent (prevent spam)
+    const verificationDoc = await db.collection("email_verifications").doc(uid).get();
+    if (verificationDoc.exists) {
+      const verificationData = verificationDoc.data();
+      const timeSinceCreation = Date.now() - verificationData?.createdAt?.toMillis();
+      
+      // Prevent resending within 1 minute
+      if (timeSinceCreation < 60000) {
+        return res.status(429).send({ 
+          error: "Please wait before requesting another verification email" 
+        });
+      }
+    }
+
+    // Generate new token and send email
+    const verificationToken = Math.random().toString(36).substring(2, 15) + 
+                             Math.random().toString(36).substring(2, 15);
+    
+    await db.collection("email_verifications").doc(uid).set({
+      email: userData?.email,
+      token: verificationToken,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      expiresAt: Date.now() + 24 * 60 * 60 * 1000,
+      verified: false,
+    });
+
+    const verificationLink = `https://api-m2tvqc6zqq-uc.a.run.app/verifyEmail?token=${verificationToken}&uid=${uid}`;
+
+    await transporter.sendMail({
+      from: '"Rubric" <rubric.capstone@gmail.com>',
+      to: userData?.email,
+      subject: "Verify Your Email Address - Rubric",
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2 style="color: #1A2D4B;">Verify Your Email</h2>
+          <p>You requested a new verification link for your Rubric account.</p>
+          <div style="text-align: center; margin: 30px 0;">
+            <a href="${verificationLink}" 
+               style="display:inline-block;
+                      padding:15px 30px;
+                      background: linear-gradient(to right, #52F7E2, #5EEF96);
+                      color:#263A56;
+                      text-decoration:none;
+                      border-radius:8px;
+                      font-weight:bold;">
+              Verify Email Address
+            </a>
+          </div>
+          <p style="color: #666; font-size: 14px;">
+            This link will expire in 24 hours.
+          </p>
+        </div>
+      `,
+    });
+
+    return res.status(200).send({ 
+      success: true, 
+      message: "Verification email sent successfully" 
+    });
+  } catch (error: any) {
+    console.error("Error resending verification email:", error);
+    return res.status(500).send({ error: error.message });
   }
 });
 
