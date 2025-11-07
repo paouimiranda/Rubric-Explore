@@ -34,8 +34,6 @@ export interface UserData {
   avatar: string | null; // New field for avatar URL
   headerGradient: string[]; // New field for header gradient colors
   bio: string;
-  followers: number;
-  following: number;
   posts: number;
   isVerified: boolean;
   isActive: boolean;
@@ -114,8 +112,6 @@ export const registerUser = async (userData: RegisterData): Promise<UserData> =>
       avatar: null, // Default avatar
       headerGradient: ['#FF999A', '#EE007F'], // Default header gradient
       bio: '',
-      followers: 0,
-      following: 0,
       posts: 0,
       isVerified: false,
       isActive: true,

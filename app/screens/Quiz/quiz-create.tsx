@@ -1,4 +1,4 @@
-// File: app/Quiz/quiz-create.tsx - Updated with Firebase Storage Integration
+// File: app/Quiz/quiz-create.tsx - Updated with Firebase Storage Integration and Enhanced UI
 import { convertAPIQuestionToInternalFormat, generateQuizFromAI } from '@/api/quizApi';
 import { TopicSelectionModal } from '@/components/Interface/ai-quiz-modal';
 import { auth } from '@/firebase';
@@ -62,6 +62,8 @@ const QuizMaker = () => {
   const [customTimeLimit, setCustomTimeLimit] = useState('');
   const [newTopicInput, setNewTopicInput] = useState('');
   const [uploadingImage, setUploadingImage] = useState(false);
+  const [showQuestionFocusModal, setShowQuestionFocusModal] = useState(false);
+  const [focusedQuestionText, setFocusedQuestionText] = useState('');
 
   const questionTypes = [
     { key: 'multiple_choice', label: 'Multiple Choice', icon: 'checkmark-circle-outline' },
@@ -106,6 +108,26 @@ const QuizMaker = () => {
     updateQuestion(currentQuestionIndex, updated);
   };
 
+  const handleOpenQuestionFocus = () => {
+    setFocusedQuestionText(questions[currentQuestionIndex].question);
+    setShowQuestionFocusModal(true);
+  };
+
+  const handleSaveQuestionFocus = () => {
+    const updated = { ...questions[currentQuestionIndex] };
+    updated.question = focusedQuestionText;
+    updateQuestion(currentQuestionIndex, updated);
+    setShowQuestionFocusModal(false);
+  };
+
+  const calculateFontSize = (text: string, baseSize: number = 15): number => {
+    const length = text.length;
+    if (length <= 20) return baseSize;
+    if (length <= 30) return baseSize - 1;
+    if (length <= 40) return baseSize - 2;
+    return baseSize - 3; // minimum font size
+  };
+
   const handleQuestionTypeChange = (type: Question['type']) => {
     const currentQ = { ...questions[currentQuestionIndex] };
     
@@ -138,6 +160,7 @@ const QuizMaker = () => {
   };
 
   const handleOptionChange = (oIndex: number, text: string) => {
+    if (text.length > 50) return; // Enforce 50 character limit
     const updated = { ...questions[currentQuestionIndex] };
     updated.options[oIndex] = text;
     updateQuestion(currentQuestionIndex, updated);
@@ -308,7 +331,7 @@ const QuizMaker = () => {
 
   const uploadQuestionImageToFirebase = async (localUri: string) => {
     const currentQuestion = questions[currentQuestionIndex];
-    const quizId = Date.now().toString(); // In real use, this should be the actual quiz ID
+    const quizId = Date.now().toString();
     const userId = auth.currentUser?.uid;
     
     if (!userId) {
@@ -319,7 +342,6 @@ const QuizMaker = () => {
     setUploadingImage(true);
     
     try {
-      // Delete old image if it exists and is a Firebase URL
       if (currentQuestion.image && isFirebaseStorageUrl(currentQuestion.image)) {
         const oldPath = extractStoragePathFromUrl(currentQuestion.image);
         if (oldPath) {
@@ -329,7 +351,6 @@ const QuizMaker = () => {
         }
       }
       
-      // Upload new image
       const result = await uploadQuestionImage(
         quizId,
         currentQuestion.id,
@@ -426,7 +447,6 @@ const QuizMaker = () => {
           onPress: async () => {
             const question = questions[currentQuestionIndex];
             
-            // Delete image if exists
             if (question.image && isFirebaseStorageUrl(question.image)) {
               const imagePath = extractStoragePathFromUrl(question.image);
               if (imagePath) {
@@ -527,7 +547,11 @@ const QuizMaker = () => {
                     placeholderTextColor="rgba(255, 255, 255, 0.6)"
                     value={opt}
                     onChangeText={(text) => handleOptionChange(oIndex, text)}
-                    style={styles.answerInput}
+                    style={[
+                      styles.answerInput,
+                      { fontSize: calculateFontSize(opt) }
+                    ]}
+                    maxLength={50}
                   />
                 </View>
               </TouchableOpacity>
@@ -664,14 +688,22 @@ const QuizMaker = () => {
 
         <ScrollView style={styles.mainContent} showsVerticalScrollIndicator={false}>
           <View style={styles.questionInputContainer}>
-            <TextInput
-              placeholder="Enter your question"
-              placeholderTextColor="rgba(255, 255, 255, 0.5)"
-              value={currentQuestion.question}
-              onChangeText={handleQuestionChange}
-              style={styles.questionInput}
-              multiline={currentQuestion.type === 'fill_blank'}
-            />
+            <TouchableOpacity 
+              style={styles.questionInputWrapper}
+              onPress={handleOpenQuestionFocus}
+              activeOpacity={0.8}
+            >
+              <Text 
+                style={[
+                  styles.questionInputDisplay,
+                  !currentQuestion.question && { color: 'rgba(255, 255, 255, 0.5)' }
+                ]}
+                numberOfLines={2}
+                ellipsizeMode="tail"
+              >
+                {currentQuestion.question || 'Enter your question'}
+              </Text>
+            </TouchableOpacity>
             <TouchableOpacity
               onPress={() => setShowTopicSelectorModal(true)}
               style={[
@@ -780,7 +812,6 @@ const QuizMaker = () => {
           )}
         </View>
 
-        {/* Modals remain the same as before - ellipsis, topic selector, time limit, question type */}
         <Modal
           visible={showEllipsisMenu}
           transparent={true}
@@ -824,7 +855,6 @@ const QuizMaker = () => {
           </TouchableOpacity>
         </Modal>
 
-        {/* Topic Selector Modal - Same as before */}
         <Modal
           visible={showTopicSelectorModal}
           transparent={true}
@@ -919,7 +949,6 @@ const QuizMaker = () => {
           </View>
         </Modal>
 
-        {/* Time Limit Modal */}
         <Modal
           visible={showTimeLimitModal}
           transparent={true}
@@ -984,7 +1013,6 @@ const QuizMaker = () => {
           </View>
         </Modal>
 
-        {/* Question Type Modal */}
         <Modal
           visible={showQuestionTypeModal}
           transparent={true}
@@ -1035,6 +1063,52 @@ const QuizMaker = () => {
             onTopicSelected={handleTopicSelected}
           />
         )}
+
+        <Modal
+          visible={showQuestionFocusModal}
+          transparent={true}
+          animationType="fade"
+          onRequestClose={() => setShowQuestionFocusModal(false)}
+        >
+          <TouchableOpacity 
+            style={styles.focusModalOverlay}
+            activeOpacity={1}
+            onPress={() => setShowQuestionFocusModal(false)}
+          >
+            <TouchableOpacity 
+              activeOpacity={1}
+              onPress={(e) => e.stopPropagation()}
+              style={styles.focusModalContent}
+            >
+              <View style={styles.focusModalHeader}>
+                <Text style={styles.focusModalTitle}>Edit Question</Text>
+                <TouchableOpacity
+                  onPress={handleSaveQuestionFocus}
+                  style={styles.focusModalDoneBtn}
+                >
+                  <Text style={styles.focusModalDoneText}>Done</Text>
+                </TouchableOpacity>
+              </View>
+              
+              <TextInput
+                placeholder="Enter your question"
+                placeholderTextColor="rgba(255, 255, 255, 0.5)"
+                value={focusedQuestionText}
+                onChangeText={setFocusedQuestionText}
+                style={styles.focusModalInput}
+                multiline
+                autoFocus
+                textAlignVertical="top"
+              />
+              
+              <View style={styles.focusModalFooter}>
+                <Text style={styles.focusModalCharCount}>
+                  {focusedQuestionText.length} characters
+                </Text>
+              </View>
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </Modal>
 
         {isLoading && (
           <View style={styles.loadingOverlay}>
@@ -1117,17 +1191,21 @@ const styles = StyleSheet.create({
     marginBottom: 20,
     gap: 12,
   },
-  questionInput: {
+  questionInputWrapper: {
     flex: 1,
     backgroundColor: 'rgba(255, 255, 255, 0.08)',
     borderRadius: 16,
     padding: 18,
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '500',
     minHeight: 60,
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.15)',
+    justifyContent: 'center',
+  },
+  questionInputDisplay: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '500',
+    lineHeight: 22,
   },
   topicIconBtn: {
     width: 48,
@@ -1288,7 +1366,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     flex: 1,
     fontWeight: '600',
-    fontSize: 15,
   },
   color0: { backgroundColor: '#ef4444' },
   color1: { backgroundColor: '#f59e0b' },
@@ -1693,5 +1770,69 @@ const styles = StyleSheet.create({
   },
   questionTypeOptionTextActive: {
     color: '#fff',
+  },
+  focusModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.75)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  focusModalContent: {
+    backgroundColor: '#1e293b',
+    borderRadius: 20,
+    width: '100%',
+    maxWidth: 500,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.4,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  focusModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  focusModalTitle: {
+    color: '#fff',
+    fontSize: 20,
+    fontWeight: 'bold',
+  },
+  focusModalDoneBtn: {
+    backgroundColor: '#8b5cf6',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 10,
+  },
+  focusModalDoneText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  focusModalInput: {
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    borderRadius: 12,
+    padding: 20,
+    color: '#fff',
+    fontSize: 18,
+    minHeight: 200,
+    maxHeight: 400,
+    margin: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.15)',
+    lineHeight: 26,
+  },
+  focusModalFooter: {
+    padding: 20,
+    paddingTop: 0,
+    alignItems: 'flex-end',
+  },
+  focusModalCharCount: {
+    color: 'rgba(255, 255, 255, 0.5)',
+    fontSize: 14,
   },
 });

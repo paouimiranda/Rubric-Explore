@@ -1,575 +1,800 @@
+// File: screens/ExploreScreen.tsx
+import { useJourney, useXPProgress } from '@/hooks/useJourney';
+import { Level } from '@/services/journey-service';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import React, { useEffect, useRef, useState } from 'react';
+import { useFocusEffect, useRouter } from 'expo-router';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
+  ActivityIndicator,
+  Alert,
   Animated,
   Dimensions,
-  FlatList,
-  Image,
-  RefreshControl,
-  StatusBar,
+  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from 'react-native';
+import LeaderboardTab from './leaderboard-tab';
 
-// Screen dimensions for responsive layout
-const { width } = Dimensions.get('window');
-const CARD_WIDTH = (width - 48) / 2; // Two columns with padding
+const { width, height } = Dimensions.get('window');
 
-// Type definitions for quiz data structure
-interface Quiz {
-  id: string;
-  title: string;
-  description: string;
-  thumbnail: string;
-  difficulty: 'easy' | 'medium' | 'hard';
-  level: number;
-  completed: boolean;
-  stars: number;
-  totalQuestions: number;
-  category: string;
-}
-
-// Mock quiz data - replace with API calls in production
-const MOCK_QUIZZES: Quiz[] = [
-  {
-    id: '1',
-    title: 'Space Exploration',
-    description: 'Journey through the cosmos',
-    thumbnail: 'https://images.unsplash.com/photo-1446776653964-20c1d3a81b06?w=400',
-    difficulty: 'easy',
-    level: 1,
-    completed: true,
-    stars: 3,
-    totalQuestions: 10,
-    category: 'Science',
-  },
-  {
-    id: '2',
-    title: 'Ancient Civilizations',
-    description: 'Discover lost empires',
-    thumbnail: 'https://images.unsplash.com/photo-1503177119275-0aa32b3a9368?w=400',
-    difficulty: 'medium',
-    level: 2,
-    completed: false,
-    stars: 0,
-    totalQuestions: 15,
-    category: 'History',
-  },
-  {
-    id: '3',
-    title: 'Quantum Physics',
-    description: 'Explore particle behavior',
-    thumbnail: 'https://images.unsplash.com/photo-1635070041078-e363dbe005cb?w=400',
-    difficulty: 'hard',
-    level: 3,
-    completed: false,
-    stars: 0,
-    totalQuestions: 20,
-    category: 'Science',
-  },
-  {
-    id: '4',
-    title: 'World Geography',
-    description: 'Master continents and oceans',
-    thumbnail: 'https://images.unsplash.com/photo-1526778548025-fa2f459cd5c1?w=400',
-    difficulty: 'easy',
-    level: 1,
-    completed: true,
-    stars: 2,
-    totalQuestions: 12,
-    category: 'Geography',
-  },
-  {
-    id: '5',
-    title: 'Classical Music',
-    description: 'Learn about great composers',
-    thumbnail: 'https://images.unsplash.com/photo-1507838153414-b4b713384a76?w=400',
-    difficulty: 'medium',
-    level: 2,
-    completed: false,
-    stars: 0,
-    totalQuestions: 10,
-    category: 'Arts',
-  },
-  {
-    id: '6',
-    title: 'Marine Biology',
-    description: 'Dive into ocean life',
-    thumbnail: 'https://images.unsplash.com/photo-1559827260-dc66d52bef19?w=400',
-    difficulty: 'medium',
-    level: 2,
-    completed: false,
-    stars: 0,
-    totalQuestions: 18,
-    category: 'Science',
-  },
+// Tab options for navigation
+const TABS = [
+  { id: 'journey', label: 'Journey', icon: 'rocket' as const },
+  // { id: 'shop', label: 'Shop', icon: 'cart' as const },
+  { id: 'leaderboard', label: 'Leaderboard', icon: 'trophy' as const },
 ];
 
-// Difficulty color schemes matching gamification theme
-const DIFFICULTY_COLORS = {
-  easy: ['#00f2fe', '#4facfe'],
-  medium: ['#fa709a', '#fee140'],
-  hard: ['#f093fb', '#f5576c'],
-};
-
-// Quiz card component with glassmorphic design
-const QuizCard: React.FC<{ quiz: Quiz; index: number }> = ({ quiz, index }) => {
-  // Animation value for fade-in effect
+const ExploreScreen = ({ navigation }: any) => {
+  const [activeTab, setActiveTab] = useState('journey');
   const fadeAnim = useRef(new Animated.Value(0)).current;
-  const scaleAnim = useRef(new Animated.Value(0.8)).current;
 
+  const router = useRouter();
+  
+  // Load journey data from Firestore
+  const { levels, userStats, userProgress, loading, error, reload } = useJourney();
+  const xpData = useXPProgress(userStats);
+  
+  // Generate static star positions
+  const stars = useRef(
+    Array.from({ length: 20 }, () => ({
+      left: Math.random() * width,
+      top: Math.random() * height,
+      opacity: useRef(new Animated.Value(Math.random())).current,
+    }))
+  ).current;
+
+  // Log when stats change
   useEffect(() => {
-    // Staggered animation based on card index
-    Animated.parallel([
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 400,
-        delay: index * 100, // Stagger by 100ms per card
-        useNativeDriver: true,
-      }),
-      Animated.spring(scaleAnim, {
-        toValue: 1,
-        delay: index * 100,
-        tension: 50,
-        friction: 7,
-        useNativeDriver: true,
-      }),
-    ]).start();
-  }, []);
+    console.log('=== STATS UPDATED IN EXPLORE SCREEN ===', {
+      shards: userStats?.shards,
+      energy: userStats?.energy,
+      currentLevel: userProgress?.currentLevel,
+      timestamp: new Date().toISOString()
+    });
+  }, [userStats, userProgress]);
 
-  return (
-    <Animated.View
-      style={[
-        styles.cardContainer,
-        {
-          opacity: fadeAnim,
-          transform: [{ scale: scaleAnim }],
-        },
-      ]}
-    >
-      <TouchableOpacity activeOpacity={0.8}>
-        {/* Glassmorphic card background */}
-        <View style={styles.card}>
-          {/* Quiz thumbnail with overlay */}
-          <View style={styles.thumbnailContainer}>
-            <Image source={{ uri: quiz.thumbnail }} style={styles.thumbnail} />
-            <LinearGradient
-              colors={['transparent', 'rgba(10, 28, 60, 0.9)']}
-              style={styles.thumbnailOverlay}
-            />
-            
-            {/* Level badge with gradient */}
-            <LinearGradient
-              colors={DIFFICULTY_COLORS[quiz.difficulty] as any}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={styles.levelBadge}
-            >
-              <Text style={styles.levelText}>Lv {quiz.level}</Text>
-            </LinearGradient>
-
-            {/* Completion status indicator */}
-            {quiz.completed && (
-              <View style={styles.completedBadge}>
-                <Ionicons name="checkmark-circle" size={20} color="#00f2fe" />
-              </View>
-            )}
-          </View>
-
-          {/* Card content */}
-          <View style={styles.cardContent}>
-            {/* Quiz title */}
-            <Text style={styles.quizTitle} numberOfLines={2}>
-              {quiz.title}
-            </Text>
-
-            {/* Quiz description */}
-            <Text style={styles.quizDescription} numberOfLines={2}>
-              {quiz.description}
-            </Text>
-
-            {/* Bottom info row */}
-            <View style={styles.infoRow}>
-              {/* Category tag */}
-              <View style={styles.categoryTag}>
-                <Ionicons name="pricetag" size={12} color="#4facfe" />
-                <Text style={styles.categoryText}>{quiz.category}</Text>
-              </View>
-
-              {/* Stars display */}
-              <View style={styles.starsContainer}>
-                {[...Array(3)].map((_, i) => (
-                  <Ionicons
-                    key={i}
-                    name={i < quiz.stars ? 'star' : 'star-outline'}
-                    size={14}
-                    color={i < quiz.stars ? '#fee140' : '#4a5568'}
-                  />
-                ))}
-              </View>
-            </View>
-
-            {/* Questions count */}
-            <View style={styles.questionsRow}>
-              <Ionicons name="help-circle-outline" size={14} color="#667eea" />
-              <Text style={styles.questionsText}>
-                {quiz.totalQuestions} questions
-              </Text>
-            </View>
-          </View>
-        </View>
-      </TouchableOpacity>
-    </Animated.View>
+  useFocusEffect(
+    useCallback(() => {
+      console.log('=== EXPLORE SCREEN FOCUSED ===', new Date().toISOString());
+      console.log('Current stats before reload:', {
+        shards: userStats?.shards,
+        energy: userStats?.energy,
+      });
+      reload();
+      
+      // Return cleanup function
+      return () => {
+        console.log('=== EXPLORE SCREEN UNFOCUSED ===', new Date().toISOString());
+      };
+    }, [reload])
   );
-};
 
-// Main Explore Feed component
-export default function ExploreFeed() {
-  const [refreshing, setRefreshing] = useState(false);
-  const headerAnim = useRef(new Animated.Value(0)).current;
-
-  // Animate header on mount
   useEffect(() => {
-    Animated.timing(headerAnim, {
+    // Fade in animation
+    Animated.timing(fadeAnim, {
       toValue: 1,
-      duration: 600,
+      duration: 400,
       useNativeDriver: true,
     }).start();
+
+    // Starfield animation
+    stars.forEach((star) => {
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(star.opacity, {
+            toValue: 1,
+            duration: 2000 + Math.random() * 2000,
+            useNativeDriver: true,
+          }),
+          Animated.timing(star.opacity, {
+            toValue: 0.2,
+            duration: 2000 + Math.random() * 2000,
+            useNativeDriver: true,
+          }),
+        ])
+      ).start();
+    });
   }, []);
 
-  // Pull-to-refresh handler
-  const onRefresh = () => {
-    setRefreshing(true);
-    // Simulate API call
-    setTimeout(() => {
-      setRefreshing(false);
-    }, 1500);
+  const handleTabPress = (tabId: string) => {
+    setActiveTab(tabId);
+
   };
 
-  // Section header component
-  const renderHeader = () => (
-    <Animated.View
-      style={[
-        styles.headerContainer,
-        {
-          opacity: headerAnim,
-          transform: [
-            {
-              translateY: headerAnim.interpolate({
-                inputRange: [0, 1],
-                outputRange: [-20, 0],
-              }),
-            },
-          ],
-        },
-      ]}
-    >
-      {/* Main title with gradient icon */}
-      <View style={styles.titleRow}>
+  const handleLevelPress = (level: Level) => {
+    if (!level.unlocked) {
+      Alert.alert('Locked', 'Complete previous levels to unlock this one!');
+      return;
+    }
+
+    console.log('=== NAVIGATING TO QUIZ ===', {
+      levelId: level.id,
+      quizId: level.quizId,
+    });
+
+    router.push({
+      pathname: './journey-quiz-play',
+      params: {
+        quizId: level.quizId,
+        levelId: level.id.toString(),
+        levelTitle: level.title,
+        isJourneyLevel: 'true',
+      },
+    });
+  };
+
+  if (loading) {
+    return (
+      <View style={[styles.container, styles.centerContent]}>
         <LinearGradient
-          colors={['#667eea', '#764ba2']}
+          colors={['#0A1C3C', '#1a2f4f', '#324762']}
+          style={styles.backgroundGradient}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
-          style={styles.iconBadge}
-        >
-          <Ionicons name="rocket" size={32} color="#ffffff" />
-        </LinearGradient>
-        <View style={styles.titleTextContainer}>
-          <Text style={styles.mainTitle}>Explore Quizzes</Text>
-          <Text style={styles.subtitle}>
-            Embark on your learning journey
-          </Text>
-        </View>
+        />
+        <ActivityIndicator size="large" color="#667eea" />
+        <Text style={styles.loadingText}>Loading your journey...</Text>
       </View>
+    );
+  }
 
-      {/* Stats row with glassmorphic cards */}
-      <View style={styles.statsRow}>
-        <View style={styles.statCard}>
-          <Ionicons name="trophy" size={20} color="#fee140" />
-          <Text style={styles.statNumber}>12</Text>
-          <Text style={styles.statLabel}>Completed</Text>
-        </View>
-        <View style={styles.statCard}>
-          <Ionicons name="flame" size={20} color="#f5576c" />
-          <Text style={styles.statNumber}>7</Text>
-          <Text style={styles.statLabel}>Day Streak</Text>
-        </View>
-        <View style={styles.statCard}>
-          <Ionicons name="star" size={20} color="#4facfe" />
-          <Text style={styles.statNumber}>840</Text>
-          <Text style={styles.statLabel}>Points</Text>
-        </View>
+  if (error) {
+    return (
+      <View style={[styles.container, styles.centerContent]}>
+        <LinearGradient
+          colors={['#0A1C3C', '#1a2f4f', '#324762']}
+          style={styles.backgroundGradient}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+        />
+        <Ionicons name="alert-circle" size={64} color="#f5576c" />
+        <Text style={styles.errorText}>{error}</Text>
+        <TouchableOpacity style={styles.retryButton} onPress={reload}>
+          <Text style={styles.retryButtonText}>Retry</Text>
+        </TouchableOpacity>
       </View>
-    </Animated.View>
-  );
+    );
+  }
 
   return (
-    <View style={styles.container}>
-      <StatusBar barStyle="light-content" />
-      
-      {/* Space-themed gradient background */}
-      <LinearGradient
-        colors={['#0A0E27', '#1a1f3a', '#2d3561']}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={styles.background}
-      />
+     <View style={styles.container}>
+    {/* Animated Background */}
+    <LinearGradient
+      colors={['#0A1C3C', '#1a2f4f', '#324762']}
+      style={styles.backgroundGradient}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 1, y: 1 }}
+    />
 
-      {/* Animated stars background */}
-      <View style={styles.starsBackground}>
-        {[...Array(50)].map((_, i) => (
-          <View
-            key={i}
-            style={[
-              styles.star,
-              {
-                top: `${Math.random() * 100}%`,
-                left: `${Math.random() * 100}%`,
-                opacity: Math.random() * 0.8 + 0.2,
-              },
-            ]}
-          />
-        ))}
+    {/* Starfield */}
+    {stars.map((star, index) => (
+      <Animated.View
+        key={index}
+        style={[
+          styles.star,
+          {
+            left: star.left,
+            top: star.top,
+            opacity: star.opacity,
+          },
+        ]}
+      />
+    ))}
+
+    <Animated.View style={[styles.content, { opacity: fadeAnim }]}>
+      {/* Tab Switcher */}
+      <View style={styles.tabContainer}>
+        <View style={styles.tabPillContainer}>
+          {TABS.map((tab) => (
+            <TouchableOpacity
+              key={tab.id}
+              onPress={() => handleTabPress(tab.id)}
+              activeOpacity={0.8}
+              style={styles.tabButton}
+            >
+              {activeTab === tab.id ? (
+                <LinearGradient
+                  colors={['#667eea', '#764ba2']}
+                  style={styles.tabPillActive}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                >
+                  <Ionicons name={tab.icon} size={18} color="#fff" />
+                  <Text style={styles.tabTextActive}>{tab.label}</Text>
+                </LinearGradient>
+              ) : (
+                <View style={styles.tabPillInactive}>
+                  <Ionicons name={tab.icon} size={18} color="#aaa" />
+                  <Text style={styles.tabTextInactive}>{tab.label}</Text>
+                </View>
+              )}
+            </TouchableOpacity>
+          ))}
+        </View>
       </View>
 
-      {/* Quiz cards list with pull-to-refresh */}
-      <FlatList
-        data={MOCK_QUIZZES}
-        renderItem={({ item, index }) => (
-          <QuizCard quiz={item} index={index} />
-        )}
-        keyExtractor={(item) => item.id}
-        numColumns={2}
-        ListHeaderComponent={renderHeader}
-        contentContainerStyle={styles.listContent}
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            tintColor="#4facfe"
-            colors={['#4facfe', '#667eea']}
-          />
-        }
-      />
-    </View>
+      {/* CONDITIONAL CONTENT BASED ON ACTIVE TAB */}
+      {activeTab === 'journey' ? (
+        <>
+          {/* Header */}
+          <View style={styles.header}>
+            <Text style={styles.title}>Your Journey</Text>
+            <Text style={styles.subtitle}>
+              {userProgress?.currentLevel === 1 
+                ? 'Begin your cosmic adventure' 
+                : `Continue your cosmic adventure`}
+            </Text>
+          </View>
+
+          {/* Stats Bar */}
+          <View style={styles.statsContainer}>
+            {/* Shards */}
+            <View style={styles.compactStatCard}>
+              <LinearGradient
+                colors={['#fbbf24', '#f59e0b']}
+                style={styles.compactStatIcon}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+              >
+                <Ionicons name="diamond" size={16} color="#fff" />
+              </LinearGradient>
+              <Text style={styles.compactStatValue}>{userStats?.shards || 0}</Text>
+            </View>
+
+            {/* Energy */}
+            <View style={styles.compactStatCard}>
+              <LinearGradient
+                colors={['#10b981', '#059669']}
+                style={styles.compactStatIcon}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+              >
+                <Ionicons name="flash" size={16} color="#fff" />
+              </LinearGradient>
+              <Text style={styles.compactStatValue}>
+                {userStats?.energy.current || 0}/{userStats?.energy.max || 5}
+              </Text>
+            </View>
+
+            {/* XP Bar */}
+            <View style={styles.expBarContainer}>
+              <View style={styles.expBarHeader}>
+                <Text style={styles.expLevel}>Lv. {xpData.currentLevel}</Text>
+                <Text style={styles.expText}>
+                  {xpData.currentXP}/{xpData.xpToNextLevel}
+                </Text>
+              </View>
+              <View style={styles.expBarBackground}>
+                <LinearGradient
+                  colors={['#667eea', '#764ba2']}
+                  style={[
+                    styles.expBarFill,
+                    { width: `${xpData.xpProgress}%` },
+                  ]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                />
+              </View>
+            </View>
+          </View>
+
+          {/* Level Path */}
+          <ScrollView
+            style={styles.scrollView}
+            contentContainerStyle={styles.scrollContent}
+            showsVerticalScrollIndicator={false}
+          >
+            {levels.map((level, index) => (
+              <LevelNode
+                key={level.id}
+                level={level}
+                index={index}
+                isLast={index === levels.length - 1}
+                onPress={() => handleLevelPress(level)}
+              />
+            ))}
+            
+            {/* Spacer at bottom */}
+            <View style={{ height: 100 }} />
+          </ScrollView>
+        </>
+      ) : activeTab === 'leaderboard' ? (
+        <LeaderboardTab />
+      ) : (
+        // Shop tab placeholder
+        <View style={styles.centerContent}>
+          <Ionicons name="cart" size={64} color="#555" />
+          <Text style={styles.loadingText}>Shop coming soon!</Text>
+        </View>
+      )}
+    </Animated.View>
+  </View>
   );
+};
+
+interface LevelNodeProps {
+  level: Level;
+  index: number;
+  isLast: boolean;
+  onPress: () => void;
 }
 
+const LevelNode: React.FC<LevelNodeProps> = ({ level, index, isLast, onPress }) => {
+  const scaleAnim = useRef(new Animated.Value(0)).current;
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+  const floatAnim = useRef(new Animated.Value(0)).current;
+
+  const isLeft = index % 2 === 0;
+  const isCurrentLevel = level.unlocked && !level.completed;
+
+  useEffect(() => {
+    // Entry animation
+    Animated.spring(scaleAnim, {
+      toValue: 1,
+      delay: index * 150,
+      tension: 50,
+      friction: 7,
+      useNativeDriver: true,
+    }).start();
+
+    // Pulse for current level
+    if (isCurrentLevel) {
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(pulseAnim, {
+            toValue: 1.1,
+            duration: 1000,
+            useNativeDriver: true,
+          }),
+          Animated.timing(pulseAnim, {
+            toValue: 1,
+            duration: 1000,
+            useNativeDriver: true,
+          }),
+        ])
+      ).start();
+    }
+
+    // Floating animation
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(floatAnim, {
+          toValue: -10,
+          duration: 2000 + index * 200,
+          useNativeDriver: true,
+        }),
+        Animated.timing(floatAnim, {
+          toValue: 0,
+          duration: 2000 + index * 200,
+          useNativeDriver: true,
+        }),
+      ])
+    ).start();
+  }, []);
+
+  return (
+    <View style={styles.levelContainer}>
+      {/* Connection Path */}
+      {!isLast && (
+        <View style={[styles.pathLine, isLeft ? styles.pathLineLeft : styles.pathLineRight]}>
+          {[...Array(3)].map((_, i) => (
+            <View key={i}>
+              <LinearGradient
+                colors={
+                  level.completed
+                    ? ['rgba(102, 126, 234, 0.6)', 'rgba(118, 75, 162, 0.6)']
+                    : ['rgba(255, 255, 255, 0.15)', 'rgba(255, 255, 255, 0.15)']
+                }
+                style={styles.pathDot}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+              />
+            </View>
+          ))}
+        </View>
+      )}
+
+      {/* Level Card */}
+      <Animated.View
+        style={[
+          styles.levelWrapper,
+          isLeft ? styles.levelLeft : styles.levelRight,
+          {
+            transform: [
+              { scale: scaleAnim },
+              { scale: isCurrentLevel ? pulseAnim : 1 },
+              { translateY: floatAnim },
+            ],
+          },
+        ]}
+      >
+        <TouchableOpacity
+          disabled={!level.unlocked}
+          activeOpacity={0.8}
+          onPress={onPress}
+          style={styles.levelTouchable}
+        >
+          {/* Glow effect */}
+          {isCurrentLevel && (
+            <LinearGradient
+              colors={[level.gradient[0], level.gradient[1], level.gradient[0]]}
+              style={styles.glowEffect}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+            />
+          )}
+
+            {/* Card */}
+          <LinearGradient
+            colors={
+              level.unlocked
+                ? [
+                    `${level.gradient[0]}40`, // 25% opacity
+                    `${level.gradient[1]}40`,
+                  ]
+                : ['rgba(255, 255, 255, 0.1)', 'rgba(255, 255, 255, 0.05)']
+            }
+            style={[
+              styles.levelCard,
+              !level.unlocked && styles.levelCardLocked,
+              isCurrentLevel && styles.levelCardCurrent,
+            ]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+          >
+            {/* Icon */}
+            <View style={styles.levelIconContainer}>
+              <LinearGradient
+                colors={level.unlocked ? level.gradient : ['#555', '#333']}
+                style={styles.levelIcon}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+              >
+                {level.unlocked ? (
+                  level.completed ? (
+                    <Ionicons name="checkmark-circle" size={32} color="#fff" />
+                  ) : (
+                    <Ionicons name="planet" size={32} color="#fff" />
+                  )
+                ) : (
+                  <Ionicons name="lock-closed" size={32} color="#aaa" />
+                )}
+              </LinearGradient>
+            </View>
+
+            {/* Info */}
+            <View style={styles.levelInfo}>
+              <Text style={[styles.levelTitle, !level.unlocked && styles.levelTitleLocked]}>
+                Level {level.id}
+              </Text>
+              <Text style={[styles.levelSubtitle, !level.unlocked && styles.levelSubtitleLocked]}>
+                {level.title}
+              </Text>
+
+              {/* Stars */}
+              {level.unlocked && (
+                <View style={styles.starsContainer}>
+                  {[1, 2, 3].map((star) => (
+                    <Ionicons
+                      key={star}
+                      name={star <= level.stars ? 'star' : 'star-outline'}
+                      size={16}
+                      color={star <= level.stars ? '#fee140' : '#555'}
+                      style={styles.starIcon}
+                    />
+                  ))}
+                </View>
+              )}
+            </View>
+          </LinearGradient>
+        </TouchableOpacity>
+      </Animated.View>
+    </View>
+  );
+};
+
 const styles = StyleSheet.create({
-  // Main container with space background
   container: {
     flex: 1,
-    backgroundColor: '#0A0E27',
+    backgroundColor: '#0A1C3C',
   },
-  background: {
+  centerContent: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  backgroundGradient: {
     position: 'absolute',
+    top: 0,
     left: 0,
     right: 0,
-    top: 0,
-    bottom: 0,
-  },
-  starsBackground: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    top: 0,
     bottom: 0,
   },
   star: {
     position: 'absolute',
     width: 2,
     height: 2,
-    backgroundColor: '#ffffff',
+    backgroundColor: '#fff',
     borderRadius: 1,
   },
-
-  // List content padding
-  listContent: {
-    padding: 16,
-    paddingTop: 60,
+  content: {
+    flex: 1,
+    paddingTop: 20,
   },
-
-  // Header section styles
-  headerContainer: {
+  loadingText: {
+    fontFamily: 'Montserrat',
+    fontSize: 16,
+    color: '#aaa',
+    marginTop: 16,
+  },
+  errorText: {
+    fontFamily: 'Montserrat',
+    fontSize: 16,
+    color: '#f5576c',
+    marginTop: 16,
     marginBottom: 24,
+    textAlign: 'center',
+    paddingHorizontal: 32,
   },
-  titleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 20,
+  retryButton: {
+    backgroundColor: '#667eea',
+    paddingHorizontal: 32,
+    paddingVertical: 12,
+    borderRadius: 24,
   },
-  iconBadge: {
-    width: 64,
-    height: 64,
-    borderRadius: 16,
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#667eea',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.4,
-    shadowRadius: 8,
-    elevation: 8,
-  },
-  titleTextContainer: {
-    marginLeft: 16,
-    flex: 1,
-  },
-  mainTitle: {
-    fontSize: 28,
-    fontWeight: '700',
-    color: '#ffffff',
-    letterSpacing: 0.5,
-  },
-  subtitle: {
-    fontSize: 14,
-    color: 'rgba(255, 255, 255, 0.6)',
-    marginTop: 4,
-  },
-
-  // Stats row with glassmorphic cards
-  statsRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: 12,
-  },
-  statCard: {
-    flex: 1,
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
-    borderRadius: 16,
-    padding: 12,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
-  },
-  statNumber: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#ffffff',
-    marginTop: 4,
-  },
-  statLabel: {
-    fontSize: 11,
-    color: 'rgba(255, 255, 255, 0.6)',
-    marginTop: 2,
-  },
-
-  // Quiz card styles
-  cardContainer: {
-    width: CARD_WIDTH,
-    padding: 6,
-  },
-  card: {
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
-    borderRadius: 20,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
-  },
-
-  // Thumbnail section
-  thumbnailContainer: {
-    height: 140,
-    position: 'relative',
-  },
-  thumbnail: {
-    width: '100%',
-    height: '100%',
-    resizeMode: 'cover',
-  },
-  thumbnailOverlay: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    height: 60,
-  },
-
-  // Level badge with gradient
-  levelBadge: {
-    position: 'absolute',
-    top: 8,
-    left: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  levelText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#ffffff',
-  },
-
-  // Completion badge
-  completedBadge: {
-    position: 'absolute',
-    top: 8,
-    right: 8,
-    backgroundColor: 'rgba(10, 28, 60, 0.8)',
-    borderRadius: 12,
-    padding: 4,
-  },
-
-  // Card content section
-  cardContent: {
-    padding: 12,
-  },
-  quizTitle: {
+  retryButtonText: {
+    fontFamily: 'Montserrat',
     fontSize: 16,
     fontWeight: '700',
-    color: '#ffffff',
-    marginBottom: 4,
-    lineHeight: 20,
+    color: '#fff',
   },
-  quizDescription: {
-    fontSize: 12,
-    color: 'rgba(255, 255, 255, 0.6)',
-    marginBottom: 12,
-    lineHeight: 16,
+  tabContainer: {
+    paddingHorizontal: 24,
+    paddingTop: 16,
+    paddingBottom: 12,
   },
-
-  // Info row with category and stars
-  infoRow: {
+  tabPillContainer: {
+    flexDirection: 'row',
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderRadius: 30,
+    padding: 4,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  tabButton: {
+    flex: 1,
+  },
+  tabPillActive: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 26,
+    gap: 6,
+  },
+  tabPillInactive: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    gap: 6,
+  },
+  tabTextActive: {
+    fontFamily: 'Montserrat',
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#fff',
+  },
+  tabTextInactive: {
+    fontFamily: 'Montserrat',
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#aaa',
+  },
+  header: {
+    paddingHorizontal: 24,
+    marginBottom: 16,
+  },
+  title: {
+    fontFamily: 'Montserrat',
+    fontSize: 32,
+    fontWeight: '700',
+    color: '#fff',
+    marginBottom: 8,
+  },
+  subtitle: {
+    fontFamily: 'Montserrat',
+    fontSize: 15,
+    color: '#aaa',
+  },
+  statsContainer: {
+    flexDirection: 'row',
+    paddingHorizontal: 24,
+    marginBottom: 24,
+    gap: 8,
+    alignItems: 'center',
+  },
+  compactStatCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    borderRadius: 20,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+    gap: 6,
+  },
+  compactStatIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  compactStatValue: {
+    fontFamily: 'Montserrat',
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#fff',
+  },
+  expBarContainer: {
+    flex: 1,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    borderRadius: 20,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  expBarHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: 6,
   },
-  categoryTag: {
+  expLevel: {
+    fontFamily: 'Montserrat',
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#667eea',
+  },
+  expText: {
+    fontFamily: 'Montserrat',
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#aaa',
+  },
+  expBarBackground: {
+    height: 6,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: 3,
+    overflow: 'hidden',
+  },
+  expBarFill: {
+    height: '100%',
+    borderRadius: 3,
+  },
+  scrollView: {
+    flex: 1,
+  },
+  scrollContent: {
+    paddingTop: 20,
+    paddingHorizontal: 24,
+    paddingBottom: 100,
+  },
+  levelContainer: {
+    marginBottom: 50,
+    position: 'relative',
+  },
+  pathLine: {
+    position: 'absolute',
+    top: 120,
+    zIndex: 0,
+    gap: 10,
+  },
+  pathLineLeft: {
+    left: 90,
+  },
+  pathLineRight: {
+    right: 90,
+  },
+  pathDot: {
+    width: 8,
+    height: 7,
+    borderRadius: 4,
+  },
+  levelWrapper: {
+    position: 'relative',
+    zIndex: 1,
+  },
+  levelLeft: {
+    alignItems: 'flex-start',
+  },
+  levelRight: {
+    alignItems: 'flex-end',
+  },
+  levelTouchable: {
+    position: 'relative',
+  },
+  glowEffect: {
+    position: 'absolute',
+    top: -8,
+    left: -8,
+    right: -8,
+    bottom: -8,
+    borderRadius: 28,
+    opacity: 0.3,
+    zIndex: 0,
+  },
+  levelCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(79, 172, 254, 0.15)',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
-    gap: 4,
+    width: width - 120,
+    padding: 20,
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.15)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.4,
+    shadowRadius: 12,
   },
-  categoryText: {
-    fontSize: 10,
-    color: '#4facfe',
-    fontWeight: '600',
+  levelCardLocked: {
+    opacity: 0.5,
+  },
+  levelCardCurrent: {
+    borderWidth: 2,
+    borderColor: 'rgba(102, 126, 234, 0.5)',
+  },
+  levelIconContainer: {
+    marginRight: 16,
+  },
+  levelIcon: {
+    width: 70,
+    height: 70,
+    borderRadius: 35,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 6,
+    elevation: 6,
+  },
+  levelInfo: {
+    flex: 1,
+  },
+  levelTitle: {
+    fontFamily: 'Montserrat',
+    fontSize: 19,
+    fontWeight: '700',
+    color: '#fff',
+    marginBottom: 6,
+  },
+  levelTitleLocked: {
+    color: '#888',
+  },
+  levelSubtitle: {
+    fontFamily: 'Montserrat',
+    fontSize: 14,
+    color: '#aaa',
+    marginBottom: 8,
+  },
+  levelSubtitleLocked: {
+    color: '#666',
   },
   starsContainer: {
     flexDirection: 'row',
-    gap: 2,
+    gap: 4,
   },
-
-  // Questions count row
-  questionsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  questionsText: {
-    fontSize: 11,
-    color: 'rgba(255, 255, 255, 0.5)',
+  starIcon: {
+    marginRight: 2,
   },
 });
+
+export default ExploreScreen;

@@ -104,20 +104,25 @@ const RegisterScreen = () => {
         dateOfBirth: dateOfBirth.toISOString(),
       };
       
-      await registerUser(userData);
+      const registeredUser = await registerUser(userData);
       
-      // Send verification email after successful registration
+      // Send verification email using new endpoint
       try {
-        const response = await fetch('https://us-central1-rubric-app-8f65c.cloudfunctions.net/api/sendVerificationLink', {
+        const response = await fetch('https://api-m2tvqc6zqq-uc.a.run.app/sendEmailVerification', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({ email: userData.email }),
+          body: JSON.stringify({ 
+            email: userData.email,
+            uid: registeredUser.uid 
+          }),
         });
         
+        const result = await response.json();
+        
         if (!response.ok) {
-          console.error('Failed to send verification email:', response.statusText);
+          console.error('Failed to send verification email:', result.error);
         } else {
           console.log('Verification email sent successfully');
         }
@@ -127,7 +132,7 @@ const RegisterScreen = () => {
       
       Alert.alert(
         'Success', 
-        'Account created successfully! Please log in again.',
+        'Account created! Please check your email to verify your account before logging in.',
         [
           {
             text: 'OK',

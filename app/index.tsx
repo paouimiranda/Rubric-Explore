@@ -5,6 +5,7 @@ import { useRouter } from 'expo-router';
 import React, { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   Animated,
   Image,
   KeyboardAvoidingView,
@@ -37,6 +38,7 @@ const LoginScreen = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [showResendVerification, setShowResendVerification] = useState(false); //for resending
   const [error, setError] = useState<ErrorState>({
     visible: false,
     type: 'unknown',
@@ -48,6 +50,30 @@ const LoginScreen = () => {
   const modalFadeAnim = useRef(new Animated.Value(0)).current;
   const modalScaleAnim = useRef(new Animated.Value(0.9)).current;
   const router = useRouter();
+
+
+  const handleResendVerification = async () => {
+  try {
+    const userData = await loginUser(email.trim().toLowerCase(), password);
+    
+    const response = await fetch('https://api-m2tvqc6zqq-uc.a.run.app/resendVerificationEmail', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ uid: userData.uid }),
+    });
+    
+    if (response.ok) {
+      Alert.alert('Success', 'Verification email sent! Please check your inbox.');
+    } else {
+      const result = await response.json();
+      Alert.alert('Error', result.error || 'Failed to resend verification email');
+    }
+  } catch (error: any) {
+    Alert.alert('Error', 'Failed to resend verification email');
+  }
+};
 
   useEffect(() => {
     if (error.visible) {
@@ -116,6 +142,17 @@ const LoginScreen = () => {
     try {
       const userData = await loginUser(email.trim().toLowerCase(), password);
       
+      // Check if email is verified
+    if (!userData.isVerified) {
+        setIsLoading(false);
+        showError(
+          'validation',
+          'Email Not Verified',
+          'Please verify your email address before logging in. Check your inbox for the verification link.'
+        );
+        return;
+      }
+
       Animated.timing(opacityAnim, {
         toValue: 0,
         duration: 500,
@@ -126,6 +163,7 @@ const LoginScreen = () => {
       
     } catch (error: any) {
       console.error('Login error:', error);
+      console.log(error.code)
       
       // Determine error type and show appropriate message
       if (error.code === 'auth/invalid-credential' || error.code === 'auth/wrong-password' || error.code === 'auth/user-not-found') {
@@ -330,6 +368,11 @@ const LoginScreen = () => {
                         <Ionicons name="key" size={16} color="#667eea" />
                         <Text style={styles.errorSecondaryButtonText}>Reset Password</Text>
                       </LinearGradient>
+                    </TouchableOpacity>
+                  )}
+                  {error.title === 'Email Not Verified' && (
+                    <TouchableOpacity onPress={handleResendVerification}>
+                      <Text style={styles.errorSecondaryButtonText}>Resend Verification Email</Text>
                     </TouchableOpacity>
                   )}
                   
