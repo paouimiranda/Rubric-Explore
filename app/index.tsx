@@ -19,6 +19,7 @@ import {
 } from 'react-native';
 import { loginUser } from '../services/auth-service';
 
+
 type ErrorType = 'validation' | 'credentials' | 'network' | 'unknown';
 
 interface ErrorState {
