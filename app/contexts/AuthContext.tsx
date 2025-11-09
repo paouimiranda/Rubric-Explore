@@ -1,10 +1,9 @@
-// contexts/AuthContext.tsx
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import React, { createContext, ReactNode, useContext, useEffect, useState } from 'react';
 
 import { auth } from '../../firebase';
 import { getCurrentUserData } from '../../services/auth-service';
+import { clearUserData, getUserData, saveUserData } from '../../services/storage'; // Updated: Use new storage service
 
 interface UserData {
   uid: string;
@@ -62,28 +61,28 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
 
         try {
           // Try cached data first
-          const cached = await AsyncStorage.getItem('userData');
+          const cached = await getUserData(); // Updated: Use encrypted storage
           if (cached) {
-            setUserData(JSON.parse(cached));
-            console.log('💾 Loaded userData from AsyncStorage');
+            setUserData(cached);
+            console.log('💾 Loaded userData from secure storage');
           }
 
           // Always refresh in background
           const freshData = await getCurrentUserData();
           if (freshData) {
             setUserData(freshData as UserData);
-            await AsyncStorage.setItem('userData', JSON.stringify(freshData));
-            console.log('✅ Updated userData from Firestore');
+            await saveUserData(freshData as UserData); // Updated: Save securely
+            console.log('✅ Updated userData from Firestore and saved securely');
           }
         } catch (err) {
-          console.error('❌ Failed to load user data:', err);
+          console.error('❌ Failed to load/save user data:', err);
           setUserData(null);
         }
       } else {
         console.log('🚪 User signed out');
         setUser(null);
         setUserData(null);
-        await AsyncStorage.removeItem('userData');
+        await clearUserData(); // Updated: Clear securely
       }
 
       setLoading(false);
