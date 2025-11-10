@@ -41,7 +41,8 @@ export const BACKLOG_EVENTS = {
   USER_REJECTED_FRIEND_REQUEST: "user_rejected_friend_request",
   USER_UPDATED_QUIZ: "user_updated_quiz",
   USER_VIEWED_QUIZ: "user_viewed_quiz",
-  USER_VIEWED_QUIZ_LIST: "user_viewed_quiz_list"
+  USER_VIEWED_QUIZ_LIST: "user_viewed_quiz_list",
+  USER_EDIT_QUIZ: "user_edit_quiz"
 } as const;
 
 export type BacklogEvent = typeof BACKLOG_EVENTS[keyof typeof BACKLOG_EVENTS];
