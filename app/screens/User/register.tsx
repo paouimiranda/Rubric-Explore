@@ -26,6 +26,8 @@ const RegisterScreen = () => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [month, setMonth] = useState('');
   const [day, setDay] = useState('');
   const [year, setYear] = useState('');
@@ -272,23 +274,43 @@ const RegisterScreen = () => {
               autoCapitalize="none"
             />
             
-            <TextInput
-              style={styles.input}
-              placeholder="Password"
-              placeholderTextColor="#fff"
-              value={password}
-              onChangeText={setPassword}
-              secureTextEntry
-            />
+            <View style={styles.passwordContainer}>
+              <TextInput
+                style={[styles.input, { flex: 1 }]}
+                placeholder="Password"
+                placeholderTextColor="#fff"
+                value={password}
+                onChangeText={setPassword}
+                secureTextEntry={!showPassword}
+              />
+              <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
+                <Ionicons 
+                  name={showPassword ? "eye-off" : "eye"} 
+                  size={22} 
+                  color="#fff" 
+                  style={styles.eyeIcon}
+                />
+              </TouchableOpacity>
+            </View>
             
-            <TextInput
-              style={styles.input}
-              placeholder="Confirm Password"
-              placeholderTextColor="#fff"
-              value={confirmPassword}
-              onChangeText={setConfirmPassword}
-              secureTextEntry
-            />
+            <View style={styles.passwordContainer}>
+              <TextInput
+                style={[styles.input, { flex: 1 }]}
+                placeholder="Confirm Password"
+                placeholderTextColor="#fff"
+                value={confirmPassword}
+                onChangeText={setConfirmPassword}
+                secureTextEntry={!showConfirmPassword}
+              />
+              <TouchableOpacity onPress={() => setShowConfirmPassword(!showConfirmPassword)}>
+                <Ionicons 
+                  name={showConfirmPassword ? "eye-off" : "eye"} 
+                  size={22} 
+                  color="#fff" 
+                  style={styles.eyeIcon}
+                />
+              </TouchableOpacity>
+            </View>
             
             <View style={styles.birthdayRow}>
               <Text style={styles.dateLabel}>Birthday</Text>
@@ -421,6 +443,15 @@ const styles = StyleSheet.create({
     marginBottom: 30,
     textAlign: 'center',
   },
+  passwordContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    width: '80%',
+  },
+  eyeIcon: {
+    marginLeft: 10,
+    marginTop: -20
+  },
   input: {
     width: '80%',
     height: 40,
@@ -450,21 +481,21 @@ const styles = StyleSheet.create({
   width: '80%',
   marginBottom: 30,
   justifyContent: 'space-between',
-},
+  },
 
-dateLabel: {
-  color: '#fff',
-  fontSize: 16,
-  marginRight: 10,
-  width: '25%',
-  textAlign: 'left',
-},
+  dateLabel: {
+    color: '#fff',
+    fontSize: 16,
+    marginRight: 10,
+    width: '25%',
+    textAlign: 'left',
+  },
 
-dateContainer: {
-  flexDirection: 'row',
-  alignItems: 'center',
-  flex: 1,
-},
+  dateContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
 
   termsContainer: {
     flexDirection: 'row',
