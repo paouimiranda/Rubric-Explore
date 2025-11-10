@@ -1,7 +1,6 @@
 import { useBacklogLogger } from "@/hooks/useBackLogLogger";
 import { registerUser } from '@/services/auth-service';
 import { Ionicons } from '@expo/vector-icons';
-import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import React, { useRef, useState } from 'react';
@@ -19,6 +18,7 @@ import {
   View
 } from 'react-native';
 import TermsModal from '../Misc/t&c';
+
 const RegisterScreen = () => {
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
@@ -26,8 +26,11 @@ const RegisterScreen = () => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [dateOfBirth, setDateOfBirth] = useState(new Date());
-  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [month, setMonth] = useState('');
+  const [day, setDay] = useState('');
+  const [year, setYear] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [showTermsModal, setShowTermsModal] = useState(false);
@@ -35,6 +38,24 @@ const RegisterScreen = () => {
   const opacityAnim = useRef(new Animated.Value(1)).current;
   const router = useRouter();
   const { addBacklogEvent } = useBacklogLogger();
+
+  const getDateOfBirth = () => {
+    const m = parseInt(month, 10);
+    const d = parseInt(day, 10);
+    const y = parseInt(year, 10);
+    if (isNaN(m) || isNaN(d) || isNaN(y) || m < 1 || m > 12 || d < 1 || d > 31 || y < 1900 || y > new Date().getFullYear()) {
+      return null;
+    }
+    const date = new Date(y, m - 1, d);
+    if (date.getFullYear() !== y || date.getMonth() !== m - 1 || date.getDate() !== d) {
+      return null; // Invalid date, e.g., Feb 30
+    }
+    return date;
+  };
+  const monthRef = useRef<TextInput>(null);
+  const dayRef = useRef<TextInput>(null);
+  const yearRef = useRef<TextInput>(null);
+
 
   const validateForm = () => {
     if (!firstName.trim()) {
@@ -74,6 +95,12 @@ const RegisterScreen = () => {
       return false;
     }
     
+    const dateOfBirth = getDateOfBirth();
+    if (!dateOfBirth) {
+      Alert.alert('Validation Error', 'Please enter a valid date of birth (MM/DD/YYYY)');
+      return false;
+    }
+    
     // Check if user is at least 13 years old
     const today = new Date();
     const age = today.getFullYear() - dateOfBirth.getFullYear();
@@ -104,6 +131,7 @@ const RegisterScreen = () => {
     setIsLoading(true);
     
     try {
+      const dateOfBirth = getDateOfBirth()!;
       const userData = {
         firstName: firstName.trim(),
         lastName: lastName.trim(),
@@ -181,21 +209,6 @@ const RegisterScreen = () => {
     router.back();
   };
 
-  const onDateChange = (_event: DateTimePickerEvent, selectedDate?: Date) => {
-    setShowDatePicker(Platform.OS === 'ios');
-    if (selectedDate) {
-      setDateOfBirth(selectedDate);
-    }
-  };
-
-  const formatDate = (date: Date) => {
-    return date.toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-    });
-  };
-
   const handleTermsClose = () => {
     setShowTermsModal(false);
     setAcceptedTerms(true);
@@ -261,43 +274,92 @@ const RegisterScreen = () => {
               autoCapitalize="none"
             />
             
-            <TextInput
-              style={styles.input}
-              placeholder="Password"
-              placeholderTextColor="#fff"
-              value={password}
-              onChangeText={setPassword}
-              secureTextEntry
-            />
-            
-            <TextInput
-              style={styles.input}
-              placeholder="Confirm Password"
-              placeholderTextColor="#fff"
-              value={confirmPassword}
-              onChangeText={setConfirmPassword}
-              secureTextEntry
-            />
-            
-            <TouchableOpacity 
-              style={styles.dateInput}
-              onPress={() => setShowDatePicker(true)}
-            >
-              <Text style={styles.dateText}>
-                Date of Birth: {formatDate(dateOfBirth)}
-              </Text>
-            </TouchableOpacity>
-            
-            {showDatePicker && (
-              <DateTimePicker
-                value={dateOfBirth}
-                mode="date"
-                display="default"
-                onChange={onDateChange}
-                maximumDate={new Date()}
+            <View style={styles.passwordContainer}>
+              <TextInput
+                style={[styles.input, { flex: 1 }]}
+                placeholder="Password"
+                placeholderTextColor="#fff"
+                value={password}
+                onChangeText={setPassword}
+                secureTextEntry={!showPassword}
               />
-            )}
-
+              <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
+                <Ionicons 
+                  name={showPassword ? "eye-off" : "eye"} 
+                  size={22} 
+                  color="#fff" 
+                  style={styles.eyeIcon}
+                />
+              </TouchableOpacity>
+            </View>
+            
+            <View style={styles.passwordContainer}>
+              <TextInput
+                style={[styles.input, { flex: 1 }]}
+                placeholder="Confirm Password"
+                placeholderTextColor="#fff"
+                value={confirmPassword}
+                onChangeText={setConfirmPassword}
+                secureTextEntry={!showConfirmPassword}
+              />
+              <TouchableOpacity onPress={() => setShowConfirmPassword(!showConfirmPassword)}>
+                <Ionicons 
+                  name={showConfirmPassword ? "eye-off" : "eye"} 
+                  size={22} 
+                  color="#fff" 
+                  style={styles.eyeIcon}
+                />
+              </TouchableOpacity>
+            </View>
+            
+            <View style={styles.birthdayRow}>
+              <Text style={styles.dateLabel}>Birthday</Text>
+              <View style={styles.dateContainer}>
+                <TextInput
+                  ref={monthRef}
+                  style={styles.dateInput}
+                  placeholder="MM"
+                  placeholderTextColor="#fff"
+                  value={month}
+                  onChangeText={(text) => {
+                    const newText = text.replace(/[^0-9]/g, '').slice(0, 2);
+                    setMonth(newText);
+                    if (newText.length === 2) dayRef.current?.focus();
+                  }}
+                  keyboardType="numeric"
+                  maxLength={2}
+                />
+                <Text style={styles.dateSeparator}>/</Text>
+                <TextInput
+                  ref={dayRef}
+                  style={styles.dateInput}
+                  placeholder="DD"
+                  placeholderTextColor="#fff"
+                  value={day}
+                  onChangeText={(text) => {
+                    const newText = text.replace(/[^0-9]/g, '').slice(0, 2);
+                    setDay(newText);
+                    if (newText.length === 2) yearRef.current?.focus();
+                  }}
+                  keyboardType="numeric"
+                  maxLength={2}
+                />
+                <Text style={styles.dateSeparator}>/</Text>
+                <TextInput
+                  ref={yearRef}
+                  style={styles.dateInput}
+                  placeholder="YYYY"
+                  placeholderTextColor="#fff"
+                  value={year}
+                  onChangeText={(text) => {
+                    const newText = text.replace(/[^0-9]/g, '').slice(0, 4);
+                    setYear(newText);
+                  }}
+                  keyboardType="numeric"
+                  maxLength={4}
+                />
+              </View>
+            </View>
             <View style={styles.termsContainer}>
               <TouchableOpacity 
                 style={styles.checkbox}
@@ -381,6 +443,15 @@ const styles = StyleSheet.create({
     marginBottom: 30,
     textAlign: 'center',
   },
+  passwordContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    width: '80%',
+  },
+  eyeIcon: {
+    marginLeft: 10,
+    marginTop: -20
+  },
   input: {
     width: '80%',
     height: 40,
@@ -391,18 +462,41 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
   dateInput: {
-    width: '80%',
+    flex: 1,
     height: 40,
     borderBottomWidth: 0.5,
     borderColor: '#fff',
-    marginBottom: 30,
-    justifyContent: 'center',
+    color: '#fff',
     backgroundColor: 'transparent',
+    textAlign: 'center',
   },
-  dateText: {
+  dateSeparator: {
     color: '#fff',
     fontSize: 16,
+    marginHorizontal: 5,
   },
+  birthdayRow: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  width: '80%',
+  marginBottom: 30,
+  justifyContent: 'space-between',
+  },
+
+  dateLabel: {
+    color: '#fff',
+    fontSize: 16,
+    marginRight: 10,
+    width: '25%',
+    textAlign: 'left',
+  },
+
+  dateContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+
   termsContainer: {
     flexDirection: 'row',
     alignItems: 'center',
