@@ -57,7 +57,7 @@ export default function NotFoundScreen() {
   }, []);
 
   const handleGoHome = () => {
-    router.back();
+    router.replace('/screens/HomeScreen');
   };
 
   const spin = rotateAnim.interpolate({

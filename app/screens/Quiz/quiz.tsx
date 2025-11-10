@@ -506,6 +506,7 @@ const styles = StyleSheet.create({
   listContainer: {
     padding: 24,
     paddingTop: 8,
+    paddingBottom: 100,
   },
   quizCard: {
     marginBottom: 20,

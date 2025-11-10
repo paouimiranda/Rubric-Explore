@@ -210,6 +210,7 @@ export default function HomeScreen() {
             image={require('../../assets/images/notes_img.png')} 
             onPress={() => router.push('./Notes/notes')}
             animValue={moduleAnims[0]}
+            delay={0}
           />
           <AnimatedModuleButton 
             title="quiz" 
@@ -217,6 +218,7 @@ export default function HomeScreen() {
             image={require('../../assets/images/quiz_img.png')} 
             onPress={() => router.push('./Quiz/quiz')}
             animValue={moduleAnims[1]}
+            delay={500}
           />
           <AnimatedModuleButton 
             title="planner" 
@@ -224,6 +226,7 @@ export default function HomeScreen() {
             image={require('../../assets/images/planner_img.png')} 
             onPress={() => router.push('./Planner/planner')}
             animValue={moduleAnims[2]}
+            delay={1000}
           />
           <AnimatedModuleButton 
             title="friendlist" 
@@ -231,6 +234,7 @@ export default function HomeScreen() {
             image={require('../../assets/images/social_img.png')} 
             onPress={() => router.push('./Friends/friendlist')}
             animValue={moduleAnims[3]}
+            delay={1500}
           />
         </View>
 
@@ -242,8 +246,34 @@ export default function HomeScreen() {
 
 /* ------------------------------ Component Styles ------------------------------ */
 
-const AnimatedModuleButton = ({ title, color, image, onPress, animValue }: any) => {
+const AnimatedModuleButton = ({ title, color, image, onPress, animValue, delay }: any) => {
   const scaleValue = useRef(new Animated.Value(1)).current;
+  const floatAnim = useRef(new Animated.Value(0)).current;
+
+  // Subtle floating animation
+  useEffect(() => {
+    const startFloating = () => {
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(floatAnim, {
+            toValue: 1,
+            duration: 2500,
+            delay: delay,
+            useNativeDriver: true,
+          }),
+          Animated.timing(floatAnim, {
+            toValue: 0,
+            duration: 2500,
+            useNativeDriver: true,
+          }),
+        ])
+      ).start();
+    };
+
+    // Start floating after initial entrance animation
+    const timer = setTimeout(startFloating, 1500);
+    return () => clearTimeout(timer);
+  }, []);
 
   const handlePressIn = () => {
     Animated.spring(scaleValue, {
@@ -259,16 +289,25 @@ const AnimatedModuleButton = ({ title, color, image, onPress, animValue }: any) 
     }).start();
   };
 
+  // Interpolate float animation to very subtle movement
+  const translateY = floatAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, -6], // Only 6px of movement
+  });
+
   return (
     <Animated.View
       style={{
         opacity: animValue,
         transform: [
           {
-            translateY: animValue.interpolate({
-              inputRange: [0, 1],
-              outputRange: [50, 0],
-            }),
+            translateY: Animated.add(
+              animValue.interpolate({
+                inputRange: [0, 1],
+                outputRange: [50, 0],
+              }),
+              translateY
+            ),
           },
           { scale: Animated.multiply(animValue, scaleValue) },
         ],

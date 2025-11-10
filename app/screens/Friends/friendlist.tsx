@@ -1,4 +1,4 @@
-// Updated friends.tsx with CustomAlertModal and Lottie Loading
+// Enhanced friends.tsx with Neo-Glassmorphic Design
 
 import ChatList from '@/components/Interface/chat-list';
 import { CustomAlertModal } from '@/components/Interface/custom-alert-modal';
@@ -25,6 +25,7 @@ import { useRouter } from 'expo-router';
 import LottieView from 'lottie-react-native';
 import React, { useEffect, useRef, useState } from 'react';
 import {
+  Animated,
   RefreshControl,
   SafeAreaView,
   ScrollView,
@@ -50,6 +51,7 @@ interface SearchResult extends SearchUser {}
 export default function Friendlist() {
   const router = useRouter();
   const lottieRef = useRef<LottieView>(null);
+  const fadeAnim = useRef(new Animated.Value(0)).current;
   const { addBacklogEvent } = useBacklogLogger();
   const [activeTab, setActiveTab] = useState<TabType>('friends');
   const [search, setSearch] = useState('');
@@ -61,7 +63,6 @@ export default function Friendlist() {
   const [searchLoading, setSearchLoading] = useState(false);
   const [unreadChatCount, setUnreadChatCount] = useState(0);
 
-  // Custom Alert Modal state
   const [alertConfig, setAlertConfig] = useState<{
     visible: boolean;
     type: 'info' | 'success' | 'error' | 'warning';
@@ -82,7 +83,14 @@ export default function Friendlist() {
 
   const currentUser = auth.currentUser;
 
-  // Helper function to show custom alert
+  useEffect(() => {
+    Animated.timing(fadeAnim, {
+      toValue: 1,
+      duration: 400,
+      useNativeDriver: true,
+    }).start();
+  }, []);
+
   const showAlert = (
     type: 'info' | 'success' | 'error' | 'warning',
     title: string,
@@ -264,7 +272,8 @@ export default function Friendlist() {
                 'Request Rejected',
                 'Friend request has been rejected.',
                 [{ text: 'OK', style: 'primary', onPress: () => closeAlert() }]
-              );addBacklogEvent(BACKLOG_EVENTS.USER_REJECTED_FRIEND_REQUEST, { senderUsername: request.senderInfo.username });
+              );
+              addBacklogEvent(BACKLOG_EVENTS.USER_REJECTED_FRIEND_REQUEST, { senderUsername: request.senderInfo.username });
             } catch (error) {
               showAlert(
                 'error',
@@ -292,16 +301,11 @@ export default function Friendlist() {
     setRefreshing(false);
   };
 
-  const navigateToSearch = () => {
-    router.push('./search-screen/');
-  };
-
   const navigateToProfile = (userId: string) => {
     router.push({
       pathname: '/screens/User/profile',
       params: { userId }
     });
-    console.log('pressed!');
   };
 
   const startChatWithFriend = async (friend: Friend) => {
@@ -338,8 +342,8 @@ export default function Friendlist() {
               <RefreshControl 
                 refreshing={refreshing} 
                 onRefresh={onRefresh}
-                tintColor="#3b82f6"
-                colors={["#3b82f6"]}
+                tintColor="#4facfe"
+                colors={["#4facfe"]}
               />
             }
           >
@@ -360,7 +364,14 @@ export default function Friendlist() {
               ) : searchResults.length > 0 ? (
                 <View style={styles.resultsContainer}>
                   <View style={styles.resultsHeader}>
-                    <Ionicons name="search" size={16} color="#9ca3af" />
+                    <LinearGradient
+                      colors={['#4facfe', '#00f2fe']}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 1 }}
+                      style={styles.resultsHeaderIconBg}
+                    >
+                      <Ionicons name="search" size={14} color="#fff" />
+                    </LinearGradient>
                     <Text style={styles.resultsHeaderText}>
                       {searchResults.length} {searchResults.length === 1 ? 'result' : 'results'} found
                     </Text>
@@ -376,9 +387,14 @@ export default function Friendlist() {
                 </View>
               ) : (
                 <View style={styles.emptyContainer}>
-                  <View style={styles.emptyCircle}>
-                    <Ionicons name="people-outline" size={48} color="#4b5563" />
-                  </View>
+                  <LinearGradient
+                    colors={['#667eea', '#764ba2']}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={styles.emptyIconBg}
+                  >
+                    <Ionicons name="search-outline" size={48} color="#fff" />
+                  </LinearGradient>
                   <Text style={styles.emptyText}>No users found</Text>
                   <Text style={styles.emptySubtext}>Try searching with a different name</Text>
                 </View>
@@ -410,9 +426,14 @@ export default function Friendlist() {
                 ))
               ) : (
                 <View style={styles.emptyContainer}>
-                  <View style={styles.emptyCircle}>
-                    <Ionicons name="people-outline" size={48} color="#4b5563" />
-                  </View>
+                  <LinearGradient
+                    colors={['#f093fb', '#f5576c']}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={styles.emptyIconBg}
+                  >
+                    <Ionicons name="people-outline" size={48} color="#fff" />
+                  </LinearGradient>
                   <Text style={styles.emptyText}>No friends yet</Text>
                   <Text style={styles.emptySubtext}>Add friends to start connecting</Text>
                 </View>
@@ -430,15 +451,22 @@ export default function Friendlist() {
               <RefreshControl 
                 refreshing={refreshing} 
                 onRefresh={onRefresh}
-                tintColor="#3b82f6"
-                colors={["#3b82f6"]}
+                tintColor="#4facfe"
+                colors={["#4facfe"]}
               />
             }
           >
             {friendRequests.length > 0 ? (
               <>
                 <View style={styles.requestsHeader}>
-                  <Ionicons name="person-add" size={16} color="#9ca3af" />
+                  <LinearGradient
+                    colors={['#fa709a', '#fee140']}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={styles.requestsHeaderIconBg}
+                  >
+                    <Ionicons name="person-add" size={14} color="#fff" />
+                  </LinearGradient>
                   <Text style={styles.requestsHeaderText}>
                     {friendRequests.length} pending {friendRequests.length === 1 ? 'request' : 'requests'}
                   </Text>
@@ -455,9 +483,14 @@ export default function Friendlist() {
               </>
             ) : (
               <View style={styles.emptyContainer}>
-                <View style={styles.emptyCircle}>
-                  <Ionicons name="mail-outline" size={48} color="#4b5563" />
-                </View>
+                <LinearGradient
+                  colors={['#4facfe', '#00f2fe']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.emptyIconBg}
+                >
+                  <Ionicons name="mail-outline" size={48} color="#fff" />
+                </LinearGradient>
                 <Text style={styles.emptyText}>No friend requests</Text>
                 <Text style={styles.emptySubtext}>You're all caught up!</Text>
               </View>
@@ -480,133 +513,205 @@ export default function Friendlist() {
 
   return (
     <LinearGradient
-      colors={['#324762', '#0A1C3C']}
-      start={{ x: 1, y: 1 }}
-      end={{ x: 1, y: 0 }}
+      colors={['#0A1C3C', '#1a2942', '#324762']}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 0, y: 1 }}
       style={{ flex: 1 }}
     >
       <SafeAreaView style={styles.container}>
-        {/* Header */}
-        <View style={styles.header}>
-          <Text style={styles.headerTitle}>Social</Text>
-          <View style={styles.headerStats}>
-            <Ionicons name="people" size={16} color="#3b82f6" />
-            <Text style={styles.headerStatsText}>{friends.length} friends</Text>
-          </View>
-        </View>
-
-        {/* Tabs */}
-        <View style={styles.tabsContainer}>
-          <View style={styles.tabs}>
-            <TouchableOpacity 
-              style={[styles.tab, activeTab === 'friends' && styles.activeTab]}
-              onPress={() => setActiveTab('friends')}
-              activeOpacity={0.7}
-            >
-              <Ionicons 
-                name={activeTab === 'friends' ? 'people' : 'people-outline'} 
-                size={18} 
-                color={activeTab === 'friends' ? '#fff' : '#94A3B8'} 
-              />
-              <Text style={[styles.tabText, activeTab === 'friends' && styles.activeTabText]}>
-                Friends
-              </Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity 
-              style={[styles.tab, activeTab === 'requests' && styles.activeTab]}
-              onPress={() => setActiveTab('requests')}
-              activeOpacity={0.7}
-            >
-              <Ionicons 
-                name={activeTab === 'requests' ? 'person-add' : 'person-add-outline'} 
-                size={18} 
-                color={activeTab === 'requests' ? '#fff' : '#94A3B8'} 
-              />
-              <Text style={[styles.tabText, activeTab === 'requests' && styles.activeTabText]}>
-                Requests
-              </Text>
-              {friendRequests.length > 0 && (
-                <View style={styles.badge}>
-                  <Text style={styles.badgeText}>{friendRequests.length}</Text>
-                </View>
-              )}
-            </TouchableOpacity>
-            
-            <TouchableOpacity 
-              style={[styles.tab, activeTab === 'chat' && styles.activeTab]}
-              onPress={() => {
-                setActiveTab('chat');
-                loadUnreadCount();
-              }}
-              activeOpacity={0.7}
-            >
-              <Ionicons 
-                name={activeTab === 'chat' ? 'chatbubbles' : 'chatbubbles-outline'} 
-                size={18} 
-                color={activeTab === 'chat' ? '#fff' : '#94A3B8'} 
-              />
-              <Text style={[styles.tabText, activeTab === 'chat' && styles.activeTabText]}>
-                Chat
-              </Text>
-              {unreadChatCount > 0 && (
-                <View style={styles.badge}>
-                  <Text style={styles.badgeText}>{unreadChatCount}</Text>
-                </View>
-              )}
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        {/* Friends Tab Actions */}
-        {activeTab === 'friends' && (
-          <View style={styles.actionsContainer}>
-            <View style={styles.onlineIndicator}>
-              <View style={styles.onlineDot} />
-              <Text style={styles.onlineText}>{onlineCount} online</Text>
+        <Animated.View style={{ flex: 1, opacity: fadeAnim }}>
+          {/* Header */}
+          <View style={styles.header}>
+            <View>
+              <Text style={styles.headerTitle}>Social Hub</Text>
+              <View style={styles.headerSubtitleRow}>
+                <Ionicons name="people" size={14} color="#4facfe" />
+                <Text style={styles.headerSubtitle}>{friends.length} connections</Text>
+              </View>
             </View>
-            
-            {/* <TouchableOpacity style={styles.findFriendsBtn} onPress={navigateToSearch}>
+            <LinearGradient
+              colors={['rgba(79, 172, 254, 0.15)', 'rgba(0, 242, 254, 0.15)']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.headerStatsBg}
+            >
+              <View style={styles.headerStatsInner}>
+                <Ionicons name="chatbubbles" size={18} color="#4facfe" />
+                <Text style={styles.headerStatsText}>{friends.length}</Text>
+              </View>
+            </LinearGradient>
+          </View>
+
+          {/* Tabs */}
+          <View style={styles.tabsContainer}>
+            <LinearGradient
+              colors={['rgba(255, 255, 255, 0.08)', 'rgba(255, 255, 255, 0.04)']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 0, y: 1 }}
+              style={styles.tabsGradient}
+            >
+              <View style={styles.tabs}>
+                <TouchableOpacity 
+                  style={[styles.tab]}
+                  onPress={() => setActiveTab('friends')}
+                  activeOpacity={0.8}
+                >
+                  {activeTab === 'friends' && (
+                    <LinearGradient
+                      colors={['#4facfe', '#00f2fe']}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 1 }}
+                      style={styles.activeTabGradient}
+                    />
+                  )}
+                  <View style={styles.tabContent}>
+                    <Ionicons 
+                      name={activeTab === 'friends' ? 'people' : 'people-outline'} 
+                      size={20} 
+                      color={activeTab === 'friends' ? '#fff' : '#94A3B8'} 
+                    />
+                    <Text style={[styles.tabText, activeTab === 'friends' && styles.activeTabText]}>
+                      Friends
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+                
+                <TouchableOpacity 
+                  style={[styles.tab]}
+                  onPress={() => setActiveTab('requests')}
+                  activeOpacity={0.8}
+                >
+                  {activeTab === 'requests' && (
+                    <LinearGradient
+                      colors={['#fa709a', '#fee140']}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 1 }}
+                      style={styles.activeTabGradient}
+                    />
+                  )}
+                  <View style={styles.tabContent}>
+                    <Ionicons 
+                      name={activeTab === 'requests' ? 'person-add' : 'person-add-outline'} 
+                      size={20} 
+                      color={activeTab === 'requests' ? '#fff' : '#94A3B8'} 
+                    />
+                    <Text style={[styles.tabText, activeTab === 'requests' && styles.activeTabText]}>
+                      Requests
+                    </Text>
+                    {friendRequests.length > 0 && (
+                      <LinearGradient
+                        colors={['#ef4444', '#dc2626']}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 1 }}
+                        style={styles.badge}
+                      >
+                        <Text style={styles.badgeText}>{friendRequests.length}</Text>
+                      </LinearGradient>
+                    )}
+                  </View>
+                </TouchableOpacity>
+                
+                <TouchableOpacity 
+                  style={[styles.tab]}
+                  onPress={() => {
+                    setActiveTab('chat');
+                    loadUnreadCount();
+                  }}
+                  activeOpacity={0.8}
+                >
+                  {activeTab === 'chat' && (
+                    <LinearGradient
+                      colors={['#667eea', '#764ba2']}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 1 }}
+                      style={styles.activeTabGradient}
+                    />
+                  )}
+                  <View style={styles.tabContent}>
+                    <Ionicons 
+                      name={activeTab === 'chat' ? 'chatbubbles' : 'chatbubbles-outline'} 
+                      size={20} 
+                      color={activeTab === 'chat' ? '#fff' : '#94A3B8'} 
+                    />
+                    <Text style={[styles.tabText, activeTab === 'chat' && styles.activeTabText]}>
+                      Chat
+                    </Text>
+                    {unreadChatCount > 0 && (
+                      <LinearGradient
+                        colors={['#ef4444', '#dc2626']}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 1 }}
+                        style={styles.badge}
+                      >
+                        <Text style={styles.badgeText}>{unreadChatCount}</Text>
+                      </LinearGradient>
+                    )}
+                  </View>
+                </TouchableOpacity>
+              </View>
+            </LinearGradient>
+          </View>
+
+          {/* Online Indicator for Friends Tab */}
+          {activeTab === 'friends' && (
+            <View style={styles.actionsContainer}>
               <LinearGradient
-                colors={['#3b82f6', '#2563eb']}
-                style={styles.findFriendsBtnGradient}
+                colors={['rgba(34, 197, 94, 0.15)', 'rgba(34, 197, 94, 0.08)']}
                 start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.onlineIndicatorBg}
               >
-                <Ionicons name="search" size={16} color="#fff" />
-                <Text style={styles.findFriendsText}>Find Friends</Text>
+                <View style={styles.onlineIndicatorInner}>
+                  <View style={styles.onlineDotOuter}>
+                    <View style={styles.onlineDot} />
+                  </View>
+                  <Text style={styles.onlineText}>{onlineCount} online now</Text>
+                </View>
               </LinearGradient>
-            </TouchableOpacity> */}
-          </View>
-        )}
+            </View>
+          )}
 
-        {/* Search Bar */}
-        {(activeTab === 'friends' || activeTab === 'requests') && (
-          <View style={styles.searchContainer}>
-            <Ionicons name="search" size={18} color="#64748b" style={styles.searchIcon} />
-            <TextInput
-              style={styles.searchBar}
-              placeholder={
-                activeTab === 'friends' 
-                  ? "Search friends or find new users..." 
-                  : "Search requests..."
-              }
-              placeholderTextColor="#64748b"
-              value={search}
-              onChangeText={setSearch}
-            />
-            {search.length > 0 && (
-              <TouchableOpacity onPress={() => setSearch('')}>
-                <Ionicons name="close-circle" size={18} color="#64748b" />
-              </TouchableOpacity>
-            )}
-          </View>
-        )}
+          {/* Search Bar */}
+          {(activeTab === 'friends' || activeTab === 'requests') && (
+            <LinearGradient
+              colors={['rgba(255, 255, 255, 0.08)', 'rgba(255, 255, 255, 0.04)']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 0, y: 1 }}
+              style={styles.searchContainerGradient}
+            >
+              <View style={styles.searchContainer}>
+                <LinearGradient
+                  colors={['#4facfe', '#00f2fe']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.searchIconBg}
+                >
+                  <Ionicons name="search" size={16} color="#fff" />
+                </LinearGradient>
+                <TextInput
+                  style={styles.searchBar}
+                  placeholder={
+                    activeTab === 'friends' 
+                      ? "Search friends or discover users..." 
+                      : "Search pending requests..."
+                  }
+                  placeholderTextColor="#64748b"
+                  value={search}
+                  onChangeText={setSearch}
+                />
+                {search.length > 0 && (
+                  <TouchableOpacity onPress={() => setSearch('')} activeOpacity={0.7}>
+                    <Ionicons name="close-circle" size={20} color="#64748b" />
+                  </TouchableOpacity>
+                )}
+              </View>
+            </LinearGradient>
+          )}
 
-        {/* Content */}
-        {renderTabContent()}
+          {/* Content */}
+          {renderTabContent()}
+        </Animated.View>
         
-        {/* Custom Alert Modal */}
         <CustomAlertModal
           visible={alertConfig.visible}
           type={alertConfig.type}
@@ -629,37 +734,51 @@ const SearchResultCard = ({ user, onSendRequest, onViewProfile }: {
   onViewProfile: () => void;
 }) => (
   <TouchableOpacity 
-    style={styles.searchResultCard}
+    style={styles.cardWrapper}
     onPress={onViewProfile}
-    activeOpacity={0.7}
+    activeOpacity={0.8}
   >
-    <View style={styles.searchResultLeft}>
-      <View style={styles.searchResultAvatar}>
-        <Text style={styles.searchResultAvatarText}>
-          {user.displayName.charAt(0).toUpperCase()}
-        </Text>
-      </View>
-      <View style={styles.searchResultInfo}>
-        <Text style={styles.searchResultName}>{user.displayName}</Text>
-        <Text style={styles.searchResultUsername}>@{user.username}</Text>
-      </View>
-    </View>
-    <TouchableOpacity 
-      style={styles.addButton}
-      onPress={(e) => {
-        e.stopPropagation();
-        onSendRequest(user.uid, user.username);
-      }}
-      activeOpacity={0.7}
+    <LinearGradient
+      colors={['rgba(255, 255, 255, 0.08)', 'rgba(255, 255, 255, 0.04)']}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 0, y: 1 }}
+      style={styles.searchResultCard}
     >
-      <LinearGradient
-        colors={['#3b82f6', '#2563eb']}
-        style={styles.addButtonGradient}
+      <View style={styles.searchResultLeft}>
+        <LinearGradient
+          colors={['#667eea', '#764ba2']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.searchResultAvatar}
+        >
+          <Text style={styles.searchResultAvatarText}>
+            {user.displayName.charAt(0).toUpperCase()}
+          </Text>
+        </LinearGradient>
+        <View style={styles.searchResultInfo}>
+          <Text style={styles.searchResultName}>{user.displayName}</Text>
+          <Text style={styles.searchResultUsername}>@{user.username}</Text>
+        </View>
+      </View>
+      <TouchableOpacity 
+        style={styles.addButton}
+        onPress={(e) => {
+          e.stopPropagation();
+          onSendRequest(user.uid, user.username);
+        }}
+        activeOpacity={0.8}
       >
-        <Ionicons name="person-add" size={16} color="#fff" />
-        <Text style={styles.addButtonText}>Add</Text>
-      </LinearGradient>
-    </TouchableOpacity>
+        <LinearGradient
+          colors={['#4facfe', '#00f2fe']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.addButtonGradient}
+        >
+          <Ionicons name="person-add" size={16} color="#fff" />
+          <Text style={styles.addButtonText}>Add</Text>
+        </LinearGradient>
+      </TouchableOpacity>
+    </LinearGradient>
   </TouchableOpacity>
 );
 
@@ -670,106 +789,178 @@ const FriendRequestCard = ({ request, onAccept, onReject, onViewProfile }: {
   onReject: (request: FriendRequest) => void;
   onViewProfile: () => void;
 }) => (
-  <View style={styles.requestCard}>
-    <TouchableOpacity 
-      style={styles.requestLeft}
-      onPress={onViewProfile}
-      activeOpacity={0.7}
+  <View style={styles.cardWrapper}>
+    <LinearGradient
+      colors={['rgba(255, 255, 255, 0.08)', 'rgba(255, 255, 255, 0.04)']}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 0, y: 1 }}
+      style={styles.requestCard}
     >
-      <View style={styles.requestAvatar}>
-        <Text style={styles.requestAvatarText}>
-          {request.senderInfo.displayName.charAt(0).toUpperCase()}
-        </Text>
-        <View style={styles.requestBadge}>
-          <Ionicons name="person-add" size={10} color="#3b82f6" />
+      <TouchableOpacity 
+        style={styles.requestLeft}
+        onPress={onViewProfile}
+        activeOpacity={0.8}
+      >
+        <View style={styles.requestAvatarWrapper}>
+          <LinearGradient
+            colors={['#f093fb', '#f5576c']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.requestAvatar}
+          >
+            <Text style={styles.requestAvatarText}>
+              {request.senderInfo.displayName.charAt(0).toUpperCase()}
+            </Text>
+          </LinearGradient>
+          <LinearGradient
+            colors={['#fa709a', '#fee140']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.requestBadge}
+          >
+            <Ionicons name="person-add" size={10} color="#fff" />
+          </LinearGradient>
         </View>
-      </View>
-      <View style={styles.requestInfo}>
-        <Text style={styles.requestName}>{request.senderInfo.displayName}</Text>
-        <Text style={styles.requestUsername}>@{request.senderInfo.username}</Text>
-      </View>
-    </TouchableOpacity>
-    <View style={styles.requestActions}>
-      <TouchableOpacity 
-        style={styles.acceptButton}
-        onPress={() => onAccept(request)}
-        activeOpacity={0.7}
-      >
-        <Ionicons name="checkmark" size={18} color="#fff" />
+        <View style={styles.requestInfo}>
+          <Text style={styles.requestName}>{request.senderInfo.displayName}</Text>
+          <Text style={styles.requestUsername}>@{request.senderInfo.username}</Text>
+        </View>
       </TouchableOpacity>
-      <TouchableOpacity 
-        style={styles.rejectButton}
-        onPress={() => onReject(request)}
-        activeOpacity={0.7}
-      >
-        <Ionicons name="close" size={18} color="#fff" />
-      </TouchableOpacity>
-    </View>
+      <View style={styles.requestActions}>
+        <TouchableOpacity 
+          style={styles.actionButton}
+          onPress={() => onAccept(request)}
+          activeOpacity={0.8}
+        >
+          <LinearGradient
+            colors={['#22c55e', '#16a34a']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.acceptButton}
+          >
+            <Ionicons name="checkmark" size={20} color="#fff" />
+          </LinearGradient>
+        </TouchableOpacity>
+        <TouchableOpacity 
+          style={styles.actionButton}
+          onPress={() => onReject(request)}
+          activeOpacity={0.8}
+        >
+          <LinearGradient
+            colors={['#ef4444', '#dc2626']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.rejectButton}
+          >
+            <Ionicons name="close" size={20} color="#fff" />
+          </LinearGradient>
+        </TouchableOpacity>
+      </View>
+    </LinearGradient>
   </View>
 );
 
 const styles = StyleSheet.create({
   container: { 
     flex: 1, 
-    paddingHorizontal: 16,
-    paddingTop: 8,
+    paddingHorizontal: 20,
+    paddingTop: 12,
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: 24,
   },
   headerTitle: {
     color: '#fff',
     fontSize: 32,
-    fontWeight: '700',
-    letterSpacing: -0.5,
+    fontWeight: '800',
+    letterSpacing: -1,
+    marginBottom: 4,
   },
-  headerStats: {
+  headerSubtitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(59, 130, 246, 0.1)',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(59, 130, 246, 0.2)',
+    gap: 6,
+  },
+  headerSubtitle: {
+    color: '#94A3B8',
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  headerStatsBg: {
+    borderRadius: 16,
+    padding: 1,
+    shadowColor: '#4facfe',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  headerStatsInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(10, 28, 60, 0.8)',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 15,
+    gap: 8,
   },
   headerStatsText: {
-    color: '#9ca3af',
-    fontSize: 13,
-    fontWeight: '600',
-    marginLeft: 6,
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '700',
   },
   tabsContainer: {
-    marginBottom: 16,
+    marginBottom: 20,
+  },
+  tabsGradient: {
+    borderRadius: 18,
+    padding: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
   },
   tabs: {
     flexDirection: 'row',
-    backgroundColor: 'rgba(31, 41, 55, 0.8)',
-    borderRadius: 16,
-    padding: 4,
-    borderWidth: 1,
-    borderColor: 'rgba(75, 85, 99, 0.3)',
+    backgroundColor: 'rgba(10, 28, 60, 0.6)',
+    borderRadius: 17,
+    padding: 5,
   },
   tab: {
     flex: 1,
+    position: 'relative',
+    borderRadius: 14,
+    overflow: 'hidden',
+  },
+  activeTabGradient: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    borderRadius: 14,
+    shadowColor: '#4facfe',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.4,
+    shadowRadius: 6,
+    elevation: 4,
+  },
+  tabContent: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 10,
+    paddingVertical: 12,
     paddingHorizontal: 8,
-    borderRadius: 12,
     position: 'relative',
-  },
-  activeTab: {
-    backgroundColor: '#3b82f6',
   },
   tabText: {
     color: '#94A3B8',
     fontWeight: '600',
-    fontSize: 13,
+    fontSize: 14,
     marginLeft: 6,
   },
   activeTabText: {
@@ -777,83 +968,92 @@ const styles = StyleSheet.create({
   },
   badge: {
     position: 'absolute',
-    top: 4,
-    right: 4,
-    backgroundColor: '#ef4444',
-    minWidth: 18,
-    height: 18,
-    borderRadius: 9,
+    top: -2,
+    right: -2,
+    minWidth: 20,
+    height: 20,
+    borderRadius: 10,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 4,
+    paddingHorizontal: 6,
+    shadowColor: '#ef4444',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.4,
+    shadowRadius: 4,
+    elevation: 3,
   },
   badgeText: {
     color: '#fff',
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: '700',
   },
   actionsContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
     marginBottom: 16,
   },
-  onlineIndicator: {
+  onlineIndicatorBg: {
+    borderRadius: 14,
+    padding: 1,
+    alignSelf: 'flex-start',
+  },
+  onlineIndicatorInner: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(34, 197, 94, 0.1)',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(34, 197, 94, 0.2)',
+    backgroundColor: 'rgba(10, 28, 60, 0.6)',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 13,
+    gap: 10,
+  },
+  onlineDotOuter: {
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    backgroundColor: 'rgba(34, 197, 94, 0.3)',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   onlineDot: {
     width: 8,
     height: 8,
     borderRadius: 4,
     backgroundColor: '#22c55e',
-    marginRight: 8,
   },
   onlineText: {
     color: '#22c55e',
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '600',
   },
-  findFriendsBtn: {
-    borderRadius: 12,
-    overflow: 'hidden',
-  },
-  findFriendsBtnGradient: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-  },
-  findFriendsText: {
-    color: '#fff',
-    fontWeight: '600',
-    fontSize: 13,
-    marginLeft: 6,
+  searchContainerGradient: {
+    borderRadius: 16,
+    padding: 1,
+    marginBottom: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 6,
+    elevation: 4,
   },
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(31, 41, 55, 0.6)',
-    borderRadius: 16,
+    backgroundColor: 'rgba(10, 28, 60, 0.6)',
+    borderRadius: 15,
     paddingHorizontal: 16,
-    paddingVertical: 12,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: 'rgba(75, 85, 99, 0.3)',
+    paddingVertical: 14,
+    gap: 12,
   },
-  searchIcon: {
-    marginRight: 10,
+  searchIconBg: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   searchBar: {
     flex: 1,
     color: '#fff',
     fontSize: 15,
+    fontWeight: '500',
   },
   scrollArea: {
     paddingBottom: 100,
@@ -862,7 +1062,7 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingTop: 80,
+    paddingTop: 60,
   },
   lottieContainer: {
     width: 200,
@@ -874,9 +1074,9 @@ const styles = StyleSheet.create({
     height: '100%',
   },
   loadingText: {
-    color: '#9ca3af',
-    fontSize: 15,
-    fontWeight: '500',
+    color: '#94A3B8',
+    fontSize: 16,
+    fontWeight: '600',
   },
   emptyContainer: {
     flex: 1,
@@ -884,69 +1084,90 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingTop: 80,
   },
-  emptyCircle: {
+  emptyIconBg: {
     width: 100,
     height: 100,
-    borderRadius: 50,
-    backgroundColor: 'rgba(75, 85, 99, 0.2)',
+    borderRadius: 24,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: 24,
+    shadowColor: '#667eea',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 8,
   },
   emptyText: {
-    color: '#9ca3af',
-    fontSize: 18,
-    fontWeight: '600',
+    color: '#fff',
+    fontSize: 20,
+    fontWeight: '700',
     marginBottom: 8,
   },
   emptySubtext: {
-    color: '#6b7280',
-    fontSize: 14,
+    color: '#94A3B8',
+    fontSize: 15,
   },
   resultsHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 4,
-    paddingVertical: 8,
-    marginBottom: 12,
+    paddingVertical: 10,
+    marginBottom: 16,
+    gap: 10,
+  },
+  resultsHeaderIconBg: {
+    width: 28,
+    height: 28,
+    borderRadius: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   resultsHeaderText: {
-    color: '#9ca3af',
-    fontSize: 13,
+    color: '#94A3B8',
+    fontSize: 14,
     fontWeight: '600',
-    marginLeft: 8,
   },
   resultsContainer: {
     paddingBottom: 20,
+  },
+  cardWrapper: {
+    marginBottom: 12,
   },
   searchResultCard: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: 'rgba(31, 41, 55, 0.7)',
-    padding: 14,
-    borderRadius: 16,
-    marginBottom: 10,
+    padding: 16,
+    borderRadius: 18,
     borderWidth: 1,
-    borderColor: 'rgba(75, 85, 99, 0.3)',
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 4,
   },
   searchResultLeft: {
     flexDirection: 'row',
     alignItems: 'center',
     flex: 1,
+    gap: 14,
   },
   searchResultAvatar: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: '#3b82f6',
+    width: 50,
+    height: 50,
+    borderRadius: 16,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 12,
+    shadowColor: '#667eea',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    elevation: 4,
   },
   searchResultAvatarText: {
     color: '#fff',
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: '700',
   },
   searchResultInfo: {
@@ -954,118 +1175,157 @@ const styles = StyleSheet.create({
   },
   searchResultName: {
     color: '#fff',
-    fontWeight: '600',
-    fontSize: 16,
-    marginBottom: 2,
+    fontWeight: '700',
+    fontSize: 17,
+    marginBottom: 3,
   },
   searchResultUsername: {
     color: '#94A3B8',
-    fontSize: 13,
+    fontSize: 14,
+    fontWeight: '500',
   },
   addButton: {
-    borderRadius: 12,
+    borderRadius: 14,
     overflow: 'hidden',
+    shadowColor: '#4facfe',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    elevation: 4,
   },
   addButtonGradient: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 14,
-    paddingVertical: 8,
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    gap: 6,
   },
   addButtonText: {
     color: '#fff',
-    fontWeight: '600',
-    fontSize: 13,
-    marginLeft: 4,
+    fontWeight: '700',
+    fontSize: 14,
   },
   requestsHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 4,
-    paddingVertical: 8,
-    marginBottom: 12,
+    paddingVertical: 10,
+    marginBottom: 16,
+    gap: 10,
+  },
+  requestsHeaderIconBg: {
+    width: 28,
+    height: 28,
+    borderRadius: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   requestsHeaderText: {
-    color: '#9ca3af',
-    fontSize: 13,
+    color: '#94A3B8',
+    fontSize: 14,
     fontWeight: '600',
-    marginLeft: 8,
   },
   requestCard: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: 'rgba(31, 41, 55, 0.7)',
-    padding: 14,
-    borderRadius: 16,
-    marginBottom: 10,
+    padding: 16,
+    borderRadius: 18,
     borderWidth: 1,
-    borderColor: 'rgba(59, 130, 246, 0.3)',
+    borderColor: 'rgba(250, 112, 154, 0.2)',
+    shadowColor: '#fa709a',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 4,
   },
   requestLeft: {
     flexDirection: 'row',
     alignItems: 'center',
     flex: 1,
+    gap: 14,
+  },
+  requestAvatarWrapper: {
+    position: 'relative',
   },
   requestAvatar: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: '#334155',
+    width: 50,
+    height: 50,
+    borderRadius: 16,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 12,
-    position: 'relative',
+    shadowColor: '#f093fb',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    elevation: 4,
   },
   requestAvatarText: {
     color: '#fff',
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: '700',
   },
   requestBadge: {
     position: 'absolute',
-    bottom: -2,
-    right: -2,
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    backgroundColor: 'rgba(59, 130, 246, 0.2)',
+    bottom: -3,
+    right: -3,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
     borderWidth: 2,
-    borderColor: 'rgba(31, 41, 55, 0.7)',
+    borderColor: 'rgba(10, 28, 60, 0.8)',
     justifyContent: 'center',
     alignItems: 'center',
+    shadowColor: '#fa709a',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.4,
+    shadowRadius: 4,
+    elevation: 3,
   },
   requestInfo: {
     flex: 1,
   },
   requestName: {
     color: '#fff',
-    fontWeight: '600',
-    fontSize: 16,
-    marginBottom: 2,
+    fontWeight: '700',
+    fontSize: 17,
+    marginBottom: 3,
   },
   requestUsername: {
     color: '#94A3B8',
-    fontSize: 13,
+    fontSize: 14,
+    fontWeight: '500',
   },
   requestActions: {
     flexDirection: 'row',
-    gap: 8,
+    gap: 10,
+  },
+  actionButton: {
+    borderRadius: 14,
+    overflow: 'hidden',
   },
   acceptButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#22c55e',
+    width: 40,
+    height: 40,
+    borderRadius: 14,
     justifyContent: 'center',
     alignItems: 'center',
+    shadowColor: '#22c55e',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    elevation: 4,
   },
   rejectButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#ef4444',
+    width: 40,
+    height: 40,
+    borderRadius: 14,
     justifyContent: 'center',
     alignItems: 'center',
+    shadowColor: '#ef4444',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    elevation: 4,
   },
 });

@@ -1,5 +1,5 @@
-import { useBacklogLogger } from "@/hooks/useBackLogLogger"; // ✅ ADDED: Import backlog logger
-import { BACKLOG_EVENTS } from "@/services/backlogEvents"; // ✅ ADDED: Import backlog events
+import { useBacklogLogger } from "@/hooks/useBackLogLogger";
+import { BACKLOG_EVENTS } from "@/services/backlogEvents";
 import { Montserrat_400Regular, Montserrat_600SemiBold, Montserrat_700Bold, useFonts } from '@expo-google-fonts/montserrat';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -9,6 +9,8 @@ import {
   ActivityIndicator,
   Alert,
   Animated,
+  Dimensions,
+  Easing,
   Image,
   KeyboardAvoidingView,
   Modal,
@@ -21,6 +23,7 @@ import {
 } from 'react-native';
 import { loginUser } from '../services/auth-service';
 
+const { width, height } = Dimensions.get('window');
 
 type ErrorType = 'validation' | 'credentials' | 'network' | 'unknown';
 
@@ -29,6 +32,14 @@ interface ErrorState {
   type: ErrorType;
   title: string;
   message: string;
+}
+
+interface Particle {
+  id: number;
+  x: Animated.Value;
+  y: Animated.Value;
+  opacity: Animated.Value;
+  scale: Animated.Value;
 }
 
 const LoginScreen = () => {
@@ -42,42 +53,220 @@ const LoginScreen = () => {
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const [showResendVerification, setShowResendVerification] = useState(false); //for resending
+  const [showResendVerification, setShowResendVerification] = useState(false);
   const [error, setError] = useState<ErrorState>({
     visible: false,
     type: 'unknown',
     title: '',
     message: '',
   });
+  const [emailFocused, setEmailFocused] = useState(false);
+  const [passwordFocused, setPasswordFocused] = useState(false);
+  const [particles, setParticles] = useState<Particle[]>([]);
+
   const { addBacklogEvent } = useBacklogLogger();
   const opacityAnim = useRef(new Animated.Value(1)).current;
   const modalFadeAnim = useRef(new Animated.Value(0)).current;
   const modalScaleAnim = useRef(new Animated.Value(0.9)).current;
+  const shakeAnim = useRef(new Animated.Value(0)).current;
+  const logoFloatAnim = useRef(new Animated.Value(0)).current;
+  const backgroundColorAnim = useRef(new Animated.Value(0)).current;
+  
+  // Floating label animations
+  const emailLabelAnim = useRef(new Animated.Value(0)).current;
+  const passwordLabelAnim = useRef(new Animated.Value(0)).current;
+  
+  // Input border glow animations
+  const emailBorderAnim = useRef(new Animated.Value(0)).current;
+  const passwordBorderAnim = useRef(new Animated.Value(0)).current;
+  
+  // Success checkmark
+  const emailCheckAnim = useRef(new Animated.Value(0)).current;
+  
+  // Button shimmer effect
+  const shimmerAnim = useRef(new Animated.Value(0)).current;
+
   const router = useRouter();
 
+  // Animated gradient background
+  useEffect(() => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(backgroundColorAnim, {
+          toValue: 1,
+          duration: 8000,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: false,
+        }),
+        Animated.timing(backgroundColorAnim, {
+          toValue: 0,
+          duration: 8000,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: false,
+        }),
+      ])
+    ).start();
+  }, []);
+
+  // Logo floating animation
+  useEffect(() => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(logoFloatAnim, {
+          toValue: 1,
+          duration: 2500,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+        Animated.timing(logoFloatAnim, {
+          toValue: 0,
+          duration: 2500,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+      ])
+    ).start();
+  }, []);
+
+  // Button shimmer animation
+  useEffect(() => {
+    if (!isLoading) {
+      Animated.loop(
+        Animated.timing(shimmerAnim, {
+          toValue: 1,
+          duration: 2000,
+          easing: Easing.linear,
+          useNativeDriver: true,
+        })
+      ).start();
+    }
+  }, [isLoading]);
+
+  // Email focus animation
+  useEffect(() => {
+    Animated.parallel([
+      Animated.spring(emailLabelAnim, {
+        toValue: emailFocused || email ? 1 : 0,
+        tension: 50,
+        friction: 7,
+        useNativeDriver: true,
+      }),
+      Animated.timing(emailBorderAnim, {
+        toValue: emailFocused ? 1 : 0,
+        duration: 300,
+        useNativeDriver: false,
+      }),
+    ]).start();
+  }, [emailFocused, email]);
+
+  // Password focus animation
+  useEffect(() => {
+    Animated.parallel([
+      Animated.spring(passwordLabelAnim, {
+        toValue: passwordFocused || password ? 1 : 0,
+        tension: 50,
+        friction: 7,
+        useNativeDriver: true,
+      }),
+      Animated.timing(passwordBorderAnim, {
+        toValue: passwordFocused ? 1 : 0,
+        duration: 300,
+        useNativeDriver: false,
+      }),
+    ]).start();
+  }, [passwordFocused, password]);
+
+  // Email validation checkmark
+  useEffect(() => {
+    const isValid = email.includes('@') && email.includes('.');
+    Animated.spring(emailCheckAnim, {
+      toValue: isValid && email ? 1 : 0,
+      tension: 50,
+      friction: 7,
+      useNativeDriver: true,
+    }).start();
+  }, [email]);
+
+  // Particle explosion effect
+  const createParticles = () => {
+    const newParticles: Particle[] = Array.from({ length: 30 }, (_, i) => ({
+      id: Date.now() + i,
+      x: new Animated.Value(0),
+      y: new Animated.Value(0),
+      opacity: new Animated.Value(1),
+      scale: new Animated.Value(1),
+    }));
+
+    setParticles(newParticles);
+
+    newParticles.forEach((particle, index) => {
+      const angle = (index / newParticles.length) * Math.PI * 2;
+      const velocity = 100 + Math.random() * 100;
+      const targetX = Math.cos(angle) * velocity;
+      const targetY = Math.sin(angle) * velocity;
+
+      Animated.parallel([
+        Animated.timing(particle.x, {
+          toValue: targetX,
+          duration: 1000,
+          easing: Easing.out(Easing.quad),
+          useNativeDriver: true,
+        }),
+        Animated.timing(particle.y, {
+          toValue: targetY,
+          duration: 1000,
+          easing: Easing.out(Easing.quad),
+          useNativeDriver: true,
+        }),
+        Animated.timing(particle.opacity, {
+          toValue: 0,
+          duration: 1000,
+          useNativeDriver: true,
+        }),
+        Animated.timing(particle.scale, {
+          toValue: 0,
+          duration: 1000,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    });
+
+    setTimeout(() => setParticles([]), 1000);
+  };
+
+  // Shake animation for errors
+  const triggerShake = () => {
+    Animated.sequence([
+      Animated.timing(shakeAnim, { toValue: 10, duration: 50, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: -10, duration: 50, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: 10, duration: 50, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: -10, duration: 50, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: 0, duration: 50, useNativeDriver: true }),
+    ]).start();
+  };
 
   const handleResendVerification = async () => {
-  try {
-    const userData = await loginUser(email.trim().toLowerCase(), password);
-    
-    const response = await fetch('https://api-m2tvqc6zqq-uc.a.run.app/resendVerificationEmail', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ uid: userData.uid }),
-    });
-    
-    if (response.ok) {
-      Alert.alert('Success', 'Verification email sent! Please check your inbox.');
-    } else {
-      const result = await response.json();
-      Alert.alert('Error', result.error || 'Failed to resend verification email');
+    try {
+      const userData = await loginUser(email.trim().toLowerCase(), password);
+      
+      const response = await fetch('https://api-m2tvqc6zqq-uc.a.run.app/resendVerificationEmail', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ uid: userData.uid }),
+      });
+      
+      if (response.ok) {
+        Alert.alert('Success', 'Verification email sent! Please check your inbox.');
+      } else {
+        const result = await response.json();
+        Alert.alert('Error', result.error || 'Failed to resend verification email');
+      }
+    } catch (error: any) {
+      Alert.alert('Error', 'Failed to resend verification email');
     }
-  } catch (error: any) {
-    Alert.alert('Error', 'Failed to resend verification email');
-  }
-};
+  };
 
   useEffect(() => {
     if (error.visible) {
@@ -111,6 +300,7 @@ const LoginScreen = () => {
   }, [error.visible]);
 
   const showError = (type: ErrorType, title: string, message: string) => {
+    triggerShake();
     setError({ visible: true, type, title, message });
   };
 
@@ -146,8 +336,7 @@ const LoginScreen = () => {
     try {
       const userData = await loginUser(email.trim().toLowerCase(), password);
       
-      // Check if email is verified
-    if (!userData.isVerified) {
+      if (!userData.isVerified) {
         setIsLoading(false);
         showError(
           'validation',
@@ -157,19 +346,23 @@ const LoginScreen = () => {
         return;
       }
 
-      Animated.timing(opacityAnim, {
-        toValue: 0,
-        duration: 500,
-        useNativeDriver: true,
-      }).start(() => {
-        router.replace('./screens/Misc/loading');
-      });
+      // Create particle explosion on success
+      createParticles();
+      
+      setTimeout(() => {
+        Animated.timing(opacityAnim, {
+          toValue: 0,
+          duration: 500,
+          useNativeDriver: true,
+        }).start(() => {
+          router.replace('./screens/Misc/loading');
+        });
+      }, 500);
+
       addBacklogEvent(BACKLOG_EVENTS.LOGIN_SESSION, { email: email.toLowerCase() });
     } catch (error: any) {
       console.error('Login error:', error);
-      console.log(error.code)
       
-      // Determine error type and show appropriate message
       if (error.code === 'auth/invalid-credential' || error.code === 'auth/wrong-password' || error.code === 'auth/user-not-found') {
         showError(
           'credentials',
@@ -239,6 +432,31 @@ const LoginScreen = () => {
     }
   };
 
+  const backgroundGradientColors = backgroundColorAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['#1A2D4B', '#2D4A6B']
+  });
+
+  const logoTranslateY = logoFloatAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, -20]
+  });
+
+  const emailBorderColor = emailBorderAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['rgba(255, 255, 255, 0.3)', '#52F7E2']
+  });
+
+  const passwordBorderColor = passwordBorderAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['rgba(255, 255, 255, 0.3)', '#52F7E2']
+  });
+
+  const shimmerTranslate = shimmerAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [-width, width]
+  });
+
   return (
     <KeyboardAvoidingView 
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -250,43 +468,122 @@ const LoginScreen = () => {
         end={{ x: 1, y: 1 }}
         style={styles.container}
       >
-        <Animated.View style={[{ opacity: opacityAnim }, styles.formContainer]}>
-          <Image
-            source={require('../assets/images/rubric.png')}
-            style={{ width: 300, height: 300, marginBottom: 25 }}
-          />
-          
-          <TextInput
-            style={styles.input}
-            placeholder="Email"
-            placeholderTextColor="#fff"
-            value={email}
-            onChangeText={setEmail}
-            autoCapitalize="none"
-            keyboardType="email-address"
-            editable={!isLoading}
-          />
-          
-          <View style={styles.passwordContainer}>
-            <TextInput
-              style={[styles.input, { flex: 1, marginBottom: 0 }]}
-              placeholder="Password"
-              placeholderTextColor="#fff"
-              value={password}
-              onChangeText={setPassword}
-              secureTextEntry={!showPassword}
-              editable={!isLoading}
+        <Animated.View style={[{ opacity: opacityAnim, transform: [{ translateX: shakeAnim }] }, styles.formContainer]}>
+          {/* Floating Logo */}
+          <Animated.View style={{ transform: [{ translateY: logoTranslateY }] }}>
+            <Image
+              source={require('../assets/images/rubric.png')}
+              style={styles.logo}
             />
-            <TouchableOpacity
-              onPress={() => setShowPassword((prev) => !prev)}
-              style={styles.eyeIcon}
+          </Animated.View>
+          
+          {/* Email Input with Floating Label */}
+          <View style={styles.inputWrapper}>
+            <Animated.Text
+              style={[
+                styles.floatingLabel,
+                {
+                  transform: [
+                    {
+                      translateY: emailLabelAnim.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [12, -10]
+                      })
+                    },
+                    {
+                      scale: emailLabelAnim.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [1, 0.85]
+                      })
+                    }
+                  ],
+                  opacity: emailLabelAnim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [0.6, 1]
+                  }),
+                  color: emailLabelAnim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: ['rgba(255, 255, 255, 0.6)', '#52F7E2']
+                  })
+                }
+              ]}
             >
-              <Ionicons
-                name={showPassword ? "eye-off" : "eye"}
-                size={20}
-                color="#fff"
-              />
-            </TouchableOpacity>
+              Email
+            </Animated.Text>
+            <View style={styles.inputContainer}>
+              <Ionicons name="mail-outline" size={20} color={emailFocused ? '#52F7E2' : 'rgba(255, 255, 255, 0.6)'} style={styles.inputIcon} />
+              <Animated.View style={[styles.inputBorderWrapper, { borderColor: emailBorderColor }]}>
+                <TextInput
+                  style={styles.input}
+                  placeholder=""
+                  placeholderTextColor="rgba(255, 255, 255, 0.4)"
+                  value={email}
+                  onChangeText={setEmail}
+                  onFocus={() => setEmailFocused(true)}
+                  onBlur={() => setEmailFocused(false)}
+                  autoCapitalize="none"
+                  keyboardType="email-address"
+                  editable={!isLoading}
+                />
+              </Animated.View>
+              <Animated.View style={[styles.checkmark, { opacity: emailCheckAnim, transform: [{ scale: emailCheckAnim }] }]}>
+                <Ionicons name="checkmark-circle" size={24} color="#5EEF96" />
+              </Animated.View>
+            </View>
+          </View>
+
+          {/* Password Input with Floating Label */}
+          <View style={styles.inputWrapper}>
+            <Animated.Text
+              style={[
+                styles.floatingLabel,
+                {
+                  transform: [
+                    {
+                      translateY: passwordLabelAnim.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [12, -10]
+                      })
+                    },
+                    {
+                      scale: passwordLabelAnim.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [1, 0.85]
+                      })
+                    }
+                  ],
+                  opacity: passwordLabelAnim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [0.6, 1]
+                  }),
+                  color: passwordLabelAnim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: ['rgba(255, 255, 255, 0.6)', '#52F7E2']
+                  })
+                }
+              ]}
+            >
+              Password
+            </Animated.Text>
+            <View style={styles.inputContainer}>
+              <Ionicons name="lock-closed-outline" size={20} color={passwordFocused ? '#52F7E2' : 'rgba(255, 255, 255, 0.6)'} style={styles.inputIcon} />
+              <Animated.View style={[styles.inputBorderWrapper, { borderColor: passwordBorderColor }]}>
+                <TextInput
+                  style={styles.input}
+                  placeholder=""
+                  placeholderTextColor="rgba(255, 255, 255, 0.4)"
+                  value={password}
+                  onChangeText={setPassword}
+                  onFocus={() => setPasswordFocused(true)}
+                  onBlur={() => setPasswordFocused(false)}
+                  secureTextEntry={!showPassword}
+                  editable={!isLoading}
+                />
+              </Animated.View>
+              <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={styles.eyeIcon}>
+                <Ionicons name={showPassword ? "eye-off" : "eye"} size={20} color="rgba(255, 255, 255, 0.6)" />
+              </TouchableOpacity>
+            </View>
           </View>
 
           <TouchableOpacity 
@@ -297,10 +594,12 @@ const LoginScreen = () => {
             <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
           </TouchableOpacity>
 
+          {/* Login Button with Shimmer */}
           <TouchableOpacity 
             style={[styles.button, isLoading && styles.disabledButton]} 
             onPress={handleLogin}
             disabled={isLoading}
+            activeOpacity={0.8}
           >
             <LinearGradient
               colors={['#52F7E2', '#5EEF96']}
@@ -311,7 +610,15 @@ const LoginScreen = () => {
               {isLoading ? (
                 <ActivityIndicator size="small" color="#263A56" />
               ) : (
-                <Text style={styles.loginButtonText}>Log In</Text>
+                <>
+                  <Text style={styles.loginButtonText}>Log In</Text>
+                  <Animated.View 
+                    style={[
+                      styles.shimmer,
+                      { transform: [{ translateX: shimmerTranslate }] }
+                    ]}
+                  />
+                </>
               )}
             </LinearGradient>
           </TouchableOpacity>
@@ -320,10 +627,29 @@ const LoginScreen = () => {
             style={[styles.button, styles.registerButton]} 
             onPress={handleRegister}
             disabled={isLoading}
+            activeOpacity={0.8}
           >
             <Text style={styles.buttonText}>Register</Text>
           </TouchableOpacity>
         </Animated.View>
+
+        {/* Particle Effects */}
+        {particles.map((particle) => (
+          <Animated.View
+            key={particle.id}
+            style={[
+              styles.particle,
+              {
+                transform: [
+                  { translateX: particle.x },
+                  { translateY: particle.y },
+                  { scale: particle.scale }
+                ],
+                opacity: particle.opacity,
+              }
+            ]}
+          />
+        ))}
 
         {/* Error Modal */}
         <Modal
@@ -351,7 +677,6 @@ const LoginScreen = () => {
                 colors={['#0A1C3C', '#324762']}
                 style={styles.errorModalContent}
               >
-                {/* Error Icon */}
                 <LinearGradient
                   colors={getErrorGradient()}
                   style={styles.errorIconBadge}
@@ -361,13 +686,9 @@ const LoginScreen = () => {
                   <Ionicons name={getErrorIcon()} size={40} color="#ffffff" />
                 </LinearGradient>
 
-                {/* Error Title */}
                 <Text style={styles.errorTitle}>{error.title}</Text>
-
-                {/* Error Message */}
                 <Text style={styles.errorMessage}>{error.message}</Text>
 
-                {/* Action Buttons */}
                 <View style={styles.errorButtons}>
                   {error.type === 'credentials' && (
                     <TouchableOpacity
@@ -390,13 +711,25 @@ const LoginScreen = () => {
                     </TouchableOpacity>
                   )}
                   {error.title === 'Email Not Verified' && (
-                    <TouchableOpacity onPress={handleResendVerification}>
-                      <Text style={styles.errorSecondaryButtonText}>Resend Verification Email</Text>
+                    <TouchableOpacity 
+                      style={styles.errorButtonWrapper}
+                      onPress={handleResendVerification}
+                      activeOpacity={0.8}
+                    >
+                      <LinearGradient
+                        colors={['rgba(102, 126, 234, 0.2)', 'rgba(118, 75, 162, 0.2)']}
+                        style={styles.errorSecondaryButton}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 0 }}
+                      >
+                        <Ionicons name="mail" size={16} color="#667eea" />
+                        <Text style={styles.errorSecondaryButtonText}>Resend Email</Text>
+                      </LinearGradient>
                     </TouchableOpacity>
                   )}
                   
                   <TouchableOpacity
-                    style={[styles.errorButtonWrapper, error.type !== 'credentials' && { flex: 1 }]}
+                    style={[styles.errorButtonWrapper, error.type !== 'credentials' && error.title !== 'Email Not Verified' && { flex: 1 }]}
                     onPress={hideError}
                     activeOpacity={0.8}
                   >
@@ -435,58 +768,122 @@ const styles = StyleSheet.create({
     width: '100%',
     alignItems: 'center',
   },
-  input: {
-    width: '80%',
-    height: 40,
-    borderBottomWidth: 0.5,
-    borderColor: '#fff',
-    color: '#fff',
+  logo: {
+    width: 250,
+    height: 250,
+    marginBottom: 40,
+  },
+  inputWrapper: {
+    width: '85%',
     marginBottom: 30,
+  },
+  floatingLabel: {
+    position: 'absolute',
+    left: 48,
+    top: 0,
+    fontSize: 16,
+    fontWeight: '500',
+    zIndex: 1,
     backgroundColor: 'transparent',
+  },
+  inputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    position: 'relative',
+  },
+  inputIcon: {
+    position: 'absolute',
+    left: 12,
+    zIndex: 2,
+  },
+  inputBorderWrapper: {
+    flex: 1,
+    borderWidth: 2,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    overflow: 'hidden',
+  },
+  input: {
+    height: 50,
+    paddingLeft: 44,
+    paddingRight: 44,
+    color: '#fff',
+    fontSize: 16,
+  },
+  checkmark: {
+    position: 'absolute',
+    right: 12,
+    zIndex: 2,
+  },
+  eyeIcon: {
+    position: 'absolute',
+    right: 12,
+    padding: 8,
+    zIndex: 2,
   },
   forgotPasswordContainer: {
     alignSelf: 'flex-end',
-    marginRight: '10%',
-    marginBottom: 20,
+    marginRight: '7.5%',
+    marginBottom: 24,
   },
   forgotPasswordText: {
-    color: '#B0C4DE',
+    color: '#52F7E2',
     fontSize: 14,
-    textAlign: 'right',
+    fontWeight: '500',
   },
   button: {
-    padding: 16,
-    borderRadius: 150,
-    width: '80%',
+    borderRadius: 12,
+    width: '85%',
     marginBottom: 15,
+    overflow: 'hidden',
   },
   disabledButton: {
     opacity: 0.6,
   },
   registerButton: {
     backgroundColor: 'transparent',
-    borderWidth: 1,
-    borderColor: '#fff',
-    width: '70%',
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.4)',
+    padding: 16,
   },
   loginButtonText: {
     color: '#263A56',
     textAlign: 'center',
-    fontWeight: '600',
+    fontWeight: '700',
+    fontSize: 16,
   },
   buttonText: {
     color: '#fff',
-    fontWeight: '100',
+    fontWeight: '400',
     textAlign: 'center',
+    fontSize: 16,
   },
   gradientButton: {
     padding: 16,
-    borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
-    minHeight: 48,
+    minHeight: 54,
+    position: 'relative',
+    overflow: 'hidden',
   },
-  // Modal Styles
+  shimmer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    width: 100,
+    backgroundColor: 'rgba(255, 255, 255, 0.3)',
+  },
+  particle: {
+    position: 'absolute',
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#52F7E2',
+    left: '50%',
+    top: '50%',
+  },
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.85)',
@@ -578,14 +975,5 @@ const styles = StyleSheet.create({
     color: '#667eea',
     fontSize: 15,
     fontFamily: 'Montserrat_600SemiBold',
-  },
-  passwordContainer: {
-    width: '80%',
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 20
-  },
-  eyeIcon: {
-    padding: 8,
   },
 });
