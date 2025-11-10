@@ -1,3 +1,4 @@
+import { useBacklogLogger } from "@/hooks/useBackLogLogger";
 import { registerUser } from '@/services/auth-service';
 import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
@@ -18,7 +19,6 @@ import {
   View
 } from 'react-native';
 import TermsModal from '../Misc/t&c';
-
 const RegisterScreen = () => {
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
@@ -34,6 +34,7 @@ const RegisterScreen = () => {
   
   const opacityAnim = useRef(new Animated.Value(1)).current;
   const router = useRouter();
+  const { addBacklogEvent } = useBacklogLogger();
 
   const validateForm = () => {
     if (!firstName.trim()) {
@@ -90,7 +91,15 @@ const RegisterScreen = () => {
   };
 
   const handleRegister = async () => {
-    if (!validateForm()) return;
+    if (!validateForm()) {
+      // ✅ ADDED: Log validation error
+      addBacklogEvent("registration_error", { 
+        errorType: "validation", 
+        email: email.trim().toLowerCase(), 
+        username: username.trim().toLowerCase() 
+      });
+      return;
+    }
     
     setIsLoading(true);
     
@@ -105,6 +114,12 @@ const RegisterScreen = () => {
       };
       
       const registeredUser = await registerUser(userData);
+      // ✅ ADDED: Log successful registration
+      addBacklogEvent("user_registered", { 
+        email: userData.email, 
+        username: userData.username, 
+        uid: registeredUser.uid 
+      });
       
       // Send verification email using new endpoint
       try {
@@ -150,6 +165,13 @@ const RegisterScreen = () => {
       );
     } catch (error: any) {
       Alert.alert('Registration Error', error.message || 'An error occurred during registration');
+      addBacklogEvent("registration_error", { 
+        errorType: "firebase", 
+        email: email.trim().toLowerCase(), 
+        username: username.trim().toLowerCase(), 
+        errorCode: error.code, 
+        errorMessage: error.message 
+      });
     } finally {
       setIsLoading(false);
     }

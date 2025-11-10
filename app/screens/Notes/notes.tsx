@@ -3,6 +3,8 @@ import CreateNotebookModal from '@/components/Interface/create-notebook-modal';
 import { CustomAlertModal } from '@/components/Interface/custom-alert-modal';
 import { JoinNoteIconButton } from '@/components/Interface/join-button';
 import BottomNavigation from "@/components/Interface/nav-bar";
+import { useBacklogLogger } from "@/hooks/useBackLogLogger";
+import { BACKLOG_EVENTS } from "@/services/backlogEvents";
 import { uploadNotebookCoverImage } from '@/services/image-service';
 import { createNotebook, deleteNotebook, getNotebooks } from "@/services/notes-service";
 import { Ionicons } from "@expo/vector-icons";
@@ -27,7 +29,6 @@ import {
 import { useAuth } from "../../contexts/AuthContext";
 import { Notebook, NotebookProperty } from "../../types/notebook";
 
-
 type ViewMode = 'list' | 'compact' | 'grid';
 
 const { width } = Dimensions.get('window');
@@ -36,7 +37,7 @@ export default function NotesHome() {
   const { user, loading: authLoading } = useAuth();
   const uid = user?.uid;
   const lottieRef = useRef<LottieView>(null);
-
+  const { addBacklogEvent } = useBacklogLogger();
   const [notebooks, setNotebooks] = useState<Notebook[]>([]);
   const [search, setSearch] = useState("");
   const [activeTag, setActiveTag] = useState<string>("All");
@@ -235,6 +236,7 @@ export default function NotesHome() {
                 'Notebook deleted successfully',
                 [{ text: 'OK', style: 'primary', onPress: () => closeAlert() }]
               );
+              addBacklogEvent(BACKLOG_EVENTS.USER_DELETED_NOTEBOOK, { notebookId: id });
             } catch (err) {
               console.error("Error deleting notebook:", err);
               showAlert(
@@ -243,6 +245,7 @@ export default function NotesHome() {
                 'Failed to delete notebook. You may not have permission.',
                 [{ text: 'OK', style: 'primary', onPress: () => closeAlert() }]
               );
+              addBacklogEvent("notebook_deletion_error", { notebookId: id, error: String(err) });
             }
           },
         },
@@ -287,6 +290,7 @@ export default function NotesHome() {
         pathname: "./notebook-screen",
         params: { notebookId: docId },
       });
+      addBacklogEvent(BACKLOG_EVENTS.USER_CREATED_NOTEBOOK, { notebookId: docId, title: notebookData.title });
     } catch (err) {
       console.error("Error creating notebook:", err);
       showAlert(
@@ -295,6 +299,7 @@ export default function NotesHome() {
         'Failed to create notebook. Please try again.',
         [{ text: 'OK', style: 'primary', onPress: () => closeAlert() }]
       );
+      addBacklogEvent("notebook_creation_error", { title: notebookData.title, error: String(err) });
     } finally {
       setCreating(false);
     }

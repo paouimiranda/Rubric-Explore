@@ -1,5 +1,7 @@
 // File: app/Quiz/quiz-preview.tsx
+import { useBacklogLogger } from '@/hooks/useBackLogLogger';
 import { getCurrentUserData } from '@/services/auth-service';
+import { BACKLOG_EVENTS } from '@/services/backlogEvents';
 import { getQuizImageSource } from '@/services/image-service';
 import { createMultiplayerSession } from '@/services/multiplayer-service';
 import { QuizService, type Question, type Quiz } from '@/services/quiz-service';
@@ -19,11 +21,10 @@ import {
   View,
 } from 'react-native';
 
-
 const QuizPreview = () => {
   const router = useRouter();
   const { quizId } = useLocalSearchParams();
-
+  const { addBacklogEvent, logError } = useBacklogLogger();
   const [quiz, setQuiz] = useState<Quiz | null>(null);
   const [loading, setLoading] = useState(true);
   const [expandedQuestion, setExpandedQuestion] = useState<number | null>(null);
@@ -46,6 +47,7 @@ const QuizPreview = () => {
         Alert.alert('Error', 'Quiz not found');
         router.back();
       }
+      addBacklogEvent(BACKLOG_EVENTS.USER_VIEWED_QUIZ);
     } catch (error: any) {
       console.error('Error loading quiz:', error);
       
@@ -63,6 +65,7 @@ const QuizPreview = () => {
           [{ text: 'OK', onPress: () => router.back() }]
         );
       }
+      
     } finally {
       setLoading(false);
     }
@@ -70,7 +73,7 @@ const QuizPreview = () => {
 
   const handleStartQuiz = () => {
     if (!quiz?.id) return;
-
+    addBacklogEvent(BACKLOG_EVENTS.USER_STARTED_QUIZ,{quizId: quiz?.id,})
     router.push({
       pathname: './quiz-play',
       params: { quizId: quiz.id },
@@ -116,6 +119,7 @@ const QuizPreview = () => {
                     sessionId: sessionId 
                   },
                 });
+                addBacklogEvent(BACKLOG_EVENTS.USER_CREATED_MULTIPLAYER_SESSION, {quizId: quiz.id,})
               } catch (error) {
                 console.error('Error creating session:', error);
                 Alert.alert('Error', 'Failed to create multiplayer session. Please try again.');

@@ -2,6 +2,8 @@
 import { convertAPIQuestionToInternalFormat, generateQuizFromAI } from '@/api/quizApi';
 import { TopicSelectionModal } from '@/components/Interface/ai-quiz-modal';
 import { auth } from '@/firebase';
+import { useBacklogLogger } from '@/hooks/useBackLogLogger';
+import { BACKLOG_EVENTS } from '@/services/backlogEvents';
 import {
   deleteQuizImage,
   extractStoragePathFromUrl,
@@ -35,7 +37,7 @@ import {
 const QuizMaker = () => {
   const router = useRouter();
   const params = useLocalSearchParams();
-
+  const { addBacklogEvent, logError } = useBacklogLogger();
   const {
     quizTitle,
     questions,
@@ -418,6 +420,12 @@ const QuizMaker = () => {
       setLoading(true, 'Saving quiz...');
       
       const quizId = await QuizService.createQuiz(quiz);
+      addBacklogEvent(BACKLOG_EVENTS.USER_CREATED_QUIZ, {
+        quizId,
+        title: quizTitle,
+        questionCount: questions.length,
+        userId: auth.currentUser?.uid,
+      });
 
       router.push({ 
         pathname: './quiz-preview',
@@ -425,6 +433,7 @@ const QuizMaker = () => {
       });
     } catch (error: any) {
       Alert.alert('Storage Error', error.message || 'Failed to save the quiz.');
+      logError(error, 'handleSaveQuiz');
     } finally {
       setLoading(false);
     }
@@ -455,7 +464,11 @@ const QuizMaker = () => {
                 );
               }
             }
-            
+            addBacklogEvent(BACKLOG_EVENTS.USER_DELETED_QUIZ, {  // Using USER_DELETED_QUIZ for question deletion
+              questionId: questions[currentQuestionIndex].id,
+              quizTitle,
+              userId: auth.currentUser?.uid,
+            });
             deleteQuestionFromStore(currentQuestionIndex);
           },
         },
@@ -487,6 +500,14 @@ const QuizMaker = () => {
                 ...convertAPIQuestionToInternalFormat(apiQuestion),
                 id: `ai_question_${Date.now()}_${index}`
               }));
+              addBacklogEvent(BACKLOG_EVENTS.USER_GENERATED_QUIZ_WITH_AI, {
+                topic,
+                questionCount,
+                questionType,
+                generatedQuestions: convertedQuestions.length,
+                userId: auth.currentUser?.uid,
+                fromNote: !!content,
+              });
               
               useQuizStore.getState().setQuestions([...questions, ...convertedQuestions]);
               
@@ -498,6 +519,7 @@ const QuizMaker = () => {
             } catch (error: any) {
               console.error(error);
               Alert.alert("Error", error.message || 'Failed to generate quiz questions.');
+              
             } finally {
               setLoading(false);
             }

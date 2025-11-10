@@ -1,5 +1,7 @@
 // File: app/Quiz/quiz-play.tsx - Improved Quiz Play Screen with Better Scrolling
 import { CustomAlertModal } from '@/components/Interface/custom-alert-modal';
+import { useBacklogLogger } from '@/hooks/useBackLogLogger'; // NEW: Added import
+import { BACKLOG_EVENTS } from '@/services/backlogEvents';
 import { QuizService, type Question, type QuestionResult, type Quiz } from '@/services/quiz-service';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -19,7 +21,6 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-
 interface QuizAnswer {
   questionId: string;
   selectedAnswers?: number[];
@@ -47,7 +48,7 @@ const MATCHING_COLORS = [
 const QuizPlay = () => {
   const router = useRouter();
   const { quizId } = useLocalSearchParams();
-  
+  const { addBacklogEvent, logError } = useBacklogLogger();
   const [quiz, setQuiz] = useState<Quiz | null>(null);
   const [loading, setLoading] = useState(true);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
@@ -111,6 +112,11 @@ const QuizPlay = () => {
           timeSpent: 0
         })));
         quizStartTime.current = Date.now();
+        addBacklogEvent(BACKLOG_EVENTS.USER_STARTED_QUIZ, {
+        quizId: id,
+        quizTitle: quizData.title,
+        questionCount: quizData.questions.length,
+      });
       } else {
         router.back();
       }
@@ -281,9 +287,13 @@ const QuizPlay = () => {
         points,
       };
     });
-    
+    addBacklogEvent(BACKLOG_EVENTS.USER_COMPLETED_QUIZ, {
+      quizId: quiz?.id,
+      quizTitle: quiz?.title,
+    });
     setQuizResults(results);
     setShowResults(true);
+    
     
     // Save attempt to Firestore for analytics
     await saveAttemptToFirestore(results);
@@ -572,8 +582,11 @@ const QuizPlay = () => {
 
   const handleViewAnalytics = () => {
     if (quiz?.id) {
+      addBacklogEvent(BACKLOG_EVENTS.USER_VIEWED_QUIZ_RESULTS, {
+      quizId: quiz?.id,
+    });
       router.push(`/screens/Quiz/Analytics/quiz-performance-detail?quizId=${quiz.id}`);
-      console.log("hello");
+      
     }
   };
 

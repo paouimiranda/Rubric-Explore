@@ -1,5 +1,7 @@
 // app/Quiz/multiplayer-play.tsx
+import { useBacklogLogger } from '@/hooks/useBackLogLogger';
 import { getCurrentUserData } from '@/services/auth-service';
+import { BACKLOG_EVENTS } from '@/services/backlogEvents';
 import {
   getLeaderboard,
   LeaderboardEntry,
@@ -47,7 +49,7 @@ type Phase = 'question' | 'correct' | 'incorrect' | 'leaderboard' | 'waiting';
 const MultiplayerPlay = () => {
   const router = useRouter();
   const { sessionId } = useLocalSearchParams();
-  
+  const { addBacklogEvent, logError } = useBacklogLogger();
 
   const [session, setSession] = useState<MultiplayerSession | null>(null);
   const [players, setPlayers] = useState<SessionPlayer[]>([]);
@@ -185,6 +187,7 @@ const MultiplayerPlay = () => {
     } catch (error) {
       console.error('Error initializing game:', error);
       Alert.alert('Error', 'Failed to initialize game');
+      logError(error, 'initializeGame', currentUser?.email);
       router.back();
     } finally {
       setLoading(false);
@@ -393,6 +396,12 @@ const MultiplayerPlay = () => {
       setLeaderboard(finalLeaderboard);
       setShowFinalResults(true);
     }
+    addBacklogEvent(BACKLOG_EVENTS.USER_COMPLETED_MULTIPLAYER_QUIZ, {
+      sessionId,
+      quizId: session?.quizId,
+      userId: currentUser?.uid,
+      finalScore: leaderboard.find(p => p.uid === currentUser?.uid)?.score || 0,
+    });
   };
 
   const cleanup = () => {
@@ -412,6 +421,10 @@ const MultiplayerPlay = () => {
           onPress: async () => {
             if (sessionId && typeof sessionId === 'string' && currentUser) {
               await leaveSession(sessionId, currentUser.uid);
+              addBacklogEvent(BACKLOG_EVENTS.USER_LEFT_MULTIPLAYER_GAME, {
+              sessionId,
+              userId: currentUser?.uid,
+            });
               router.back();
             }
           },

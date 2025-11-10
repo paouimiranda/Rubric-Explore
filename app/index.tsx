@@ -1,3 +1,5 @@
+import { useBacklogLogger } from "@/hooks/useBackLogLogger"; // ✅ ADDED: Import backlog logger
+import { BACKLOG_EVENTS } from "@/services/backlogEvents"; // ✅ ADDED: Import backlog events
 import { Montserrat_400Regular, Montserrat_600SemiBold, Montserrat_700Bold, useFonts } from '@expo-google-fonts/montserrat';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -46,7 +48,7 @@ const LoginScreen = () => {
     title: '',
     message: '',
   });
-
+  const { addBacklogEvent } = useBacklogLogger();
   const opacityAnim = useRef(new Animated.Value(1)).current;
   const modalFadeAnim = useRef(new Animated.Value(0)).current;
   const modalScaleAnim = useRef(new Animated.Value(0.9)).current;
@@ -161,7 +163,7 @@ const LoginScreen = () => {
       }).start(() => {
         router.replace('./screens/Misc/loading');
       });
-      
+      addBacklogEvent(BACKLOG_EVENTS.LOGIN_SESSION, { email: email.toLowerCase() });
     } catch (error: any) {
       console.error('Login error:', error);
       console.log(error.code)
@@ -192,7 +194,10 @@ const LoginScreen = () => {
           'An unexpected error occurred. Please try again later.'
         );
       }
-      
+      addBacklogEvent("login_error", { 
+        email: email.toLowerCase(), 
+        errorCode: error.code,  
+      });
       opacityAnim.setValue(1);
     } finally {
       setIsLoading(false);

@@ -1,6 +1,8 @@
 // app/Quiz/multiplayer-lobby.tsx
 import { db } from '@/firebase';
+import { useBacklogLogger } from '@/hooks/useBackLogLogger';
 import { getCurrentUserData } from '@/services/auth-service';
+import { BACKLOG_EVENTS } from '@/services/backlogEvents';
 import {
   createMultiplayerSession,
   leaveSession,
@@ -33,7 +35,7 @@ import {
 const MultiplayerLobby = () => {
   const router = useRouter();
   const { quizId, sessionId: paramSessionId } = useLocalSearchParams();
-
+  const { addBacklogEvent, logError } = useBacklogLogger();
   const [quiz, setQuiz] = useState<Quiz | null>(null);
   const [session, setSession] = useState<MultiplayerSession | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(
@@ -81,107 +83,6 @@ const MultiplayerLobby = () => {
     };
   }, [sessionId]);
 
-//   const initializeLobby = async () => {
-//   try {
-//     setLoading(true);
-
-//     console.log('Initializing lobby with quizId:', quizId, 'sessionId:', paramSessionId);
-
-//     // Get current user
-//     const user = await getCurrentUserData();
-//     if (!user) {
-//       console.log('No user found');
-//       Alert.alert('Error', 'Please login to continue');
-//       router.back();
-//       return;
-//     }
-//     console.log('User loaded:', user.uid);
-//     setCurrentUser(user);
-
-//     // Normalize params
-//     const normalizedQuizId = Array.isArray(quizId) ? quizId[0] : quizId;
-//     const normalizedSessionId = Array.isArray(paramSessionId) ? paramSessionId[0] : paramSessionId;
-
-//     // If joining (sessionId provided but no quizId), fetch session first to get quizId
-//     if (normalizedSessionId && !normalizedQuizId) {
-//       console.log('Joining existing session, fetching session data...');
-      
-//       const sessionDoc = await getDoc(doc(db, 'multiplayerSessions', normalizedSessionId));
-//       if (!sessionDoc.exists()) {
-//         Alert.alert('Error', 'Session not found');
-//         router.back();
-//         return;
-//       }
-      
-//       const sessionData = sessionDoc.data() as MultiplayerSession;
-//       const sessionQuizId = sessionData.quizId;
-      
-//       console.log('Loading quiz from session:', sessionQuizId);
-//       const quizData = await QuizService.getQuizById(sessionQuizId);
-//       if (!quizData) {
-//         Alert.alert('Error', 'Quiz not found');
-//         router.back();
-//         return;
-//       }
-      
-//       console.log('Quiz loaded:', quizData.title);
-//       setQuiz(quizData);
-//       setSessionId(normalizedSessionId);
-//       setIsCreator(false);
-      
-//     } else if (normalizedQuizId && typeof normalizedQuizId === 'string') {
-//       // Hosting (quizId provided, create session)
-//       console.log('Loading quiz:', normalizedQuizId);
-//       const quizData = await QuizService.getQuizById(normalizedQuizId);
-//       if (!quizData) {
-//         console.log('Quiz not found');
-//         Alert.alert('Error', 'Quiz not found');
-//         router.back();
-//         return;
-//       }
-//       console.log('Quiz loaded:', quizData.title);
-//       setQuiz(quizData);
-
-//       // Create session if not provided
-//       if (!normalizedSessionId) {
-//         console.log('Creating new multiplayer session...');
-//         const { sessionId: newSessionId, sessionCode } = await createMultiplayerSession(
-//           quizData,
-//           user.uid,
-//           user.displayName || 'Anonymous'
-//         );
-        
-//         console.log('Session created:', newSessionId, sessionCode);
-//         setSessionId(newSessionId);
-//         setIsCreator(true);
-//       } else {
-//         console.log('Using existing sessionId:', normalizedSessionId);
-//         setSessionId(normalizedSessionId);
-//       }
-//     } else {
-//       console.log('Invalid params - quizId:', normalizedQuizId, 'sessionId:', normalizedSessionId);
-//       Alert.alert('Error', 'Invalid session parameters');
-//       router.back();
-//     }
-//   } catch (error) {
-//     console.error('Error initializing lobby:', error);
-//     Alert.alert('Error', `Failed to initialize lobby: ${error}`);
-//     router.back();
-//   } finally {
-//     setLoading(false);
-//   }
-// };
-
-//   const checkAutoStart = (playersData: SessionPlayer[]) => {
-//     // Auto-start if all players are ready and minimum players met
-//     if (playersData.length >= 2) {
-//       const allReady = playersData.every((p) => p.status === 'ready');
-//       if (allReady && session?.status === 'waiting') {
-//         handleStartQuiz();
-//       }
-//     }
-//   };
-
 const initializeLobby = async () => {
   try {
     setLoading(true);
@@ -194,6 +95,7 @@ const initializeLobby = async () => {
       console.log('No user found');
       Alert.alert('Error', 'Please login to continue');
       router.back();
+      
       return;
     }
     console.log('User loaded:', user.uid);
@@ -230,7 +132,11 @@ const initializeLobby = async () => {
       setQuiz(quizData);
       setSessionId(normalizedSessionId);
       setIsCreator(false);
-      
+      addBacklogEvent(BACKLOG_EVENTS.USER_JOINED_MULTIPLAYER_SESSION, {
+          sessionId: normalizedSessionId,
+          quizId: sessionQuizId,
+          userId: user.uid,
+        });
     } else if (normalizedQuizId && typeof normalizedQuizId === 'string') {
       // Hosting (quizId provided, create session)
       console.log('Loading quiz:', normalizedQuizId);
@@ -257,6 +163,12 @@ const initializeLobby = async () => {
         console.log('Session created:', newSessionId, sessionCode);
         setSessionId(newSessionId);
         setIsCreator(true);
+        addBacklogEvent(BACKLOG_EVENTS.USER_CREATED_MULTIPLAYER_SESSION, {
+            sessionId: newSessionId,
+            quizId: normalizedQuizId,
+            userId: user.uid,
+            sessionCode,
+          });
       } else {
         console.log('Using existing sessionId:', normalizedSessionId);
         setSessionId(normalizedSessionId);
@@ -269,6 +181,7 @@ const initializeLobby = async () => {
   } catch (error) {
     console.error('Error initializing lobby:', error);
     Alert.alert('Error', `Failed to initialize lobby: ${error}`);
+    logError(error, 'initializeLobby', currentUser?.email);
     router.back();
   } finally {
     setLoading(false);
@@ -296,6 +209,11 @@ const initializeLobby = async () => {
       const newReadyState = !isReady;
       await setPlayerReady(sessionId, currentUser.uid, newReadyState);
       setIsReady(newReadyState);
+      addBacklogEvent(BACKLOG_EVENTS.USER_TOGGLED_READY_IN_MULTIPLAYER, {
+        sessionId,
+        userId: currentUser.uid,
+        isReady: newReadyState,
+      });
     } catch (error) {
       console.error('Error toggling ready:', error);
       Alert.alert('Error', 'Failed to update ready status');
@@ -319,6 +237,11 @@ const initializeLobby = async () => {
     try {
       console.log('Starting quiz for session:', sessionId);  
       await startQuiz(sessionId);
+      addBacklogEvent(BACKLOG_EVENTS.USER_STARTED_MULTIPLAYER_QUIZ, {
+        sessionId,
+        quizId: quiz?.id,
+        userId: currentUser?.uid,
+      });
     } catch (error) {
       console.error('Error starting quiz:', error);
       Alert.alert('Error', 'Failed to start quiz');
@@ -345,6 +268,10 @@ const initializeLobby = async () => {
           onPress: async () => {
             if (sessionId && currentUser) {
               await leaveSession(sessionId, currentUser.uid);
+              addBacklogEvent(BACKLOG_EVENTS.USER_LEFT_MULTIPLAYER_SESSION, {
+                sessionId,
+                userId: currentUser.uid,
+              });
               router.back();
             }
           },

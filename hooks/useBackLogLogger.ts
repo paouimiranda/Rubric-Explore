@@ -1,96 +1,154 @@
+// hooks/useBackLogLogger.ts
 import { BacklogEvent } from "@/services/backlogEvents";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { addDoc, collection, serverTimestamp } from "firebase/firestore";
+import { addDoc, collection, deleteDoc, getDocs, limit, orderBy, query, serverTimestamp } from "firebase/firestore";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Alert } from "react-native";
 import { auth, db } from "../firebase";
 
 const BACKLOG_KEY = "pending_backlogs";
-const MAX_LOCAL_LOGS = 500;  // ✅ NEW: Limit to 500 logs locally to prevent storage issues
+const MAX_LOCAL_LOGS = 500;
+const MAX_FIREBASE_LOGS = 5000;
+const UPLOAD_BATCH_SIZE = 50; // Upload in smaller batches to avoid rate limits
 
 export const useBacklogLogger = () => {
-  
-  // ✅ UPDATED: Save backlog locally with limit (prevents AsyncStorage bloat)
-  const addBacklogEvent = async (
+  const [queue, setQueue] = useState<any[]>([]);
+  const loadedRef = useRef(false);
+  const debounceRef = useRef<number | null>(null);
+
+  const loadQueue = useCallback(async () => {
+    if (loadedRef.current) return;
+    loadedRef.current = true;
+
+    try {
+      const stored = await AsyncStorage.getItem(BACKLOG_KEY);
+      const logs = stored ? JSON.parse(stored) : [];
+      setQueue(logs);
+      console.log("📌 Queue loaded on mount:", logs.length, "logs");
+    } catch (error) {
+      console.warn("⚠️ Failed to load queue:", error);
+      setQueue([]); // Fallback to empty queue
+    }
+  }, []);
+
+  useEffect(() => {
+    loadQueue();
+  }, [loadQueue]);
+
+  // Sync queue to AsyncStorage reactively
+  useEffect(() => {
+    const saveQueue = async () => {
+      try {
+        await AsyncStorage.setItem(BACKLOG_KEY, JSON.stringify(queue));
+      } catch (error) {
+        console.warn("⚠️ Failed to save queue:", error);
+      }
+    };
+    if (loadedRef.current) saveQueue();
+  }, [queue]);
+
+  const cleanupFirebaseLogs = useCallback(async (userId: string) => {
+    try {
+      const logsRef = collection(db, "backlogs", userId, "logs");
+      const q = query(logsRef, orderBy("timestamp", "asc"), limit(MAX_FIREBASE_LOGS + 1));
+      const snapshot = await getDocs(q);
+
+      if (snapshot.size > MAX_FIREBASE_LOGS) {
+        const docsToDelete = snapshot.docs.slice(0, snapshot.size - MAX_FIREBASE_LOGS);
+        const deletePromises = docsToDelete.map(doc => deleteDoc(doc.ref));
+        await Promise.all(deletePromises);
+        console.log("🗑️ Deleted", docsToDelete.length, "oldest Firebase logs");
+      }
+    } catch (error) {
+      console.warn("⚠️ Failed to cleanup Firebase logs:", error);
+    }
+  }, []);
+
+  const uploadBacklogs = useCallback(async () => {
+    if (queue.length === 0) return;
+
+    const user = auth.currentUser;
+    const userId = user?.uid ?? "anonymous";
+
+    try {
+      // Upload in batches
+      const batches = [];
+      for (let i = 0; i < queue.length; i += UPLOAD_BATCH_SIZE) {
+        batches.push(queue.slice(i, i + UPLOAD_BATCH_SIZE));
+      }
+
+      for (const batch of batches) {
+        const uploadPromises = batch.map((log: any) =>
+          addDoc(collection(db, "backlogs", userId, "logs"), {
+            ...log,
+            uploadedAt: serverTimestamp(),
+          })
+        );
+        await Promise.all(uploadPromises);
+      }
+
+      setQueue([]);
+      console.log("✅ Backlogs uploaded:", queue.length);
+
+      // Cleanup Firebase (non-blocking)
+      cleanupFirebaseLogs(userId);
+    } catch (error) {
+      console.warn("⚠️ Failed to upload batch:", error);
+    }
+  }, [queue, cleanupFirebaseLogs]);
+
+  const addBacklogEvent = useCallback(async (
     event: BacklogEvent | string,
     data: any = {},
     showAlert: boolean = false
   ) => {
-    const user = auth.currentUser;
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(async () => {
+      const user = auth.currentUser;
+      const log = {
+        event,
+        userId: user?.uid ?? null,
+        username: user?.displayName ?? null,
+        timestamp: Date.now(),
+        ...data,
+      };
 
-    const log = {
-      event,
-      userId: user?.uid ?? null,
-      username: user?.displayName ?? null,
-      timestamp: Date.now(),
-      ...data,
-    };
+      setQueue(prev => {
+        const newQueue = [...prev, log];
+        if (newQueue.length > MAX_LOCAL_LOGS) newQueue.shift(); // Enforce limit
+        console.log("📌 Backlog added:", event, "Queue length:", newQueue.length);
 
-    const stored = await AsyncStorage.getItem(BACKLOG_KEY);
-    const logs = stored ? JSON.parse(stored) : [];
+        // Auto-upload if at limit
+        if (newQueue.length >= MAX_LOCAL_LOGS) {
+          console.log("🚀 Auto-uploading due to queue limit");
+          uploadBacklogs();
+        }
 
-    // ✅ NEW: Enforce 500-log limit (delete oldest if exceeded)
-    if (logs.length >= MAX_LOCAL_LOGS) {
-      logs.shift();  // Remove oldest log
-    }
+        return newQueue;
+      });
 
-    logs.push(log);
-    await AsyncStorage.setItem(BACKLOG_KEY, JSON.stringify(logs));
+      if (showAlert) Alert.alert("Notice", `Event Logged: ${event}`);
+    }, 500);
+  }, [uploadBacklogs]);
 
-    console.log("📌 Backlog stored locally:", event);
-
-    if (showAlert) Alert.alert("Notice", `Event Logged: ${event}`);
-  };
-
-  // ✅ UPDATED: Upload each log as a separate document in a subcollection (avoids 1MB limit)
-  const uploadBacklogs = async () => {
-    const stored = await AsyncStorage.getItem(BACKLOG_KEY);
-    if (!stored) return;
-
-    const logs = JSON.parse(stored);
-    if (logs.length === 0) return;
-
-    const user = auth.currentUser;
-    const userId = user?.uid ?? "anonymous";  // Fallback for non-logged-in users
-
-    try {
-      // Upload each log as its own document in subcollection: backlogs/{userId}/logs/{autoId}
-      const uploadPromises = logs.map((log: any) =>
-        addDoc(collection(db, "backlogs", userId, "logs"), {
-          ...log,
-          uploadedAt: serverTimestamp(),  // When it hit Firestore
-        })
-      );
-
-      await Promise.all(uploadPromises);  // Batch upload all at once
-      await AsyncStorage.removeItem(BACKLOG_KEY);
-      console.log("✅ Backlogs uploaded as subcollection docs:", logs.length);
-    } catch (error) {
-      console.warn("⚠️ Failed to upload batch:", error);
-    }
-  };
-
-  // ✅ Replacement for your useErrorHandler
-  const logError = (
+  const logError = useCallback((
     error: unknown,
     context: string,
     email?: string,
     registered?: boolean
   ) => {
-    const msg =
-      error instanceof Error ? error.message : String(error);
-
-    // ✅ Log error but also show alert
+    const msg = error instanceof Error ? error.message : String(error);
     addBacklogEvent("error_event", {
       message: msg,
       context,
       email: email || "Unknown",
       registered: registered ?? false,
     }, true);
-  };
+  }, [addBacklogEvent]);
 
-  return {
+  return useMemo(() => ({
     addBacklogEvent,
     uploadBacklogs,
     logError,
-  };
+  }), [addBacklogEvent, uploadBacklogs, logError]);
 };

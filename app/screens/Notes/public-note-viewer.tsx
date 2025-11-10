@@ -5,26 +5,26 @@ import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { router, useLocalSearchParams } from "expo-router";
 import {
-    doc,
-    getDoc,
+  doc,
+  getDoc,
 } from "firebase/firestore";
 import React, { useEffect, useState } from "react";
 import {
-    Alert,
-    Dimensions,
-    FlatList,
-    Image,
-    RefreshControl,
-    SafeAreaView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View
+  Alert,
+  Dimensions,
+  FlatList,
+  Image,
+  RefreshControl,
+  SafeAreaView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
 } from "react-native";
 
 // Import service functions
+import { useBacklogLogger } from "@/hooks/useBackLogLogger";
 import { getNotesInNotebook } from '../../../services/notes-service';
-
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const HEADER_IMAGE_HEIGHT = 280;
 
@@ -62,7 +62,7 @@ interface Note {
 export default function PublicNotebookViewer() {
   const { user } = useAuth();
   const { notebookId } = useLocalSearchParams();
-  
+  const { addBacklogEvent } = useBacklogLogger();
   const [notebook, setNotebook] = useState<Notebook | null>(null);
   const [notes, setNotes] = useState<Note[]>([]);
   const [loading, setLoading] = useState(true);
@@ -103,6 +103,7 @@ export default function PublicNotebookViewer() {
         if (!data.isPublic) {
           Alert.alert("Error", "This notebook is not public");
           router.back();
+          addBacklogEvent("public_notebook_access_denied", { notebookId: id });
           return;
         }
         
@@ -117,10 +118,12 @@ export default function PublicNotebookViewer() {
       } else {
         Alert.alert("Error", "Notebook not found");
         router.back();
+        addBacklogEvent("public_notebook_not_found", { notebookId: id });
       }
     } catch (error) {
       console.error("Error fetching notebook:", error);
       Alert.alert("Error", "Failed to load notebook");
+      addBacklogEvent("public_notebook_fetch_error", { notebookId: id, error: String(error) });
     }
   };
 
@@ -148,7 +151,12 @@ export default function PublicNotebookViewer() {
   useEffect(() => {
     loadData();
   }, [notebookId]);
-
+  // ✅ ADDED: Log opening public notebook
+  useEffect(() => {
+    if (notebookId) {
+      addBacklogEvent("public_notebook_opened", { notebookId });
+    }
+  }, [notebookId]);
   // Fetch notes after notebook is loaded (need owner ID)
   useEffect(() => {
     if (notebook && notebookId) {
@@ -170,6 +178,7 @@ export default function PublicNotebookViewer() {
       pathname: "/screens/Notes/shared-note-viewer",
       params: { noteId },
     });
+    addBacklogEvent("public_note_viewed", { noteId, notebookId });
   };
 
   const renderNote = ({ item }: { item: Note }) => {

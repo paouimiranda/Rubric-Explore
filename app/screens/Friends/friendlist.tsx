@@ -4,6 +4,8 @@ import ChatList from '@/components/Interface/chat-list';
 import { CustomAlertModal } from '@/components/Interface/custom-alert-modal';
 import FriendCard from '@/components/Interface/friend-card';
 import BottomNavigation from '@/components/Interface/nav-bar';
+import { useBacklogLogger } from "@/hooks/useBackLogLogger";
+import { BACKLOG_EVENTS } from "@/services/backlogEvents";
 import { getTotalUnreadCount } from '@/services/chat-service';
 import {
   acceptFriendRequest,
@@ -48,7 +50,7 @@ interface SearchResult extends SearchUser {}
 export default function Friendlist() {
   const router = useRouter();
   const lottieRef = useRef<LottieView>(null);
-  
+  const { addBacklogEvent } = useBacklogLogger();
   const [activeTab, setActiveTab] = useState<TabType>('friends');
   const [search, setSearch] = useState('');
   const [friends, setFriends] = useState<Friend[]>([]);
@@ -178,6 +180,7 @@ export default function Friendlist() {
       setSearchLoading(true);
       const results = await searchUsers(searchTerm, currentUser.uid);
       setSearchResults(results);
+      addBacklogEvent(BACKLOG_EVENTS.USER_SEARCHED_USERS, { searchTerm });
     } catch (error) {
       console.error('Error searching users:', error);
       showAlert(
@@ -186,6 +189,7 @@ export default function Friendlist() {
         'Failed to search users. Please try again.',
         [{ text: 'OK', style: 'primary', onPress: () => closeAlert() }]
       );
+      addBacklogEvent("user_search_error", { searchTerm, error: String(error) });
     } finally {
       setSearchLoading(false);
     }
@@ -203,6 +207,7 @@ export default function Friendlist() {
         [{ text: 'OK', style: 'primary', onPress: () => closeAlert() }]
       );
       setSearchResults(prev => prev.filter(user => user.uid !== userId));
+      addBacklogEvent(BACKLOG_EVENTS.USER_SENT_FRIEND_REQUEST, { recipientUsername: username });
     } catch (error) {
       showAlert(
         'error',
@@ -210,6 +215,7 @@ export default function Friendlist() {
         'Failed to send friend request. Please try again.',
         [{ text: 'OK', style: 'primary', onPress: () => closeAlert() }]
       );
+      addBacklogEvent("friend_request_send_error", { recipientUsername: username, error: String(error) });
     }
   };
 
@@ -223,6 +229,7 @@ export default function Friendlist() {
         [{ text: 'OK', style: 'primary', onPress: () => closeAlert() }]
       );
       loadFriends();
+      addBacklogEvent(BACKLOG_EVENTS.USER_ACCEPTED_FRIEND_REQUEST, { senderUsername: request.senderInfo.username });
     } catch (error) {
       showAlert(
         'error',
@@ -230,6 +237,7 @@ export default function Friendlist() {
         'Failed to accept friend request. Please try again.',
         [{ text: 'OK', style: 'primary', onPress: () => closeAlert() }]
       );
+      addBacklogEvent("friend_request_accept_error", { senderUsername: request.senderInfo.username, error: String(error) });
     }
   };
 
@@ -256,7 +264,7 @@ export default function Friendlist() {
                 'Request Rejected',
                 'Friend request has been rejected.',
                 [{ text: 'OK', style: 'primary', onPress: () => closeAlert() }]
-              );
+              );addBacklogEvent(BACKLOG_EVENTS.USER_REJECTED_FRIEND_REQUEST, { senderUsername: request.senderInfo.username });
             } catch (error) {
               showAlert(
                 'error',
@@ -264,6 +272,7 @@ export default function Friendlist() {
                 'Failed to reject friend request. Please try again.',
                 [{ text: 'OK', style: 'primary', onPress: () => closeAlert() }]
               );
+              addBacklogEvent("friend_request_reject_error", { senderUsername: request.senderInfo.username, error: String(error) });
             }
           },
         },
