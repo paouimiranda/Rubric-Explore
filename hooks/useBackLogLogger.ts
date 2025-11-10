@@ -145,7 +145,18 @@ export const useBacklogLogger = () => {
       registered: registered ?? false,
     }, true);
   }, [addBacklogEvent]);
-
+  
+   useEffect(() => {
+    const interval = setInterval(() => {
+      if (queue.length > 0) {
+        console.log("⏰ Periodic upload triggered (10 minutes)");
+        uploadBacklogs().catch((error) => {
+          console.warn("⚠️ Failed periodic upload:", error);
+        });
+      }
+    }, 10 * 60 * 1000); // 10 minutes in milliseconds
+    return () => clearInterval(interval); // Cleanup on unmount
+  }, [queue, uploadBacklogs]);
   return useMemo(() => ({
     addBacklogEvent,
     uploadBacklogs,

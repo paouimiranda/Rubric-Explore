@@ -9,8 +9,6 @@ import {
   Animated,
   Dimensions,
   Image,
-  Modal,
-  Pressable,
   SafeAreaView,
   StyleSheet,
   Text,
@@ -25,7 +23,6 @@ const { width, height } = Dimensions.get('window');
 type Screen = 'notes' | 'quiz' | 'planner' | 'friendlist';
 
 // Global state to track if animation has been shown
-let hasShownDisclaimer = false;
 let hasShownAnimation = false;
 
 export default function HomeScreen() {
@@ -39,19 +36,6 @@ export default function HomeScreen() {
     Montserrat_400Regular,
     Montserrat_700Bold,
   });
-
-  const [showDisclaimer, setShowDisclaimer] = useState(!hasShownDisclaimer);
-  const disclaimerOpacity = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    if (showDisclaimer) {
-      Animated.timing(disclaimerOpacity, {
-        toValue: 1,
-        duration: 400,
-        useNativeDriver: true,
-      }).start();
-    }
-  }, [showDisclaimer]);
 
   // Get greeting based on time of day
   const getGreeting = () => {
@@ -252,46 +236,6 @@ export default function HomeScreen() {
 
         <AnimatedBottomNavigation animValue={bottomNavAnim} />
       </SafeAreaView>
-
-      {/* Disclaimer Modal */}
-      <Modal
-        transparent
-        animationType="fade"
-        visible={showDisclaimer}
-        onRequestClose={() => setShowDisclaimer(false)}
-      >
-        <View style={[StyleSheet.absoluteFill, styles.blurOverlay]}>
-          <Animated.View style={[styles.disclaimerContainer, { opacity: disclaimerOpacity }]}>
-            <LinearGradient
-              colors={['#324762', '#0F2245']}
-              start={{ x: 0, y: 1 }}
-              end={{ x: 1, y: 0 }}
-              style={styles.disclaimerBox}
-            >
-              <Text style={styles.disclaimerTitle}>Beta Version Notice</Text>
-              <Text style={styles.disclaimerText}>
-                This is a beta release of the application. Some features may be incomplete, limited in functionality, or subject to change as development progresses. We appreciate your understanding and feedback as we continue improving the app.
-              </Text>
-
-              <Pressable
-                onPress={() => {
-                  Animated.timing(disclaimerOpacity, {
-                    toValue: 0,
-                    duration: 300,
-                    useNativeDriver: true,
-                  }).start(() => {
-                    setShowDisclaimer(false);
-                    hasShownDisclaimer = true;
-                  });
-                }}
-                style={styles.disclaimerButton}
-              >
-                <Text style={styles.disclaimerButtonText}>I Understand</Text>
-              </Pressable>
-            </LinearGradient>
-          </Animated.View>
-        </View>
-      </Modal>
     </LinearGradient>
   );
 }
@@ -439,50 +383,5 @@ const styles = StyleSheet.create({
     width: '60%',
     height: '50%',
     marginBottom: '4%',
-  },
-  blurOverlay: {
-    backgroundColor: 'rgba(15, 44, 69, 0.95)',
-  },
-  disclaimerContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 25,
-  },
-  disclaimerBox: {
-    width: '100%',
-    borderRadius: 20,
-    padding: 25,
-    shadowColor: '#000',
-    shadowOpacity: 0.3,
-    shadowRadius: 10,
-    elevation: 10,
-  },
-  disclaimerTitle: {
-    fontSize: 22,
-    fontFamily: 'Montserrat_700Bold',
-    color: '#fff',
-    marginBottom: 10,
-    textAlign: 'center',
-  },
-  disclaimerText: {
-    fontSize: 15,
-    fontFamily: 'Montserrat_400Regular',
-    color: '#D3D3D3',
-    textAlign: 'center',
-    lineHeight: 22,
-    marginBottom: 20,
-  },
-  disclaimerButton: {
-    backgroundColor: '#4E80E1',
-    borderRadius: 12,
-    alignSelf: 'center',
-    paddingVertical: 10,
-    paddingHorizontal: 30,
-  },
-  disclaimerButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontFamily: 'Montserrat_700Bold',
   },
 });
