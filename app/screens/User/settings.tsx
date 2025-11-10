@@ -5,11 +5,8 @@ import { BebasNeue_400Regular, useFonts } from '@expo-google-fonts/bebas-neue';
 import { Montserrat_300Light, Montserrat_400Regular, Montserrat_600SemiBold } from '@expo-google-fonts/montserrat';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as Camera from 'expo-camera';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Linking from 'expo-linking';
-import * as MediaLibrary from 'expo-media-library';
-//import * as Notifications from 'expo-notifications'; // Commented out due to expo-notifications removal from Expo Go in SDK 53
 import { useRouter } from 'expo-router';
 import { signOut } from 'firebase/auth';
 import React, { useEffect, useState } from 'react';
@@ -21,8 +18,6 @@ import TermsModal from '../Misc/t&c';
 const translations: Record<string, Record<string, string>> = {
   en: {
     settings: 'Settings',
-    notifications: 'Notifications',
-    enablePush: 'Enable Push Notifications',
     privacy: 'Privacy & Security',
     support: 'Help & Support',
     about: 'About Us',
@@ -62,11 +57,6 @@ const SettingsScreen = () => {
   const [isDarkMode, setIsDarkMode] = useState(true);
   const [lang, setLang] = useState<'en' | 'tl'>('en');
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
-  const [notificationsEnabled, setNotificationsEnabled] = useState(false); // Set to false by default since disabled
-  const [cameraPermission, requestCameraPermission] = Camera.useCameraPermissions();
-  const [permissions, setPermissions] = useState<
-    { name: string; icon: string; status: boolean; onRequest?: () => void }[]
-  >([]);
 
   const [showPrivacyModal, setShowPrivacyModal] = useState(false);
   
@@ -92,43 +82,6 @@ const SettingsScreen = () => {
   useEffect(() => {
     LogBox.ignoreLogs(['Text strings must be rendered within a <Text> component']);
   }, []);
-
-  useEffect(() => {
-    const checkPermissions = async () => {
-      const cameraGranted = cameraPermission?.granted ?? false;
-      const { status: mediaStatus } = await MediaLibrary.getPermissionsAsync();
-      //const { status: notifStatus } = await Notifications.getPermissionsAsync(); // Commented out due to expo-notifications removal
-
-      setPermissions([
-        {
-          name: 'Camera',
-          icon: 'camera',
-          status: cameraGranted,
-          onRequest: requestCameraPermission,
-        },
-        {
-          name: 'Media Library',
-          icon: 'images',
-          status: mediaStatus === 'granted',
-          onRequest: async () => {
-            await MediaLibrary.requestPermissionsAsync();
-            checkPermissions();
-          },
-        },
-        // {
-        //   name: 'Notifications',
-        //   icon: 'notifications',
-        //   status: notifStatus === 'Not applicable', // Commented out due to expo-notifications removal
-        //   onRequest: async () => {
-        //     await Notifications.requestPermissionsAsync(); // Commented out due to expo-notifications removal
-        //     checkPermissions();
-        //   },
-        // },
-      ]);
-    };
-
-    checkPermissions();
-  }, [cameraPermission]);
 
   const handleLogout = async () => {
     setAlertConfig({
@@ -309,56 +262,6 @@ const SettingsScreen = () => {
     </TouchableOpacity>
   );
 
-  const PermissionItem = ({ 
-    permission
-  }: { 
-    permission: { name: string; icon: string; status: boolean; onRequest?: () => void };
-  }) => {
-    const permissionGradient = permission.status 
-      ? ['#11998e', '#38ef7d'] 
-      : ['#eb3349', '#f45c43'];
-
-    return (
-      <View style={styles.permissionItem}>
-        <View style={styles.permissionLeft}>
-          <LinearGradient
-            colors={permissionGradient as any}
-            style={styles.permissionBadge}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-          >
-            <Ionicons name={permission.icon as keyof typeof Ionicons.glyphMap} size={18} color="#ffffff" />
-          </LinearGradient>
-          <View>
-            <Text style={[styles.permissionName, { color: textColor }]}>
-              {permission.name}
-            </Text>
-            <Text style={[
-              styles.permissionStatus, 
-              { color: permission.status ? '#38ef7d' : '#f45c43' }
-            ]}>
-              {permission.status ? 'Granted' : 'Denied'}
-            </Text>
-          </View>
-        </View>
-        {!permission.status && (
-          <TouchableOpacity
-            onPress={permission.onRequest}
-          >
-            <LinearGradient
-              colors={['#667eea', '#764ba2']}
-              style={styles.allowButton}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-            >
-              <Text style={styles.allowButtonText}>Allow</Text>
-            </LinearGradient>
-          </TouchableOpacity>
-        )}
-      </View>
-    );
-  };
-
   return (
     <LinearGradient colors={gradientColors} style={styles.gradient}>
       <SafeAreaView style={styles.safeArea}>
@@ -374,37 +277,18 @@ const SettingsScreen = () => {
           </View>
 
           <SettingCard 
-            title={t.notifications} 
-            iconName="notifications" 
-            sectionKey="notifications"
-            gradientColors={['#f093fb', '#f5576c']}
-          >
-            {/* Disabled due to expo-notifications removal from Expo Go in SDK 53. Re-enable when using a development build. */}
-            <SettingRow 
-              label={t.enablePush} 
-              value={notificationsEnabled} 
-              onToggle={setNotificationsEnabled} 
-              disabled={true} // Disable the toggle to gray it out
-            />
-          </SettingCard>
-
-          <SettingCard 
             title={t.privacy} 
             iconName="shield-checkmark" 
             sectionKey="privacy"
             gradientColors={['#4facfe', '#00f2fe']}
           >
+            <ActionButton label="Account" variant="header" />
             <ActionButton label="Change Email" iconName="mail" onPress={() => {router.push('/screens/User/change-email')}} />
             <ActionButton label="Change Password" iconName="key" onPress={() => {router.push('/screens/User/change-password')}} />
-            <ActionButton label="Enable Biometric Login" iconName="finger-print" onPress={() => {}} />
             
             <View style={styles.sectionDivider} />
             <ActionButton label="App Permissions" variant="header" />
             
-            {permissions.map((p) => (
-              <PermissionItem key={p.name} permission={p} />
-            ))}
-
             <ActionButton 
               label="Manage in Device Settings" 
               iconName="settings"
@@ -412,15 +296,20 @@ const SettingsScreen = () => {
             />
             
             <View style={styles.sectionDivider} />
-            <ActionButton label="Clear App Data" iconName="trash" onPress={() => {}} />
+            <ActionButton label="Standards" variant="header" />
             <ActionButton 
               label="View Privacy Policy" 
               iconName="document-text" 
               onPress={() => setShowPrivacyModal(true)} 
             />
-            <ActionButton label="Two-Factor Authentication" iconName="lock-closed" onPress={() => {}} />
+            <ActionButton 
+              label="View Terms and Condition" 
+              iconName="document-text" 
+              onPress={() => setShowPrivacyModal(true)} 
+            />
             
-            <SettingRow label="Allow Data Sharing" value={true} onToggle={() => {}} />
+            
+            
           </SettingCard>
 
           <SettingCard 
@@ -449,24 +338,25 @@ const SettingsScreen = () => {
               </Text>
             </View>
           </SettingCard>
-
-          {/* Logout Button */}
-          <TouchableOpacity 
-            onPress={handleLogout}
-            activeOpacity={0.8}
-            style={styles.logoutButtonContainer}
+          {/* Logout Button - Moved outside ScrollView to position it lower/fixed at bottom */}
+        <TouchableOpacity 
+          onPress={handleLogout}
+          activeOpacity={0.8}
+          style={styles.logoutButtonContainer}
+        >
+          <LinearGradient
+            colors={['#eb3349', '#ff7340ff']}
+            style={styles.logoutButton}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
           >
-            <LinearGradient
-              colors={['#eb3349', '#ff7340ff']}
-              style={styles.logoutButton}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-            >
-              <Ionicons name="log-out-outline" size={22} color="#ffffff" style={{ marginRight: 10 }} />
-              <Text style={styles.logoutButtonText}>{t.logout}</Text>
-            </LinearGradient>
-          </TouchableOpacity>
+            <Ionicons name="log-out-outline" size={22} color="#ffffff" style={{ marginRight: 10 }} />
+            <Text style={styles.logoutButtonText}>{t.logout}</Text>
+          </LinearGradient>
+        </TouchableOpacity>
         </ScrollView>
+        
+        
         
         {/* Privacy Policy Modal */}
         <TermsModal 
@@ -492,9 +382,6 @@ const SettingsScreen = () => {
 
 export default SettingsScreen;
 
-// Styles remain unchanged from the original code. No additions or removals needed.
-
-
 const styles = StyleSheet.create({
   gradient: {
     flex: 1,
@@ -504,7 +391,7 @@ const styles = StyleSheet.create({
   },
   container: {
     padding: 16,
-    paddingBottom: 100,
+    paddingBottom: 20, // Reduced since logout is now outside ScrollView
   },
   headerContainer: {
     alignItems: 'center',
@@ -602,55 +489,6 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(128, 128, 128, 0.2)',
     marginVertical: 12,
   },
-  permissionItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 8,
-  },
-  permissionLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    flex: 1,
-  },
-  permissionBadge: {
-    width: 40,
-    height: 40,
-    borderRadius: 10,
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 3,
-    elevation: 3,
-  },
-  permissionName: {
-    fontSize: 14,
-    fontFamily: 'Montserrat_600SemiBold',
-  },
-  permissionStatus: {
-    fontSize: 12,
-    fontFamily: 'Montserrat_400Regular',
-    marginTop: 2,
-  },
-  allowButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 3,
-    elevation: 3,
-  },
-  allowButtonText: {
-    color: '#ffffff',
-    fontSize: 13,
-    fontFamily: 'Montserrat_600SemiBold',
-  },
   aboutContent: {
     alignItems: 'center',
     paddingVertical: 8,
@@ -661,8 +499,9 @@ const styles = StyleSheet.create({
     marginVertical: 4,
   },
   logoutButtonContainer: {
-    marginTop: 24,
-    marginBottom: 16,
+    marginHorizontal: 16,
+    marginTop: 20, // Added more top margin to push it down further
+    marginBottom: 10, // Space before BottomNavigation
   },
   logoutButton: {
     flexDirection: 'row',
