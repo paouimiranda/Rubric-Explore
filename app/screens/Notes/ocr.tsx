@@ -1,5 +1,6 @@
 // components/OCRModal.tsx
 import { CustomAlertModal } from '@/components/Interface/custom-alert-modal';
+import { useBacklogLogger } from "@/hooks/useBackLogLogger";
 import { Montserrat_400Regular, Montserrat_600SemiBold, Montserrat_700Bold, useFonts } from '@expo-google-fonts/montserrat';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
@@ -18,7 +19,6 @@ import {
   TouchableOpacity,
   View
 } from 'react-native';
-
 // Types
 interface OCRState {
   isVisible: boolean;
@@ -67,7 +67,7 @@ function useOCR() {
     selectedImage: null,
     error: null,
   });
-
+  
   const [alertState, setAlertState] = useState<AlertState>({
     visible: false,
     type: 'info',
@@ -285,6 +285,7 @@ export default function OCRModal({ isVisible, onClose, onInsertText }: OCRModalP
     Montserrat_600SemiBold,
     Montserrat_700Bold,
   });
+  const { addBacklogEvent } = useBacklogLogger();
 
   const {
     ocrState,
@@ -303,8 +304,14 @@ export default function OCRModal({ isVisible, onClose, onInsertText }: OCRModalP
       onInsertText(ocrState.extractedText);
       clearOCRData();
       onClose();
+      addBacklogEvent("ocr_text_inserted", { wordCount: ocrState.wordCount });
     }
   };
+  React.useEffect(() => {
+    if (isVisible) {
+      addBacklogEvent("ocr_modal_opened");
+    }
+  }, [isVisible]);
 
   return (
     <>

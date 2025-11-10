@@ -7,17 +7,23 @@ import * as NavigationBar from 'expo-navigation-bar';
 import { Stack, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import React, { useEffect } from 'react'; // ✅ Added: Fixes TypeScript JSX children inference for ThemeProvider and AuthProvider
+import { AppState } from 'react-native'; // ✅ ADDED: For background upload
 import 'react-native-get-random-values';
 import 'react-native-reanimated';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import Loading from './screens/Misc/loading'; // ✅ your custom loading screen
 
+// ✅ ADDED: Import backlog logger
+import { useBacklogLogger } from "@/hooks/useBackLogLogger";
+
 function RootNavigator() {
   const { loading, isAuthenticated } = useAuth();
   const router = useRouter();
-
   const colorScheme = useColorScheme();
+
+  // ✅ ADDED: Use backlog logger hook
+  const { uploadBacklogs, logError } = useBacklogLogger();
 
   // Control Android nav bar visibility
   useEffect(() => {
@@ -29,13 +35,45 @@ function RootNavigator() {
     SpaceMono: require('../assets/fonts/SpaceMono-Regular.ttf'),
   });
 
+  // ✅ ADDED: Global error handling
+  useEffect(() => {
+    const onError = (error: any) => {
+      logError(error, "Global App Error");
+    };
+
+    const onUnhandledRejection = (event: any) => {
+      const reason = event?.reason ?? event;
+      logError(reason, "Unhandled Promise Rejection");
+    };
+
+    ErrorUtils.setGlobalHandler(onError);
+
+    if (typeof globalThis.addEventListener === "function") {
+      globalThis.addEventListener("unhandledrejection", onUnhandledRejection);
+    }
+
+    return () => {
+      if (typeof globalThis.removeEventListener === "function") {
+        globalThis.removeEventListener("unhandledrejection", onUnhandledRejection);
+      }
+    };
+  }, [logError]);
+
+  // ✅ ADDED: Auto-upload backlogs when app is backgrounded
+  useEffect(() => {
+    const subscription = AppState.addEventListener("change", state => {
+      if (state === "background") uploadBacklogs();
+    });
+
+    return () => subscription.remove();
+  }, [uploadBacklogs]);
+
   // ⏳ If fonts or auth state still loading → show your custom loading screen
   if (!fontsLoaded || loading) {
     return <Loading />;
   }
   
   // 🔐 If user is authenticated → go straight to HomeScreen
-  
   if (isAuthenticated) {
     return (
       <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>

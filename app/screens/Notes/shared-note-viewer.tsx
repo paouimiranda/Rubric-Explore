@@ -3,6 +3,7 @@ import { useAuth } from '@/app/contexts/AuthContext';
 import { Note } from '@/app/types/notebook';
 import RichTextEditor, { RichTextEditorRef } from '@/components/Interface/rich-text-editor';
 import { db } from '@/firebase';
+import { useBacklogLogger } from "@/hooks/useBackLogLogger";
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -19,7 +20,6 @@ import {
   TouchableOpacity,
   View
 } from 'react-native';
-
 export default function SharedNoteViewer() {
   const { noteId } = useLocalSearchParams();
   const { user } = useAuth();
@@ -29,9 +29,12 @@ export default function SharedNoteViewer() {
   const [error, setError] = useState<string | null>(null);
   const [metadataModalVisible, setMetadataModalVisible] = useState(false);
   const richEditorRef = useRef<RichTextEditorRef>(null);
+  const { addBacklogEvent } = useBacklogLogger();
+
 
   useEffect(() => {
     if (noteId && typeof noteId === 'string') {
+      addBacklogEvent("shared_note_viewer_opened", { noteId });
       fetchPublicNote(noteId);
     } else {
       setError('Invalid note ID');
@@ -69,10 +72,11 @@ export default function SharedNoteViewer() {
       
       // Load content from chunks
       await loadNoteContent(id);
-      
+      addBacklogEvent("shared_note_viewed", { noteId: id });
     } catch (error: any) {
       console.error("Error fetching public note:", error);
       setError(error.message || "Failed to load note");
+      addBacklogEvent("shared_note_viewer_error", { noteId: id, error: error.message });
     } finally {
       setLoading(false);
     }
@@ -92,6 +96,7 @@ export default function SharedNoteViewer() {
   const handleBack = () => {
     router.back();
   };
+  
 
   const stripHtml = (html: string) => {
     return html.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').trim();

@@ -2,6 +2,7 @@
 import { useAuth } from '@/app/contexts/AuthContext';
 import { Note } from '@/app/types/notebook';
 import RichTextEditor, { RichTextEditorRef } from '@/components/Interface/rich-text-editor';
+import { useBacklogLogger } from "@/hooks/useBackLogLogger";
 import { ShareToken, sharingService } from '@/services/sharing-service';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -40,9 +41,10 @@ export default function SharedNoteHandler() {
   });
   const [previewContent, setPreviewContent] = useState<string>('');
   const richEditorRef = useRef<RichTextEditorRef>(null);
-
+  const { addBacklogEvent } = useBacklogLogger();
   useEffect(() => {
     if (token && typeof token === 'string') {
+      addBacklogEvent("shared_note_opened", { token });
       loadSharedNote(token);
     } else {
       setState(prev => ({ 
@@ -93,6 +95,7 @@ export default function SharedNoteHandler() {
         loading: false,
         error: error.message || 'Failed to load shared note'
       }));
+      addBacklogEvent("shared_note_load_error", { token: shareToken, error: error.message });
     }
   };
 
@@ -125,6 +128,7 @@ export default function SharedNoteHandler() {
         sharedPermission: state.permission!,
       }
     });
+    addBacklogEvent("shared_note_viewed", { noteId: state.note!.id, permission: state.permission });
   };
 
   const handleLoginToEdit = () => {
@@ -135,6 +139,7 @@ export default function SharedNoteHandler() {
         message: 'Login to edit this shared note'
       }
     });
+    addBacklogEvent("shared_note_login_to_edit", { token });
   };
 
   const renderError = () => (

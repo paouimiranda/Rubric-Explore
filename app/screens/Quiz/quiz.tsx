@@ -2,6 +2,8 @@
 import { CustomAlertModal } from '@/components/Interface/custom-alert-modal';
 import JoinSessionModal from '@/components/Interface/join-session-modal';
 import BottomNavigation from "@/components/Interface/nav-bar";
+import { useBacklogLogger } from '@/hooks/useBackLogLogger'; // NEW: Added import
+import { BACKLOG_EVENTS } from '@/services/backlogEvents';
 import { getQuizImageSource } from '@/services/image-service';
 import { QuizService, type Quiz } from '@/services/quiz-service';
 import { useQuizStore } from '@/services/stores/quiz-store';
@@ -32,7 +34,7 @@ const QuizHome = () => {
   const [quizzes, setQuizzes] = useState<Quiz[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  
+  const { addBacklogEvent, logError } = useBacklogLogger();
   // Alert modal state
   const [alertConfig, setAlertConfig] = useState<{
     visible: boolean;
@@ -63,6 +65,9 @@ const QuizHome = () => {
       setLoading(true);
       const data = await QuizService.getAllQuizzes();
       setQuizzes(data);
+      addBacklogEvent(BACKLOG_EVENTS.USER_VIEWED_QUIZ_LIST, {
+        quizCount: data.length,
+      });
     } catch (error) {
       console.error('Error loading quizzes:', error);
       setAlertConfig({
@@ -96,10 +101,14 @@ const QuizHome = () => {
   const handleCreateNewQuiz = () => {
     resetToDefaults();
     router.push('./quiz-overview');
+    addBacklogEvent(BACKLOG_EVENTS.USER_CREATED_QUIZ);
   };
 
   const handleEditQuiz = (quizId: string) => {
     resetToDefaults();
+    addBacklogEvent(BACKLOG_EVENTS.USER_EDIT_QUIZ, {
+      quizId
+    });
     router.push({
       pathname: './quiz-overview',
       params: { quizId }
@@ -107,6 +116,9 @@ const QuizHome = () => {
   };
 
   const handlePlayQuiz = (quizId: string) => {
+    addBacklogEvent(BACKLOG_EVENTS.USER_HOSTED_QUIZ_SESSION, {
+      quizId
+    });
     router.push({
       pathname: './quiz-preview',
       params: { quizId }
@@ -144,6 +156,10 @@ const QuizHome = () => {
                     style: 'primary',
                   },
                 ],
+              });
+              addBacklogEvent(BACKLOG_EVENTS.USER_DELETED_QUIZ, {
+                quizId,
+                quizTitle,
               });
             } catch (error) {
               console.error('Error deleting quiz:', error);

@@ -5,6 +5,8 @@ import RichTextToolbar from "@/components/Interface/rich-text-toolbar";
 import SharingModal from "@/components/Interface/sharing-modal";
 import { db } from "@/firebase";
 import { useCollaborativeEditing } from '@/hooks/CollaborativeEditing';
+import { useBacklogLogger } from "@/hooks/useBackLogLogger";
+import { BACKLOG_EVENTS } from "@/services/backlogEvents";
 import { updateNote } from '@/services/notes-service';
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
@@ -34,7 +36,6 @@ import {
 import { useAuth } from "../../contexts/AuthContext";
 import OCRModal from "./ocr";
 import PropertiesModal from './properties';
-
 type NoteEditorProps = {
   isSharedAccess?: boolean;
   sharedPermission?: "view" | "edit";
@@ -48,7 +49,8 @@ export default function NoteEditor({
 }: NoteEditorProps) {
   const { user } = useAuth();
   const uid = user?.uid;
-
+  const { addBacklogEvent } = useBacklogLogger();
+  const hasLoggedOpen = useRef(false);
   if (!uid) {
     return (
       <LinearGradient colors={["#324762", "#0A1C3C"]} style={styles.loadingContainer}>
@@ -68,10 +70,8 @@ export default function NoteEditor({
   
   const effectiveIsSharedAccess = isSharedAccess || routeIsSharedAccess === 'true';
   const effectiveSharedPermission = sharedPermission || (routeSharedPermission as 'view' | 'edit');
-
   const [note, setNote] = useState<Note | null>(null);
   const effectiveNote = effectiveIsSharedAccess ? sharedNote : note;
-  
   const [properties, setProperties] = useState<NotebookProperty[]>([]);
   const [loading, setLoading] = useState(true); 
   const [saving, setSaving] = useState(false);
@@ -98,6 +98,7 @@ export default function NoteEditor({
     }));
     setProperties(propertiesWithSource);
     setHasUnsavedChanges(true);
+    addBacklogEvent(BACKLOG_EVENTS.USER_UPDATED_PROPERTIES, { noteId: routeNoteId });
   };
 
   const collaborative = useCollaborativeEditing(
@@ -201,6 +202,16 @@ export default function NoteEditor({
     };
   }, [properties, uid, note]);
 
+  useEffect(() => {
+    if (!hasLoggedOpen.current) {
+      hasLoggedOpen.current = true;
+      addBacklogEvent(BACKLOG_EVENTS.USER_OPENED_NOTE_EDITOR, { noteId: routeNoteId });
+      if (effectiveIsSharedAccess) {
+        addBacklogEvent(BACKLOG_EVENTS.USER_VIEWED_SHARED_NOTE, { noteId: routeNoteId, permission: effectiveSharedPermission });
+      }
+    }
+  }, []);
+
   const fetchNote = async (id: string) => {
     try {
       setLoading(true);
@@ -227,11 +238,13 @@ export default function NoteEditor({
         setProperties(noteData.properties || []);
       } else {
         Alert.alert("Error", "Note not found");
+        addBacklogEvent("note_not_found", { noteId: id });
         router.back();
       }
     } catch (error) {
       console.error("Error fetching note:", error);
       Alert.alert("Error", "Failed to load note");
+      addBacklogEvent("note_fetch_error", { noteId: id, error: String(error) });
     } finally {
       setLoading(false);
     }
@@ -248,6 +261,7 @@ export default function NoteEditor({
 
     if (!hasEditPermission) {
       Alert.alert("Error", "You don't have permission to edit this note");
+      addBacklogEvent("note_save_permission_error", { noteId: note.id });
       return;
     }
     
@@ -264,11 +278,13 @@ export default function NoteEditor({
       if (showFeedback) {
         console.log("Note metadata saved successfully");
       }
+      addBacklogEvent(BACKLOG_EVENTS.USER_SAVED_NOTE, { noteId: note.id });
     } catch (error) {
       console.error("Error saving note:", error);
       if (showFeedback) {
         Alert.alert("Error", "Failed to save note");
       }
+      addBacklogEvent("note_save_error", { noteId: note.id, error: String(error) });
     } finally {
       setSaving(false);
     }
@@ -296,6 +312,7 @@ export default function NoteEditor({
     const newContent = content + (content ? '<p><br></p>' : '') + `<p>${text}</p>`;
     collaborative.handleContentChange(newContent);
     setHasUnsavedChanges(true);
+    addBacklogEvent(BACKLOG_EVENTS.USER_USED_OCR, { noteId: routeNoteId });
   }, [collaborative, content, effectiveIsSharedAccess, effectiveSharedPermission]);
 
   const truncateText = (text: string, maxLength: number) => {
@@ -352,6 +369,7 @@ export default function NoteEditor({
                 onPress={() => {
                   if (note) {
                     setVisible(true);
+                    addBacklogEvent(BACKLOG_EVENTS.USER_SHARED_NOTE, { noteId: routeNoteId });
                   } else {
                     Alert.alert('Error', 'Please save the note first before sharing');
                   }

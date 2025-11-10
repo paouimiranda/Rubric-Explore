@@ -1,3 +1,5 @@
+//app/screens/User/change-password.tsx
+import { useBacklogLogger } from "@/hooks/useBackLogLogger";
 import { Montserrat_400Regular, Montserrat_600SemiBold, Montserrat_700Bold, useFonts } from '@expo-google-fonts/montserrat';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -13,7 +15,6 @@ import {
   TouchableOpacity,
   View
 } from "react-native";
-
 const BASE_URL = "https://api-m2tvqc6zqq-uc.a.run.app";
 
 export default function ForgotPasswordScreen() {
@@ -24,7 +25,7 @@ export default function ForgotPasswordScreen() {
   });
 
   const router = useRouter();
-  
+  const { addBacklogEvent } = useBacklogLogger();
   const [email, setEmail] = useState("");
   const [otp, setOtp] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -48,11 +49,13 @@ export default function ForgotPasswordScreen() {
   const handleSendOtp = async () => {
     if (!email.trim()) {
       Alert.alert("Error", "Please enter your email");
+      addBacklogEvent("password_reset_validation_error", { step: 1, error: "empty_email" });
       return;
     }
 
     if (!email.includes("@")) {
       Alert.alert("Error", "Please enter a valid email address");
+      addBacklogEvent("password_reset_validation_error", { step: 1, error: "invalid_email" });
       return;
     }
 
@@ -76,8 +79,10 @@ export default function ForgotPasswordScreen() {
 
       Alert.alert("Success", "OTP has been sent to your email.");
       setStep(2);
+      addBacklogEvent("otp_sent", { step: 1, email: email.trim().toLowerCase() });
     } catch (error: any) {
       Alert.alert("Error", error.message || "Failed to send OTP");
+      addBacklogEvent("otp_send_error", { step: 1, email: email.trim().toLowerCase(), error: error.message });
     } finally {
       setIsLoading(false);
     }
@@ -86,21 +91,25 @@ export default function ForgotPasswordScreen() {
   const handleVerifyOtp = async () => {
     if (!otp.trim() || !newPassword.trim() || !confirmPassword.trim()) {
       Alert.alert("Error", "Please fill in all fields");
+      addBacklogEvent("password_reset_validation_error", { step: 2, error: "empty_fields" });
       return;
     }
 
     if (otp.length !== 6) {
       Alert.alert("Error", "OTP must be 6 digits");
+      addBacklogEvent("password_reset_validation_error", { step: 2, error: "invalid_otp_length" });
       return;
     }
 
     if (newPassword !== confirmPassword) {
       Alert.alert("Error", "Passwords do not match");
+      addBacklogEvent("password_reset_validation_error", { step: 2, error: "password_mismatch" });
       return;
     }
 
     if (newPassword.length < 6) {
       Alert.alert("Error", "Password must be at least 6 characters");
+      addBacklogEvent("password_reset_validation_error", { step: 2, error: "weak_password" });
       return;
     }
 
@@ -136,6 +145,7 @@ export default function ForgotPasswordScreen() {
           }
         ]
       );
+      addBacklogEvent("password_reset", { step: 2, email: email.trim().toLowerCase() });
     } catch (error: any) {
       Alert.alert("Error", error.message || "Verification failed");
     } finally {

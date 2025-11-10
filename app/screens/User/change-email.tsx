@@ -1,3 +1,5 @@
+//app/screens/User/change-email.tsx
+import { useBacklogLogger } from "@/hooks/useBackLogLogger";
 import { Montserrat_400Regular, Montserrat_600SemiBold, Montserrat_700Bold, useFonts } from '@expo-google-fonts/montserrat';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -5,14 +7,14 @@ import { useRouter } from "expo-router";
 import { getAuth } from "firebase/auth";
 import React, { useEffect, useState } from "react";
 import {
-    ActivityIndicator,
-    Alert,
-    Animated,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View
+  ActivityIndicator,
+  Alert,
+  Animated,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
 } from "react-native";
 
 export default function ChangeEmail() {
@@ -30,7 +32,7 @@ export default function ChangeEmail() {
   const router = useRouter();
   const auth = getAuth();
   const currentEmail = auth.currentUser?.email;
-
+  const { addBacklogEvent } = useBacklogLogger();
   const API_URL = "https://api-m2tvqc6zqq-uc.a.run.app";
 
   // Fade in animation when step changes
@@ -55,6 +57,7 @@ export default function ChangeEmail() {
   const handleSendOtp = async () => {
     if (!currentEmail) {
       Alert.alert("Error", "No authenticated user found.");
+      addBacklogEvent("change_email_error", { errorType: "no_auth", step: 1 });
       return;
     }
 
@@ -79,10 +82,12 @@ export default function ChangeEmail() {
       if (data.success) {
         Alert.alert("OTP Sent", `An OTP has been sent to ${currentEmail}.`);
         setStep(2);
+        addBacklogEvent("otp_sent", { step: 1, email: currentEmail });
       }
     } catch (error: any) {
       console.error("Send OTP error:", error);
       Alert.alert("Error", error.message || "Failed to send OTP.");
+      addBacklogEvent("otp_send_error", { step: 1, email: currentEmail, error: error.message });
     } finally {
       setIsLoading(false);
     }
@@ -92,11 +97,13 @@ export default function ChangeEmail() {
   const handleVerifyOtp = async () => {
     if (!otp.trim()) {
       Alert.alert("Error", "Please enter your OTP.");
+      addBacklogEvent("otp_validation_error", { step: 2, error: "empty_otp" });
       return;
     }
 
     if (otp.length !== 6) {
       Alert.alert("Error", "OTP must be 6 digits.");
+      addBacklogEvent("otp_validation_error", { step: 2, error: "invalid_length" });
       return;
     }
 
@@ -122,10 +129,12 @@ export default function ChangeEmail() {
       if (data.success) {
         Alert.alert("Verified", "OTP verified successfully. Now enter your new email.");
         setStep(3);
+        addBacklogEvent("otp_verified", { step: 2, email: currentEmail });
       }
     } catch (error: any) {
       console.error("Verify OTP error:", error);
       Alert.alert("Error", error.message || "Failed to verify OTP.");
+      addBacklogEvent("otp_verification_error", { step: 2, email: currentEmail, error: error.message });
     } finally {
       setIsLoading(false);
     }
@@ -135,16 +144,19 @@ export default function ChangeEmail() {
   const handleSubmitNewEmail = async () => {
     if (!newEmail.trim()) {
       Alert.alert("Error", "Please enter your new email address.");
+      addBacklogEvent("email_validation_error", { step: 3, error: "empty_email" });
       return;
     }
 
     if (!newEmail.includes("@")) {
       Alert.alert("Error", "Please enter a valid email address.");
+      addBacklogEvent("email_validation_error", { step: 3, error: "invalid_email" });
       return;
     }
 
     if (newEmail.toLowerCase() === currentEmail?.toLowerCase()) {
       Alert.alert("Error", "New email must be different from current email.");
+      addBacklogEvent("email_validation_error", { step: 3, error: "same_email" });
       return;
     }
 
@@ -179,10 +191,12 @@ export default function ChangeEmail() {
             }
           ]
         );
+        addBacklogEvent("change_email_submitted", { step: 3, oldEmail: currentEmail, newEmail: newEmail.trim().toLowerCase() });
       }
     } catch (error: any) {
       console.error("Send verification error:", error);
       Alert.alert("Error", error.message || "Failed to send verification link.");
+      addBacklogEvent("change_email_error", { step: 3, oldEmail: currentEmail, newEmail: newEmail.trim().toLowerCase(), error: error.message });
     } finally {
       setIsLoading(false);
     }

@@ -3,6 +3,8 @@ import { convertAPIQuestionToInternalFormat, generateQuizFromAI } from '@/api/qu
 import { TopicSelectionModal } from '@/components/Interface/ai-quiz-modal';
 import { CustomAlertModal } from '@/components/Interface/custom-alert-modal';
 import { auth } from '@/firebase';
+import { useBacklogLogger } from '@/hooks/useBackLogLogger'; // NEW: Added import
+import { BACKLOG_EVENTS } from '@/services/backlogEvents';
 import {
   deleteQuizImage,
   extractStoragePathFromUrl,
@@ -48,7 +50,7 @@ interface AlertState {
 const QuizOverview: React.FC = () => {
   const router = useRouter();
   const { quizId } = useLocalSearchParams();
-  
+  const { addBacklogEvent, logError } = useBacklogLogger();
   const {
     quizTitle,
     quizImage,
@@ -185,8 +187,22 @@ const QuizOverview: React.FC = () => {
       if (quizId && typeof quizId === 'string') {
         await QuizService.updateQuiz(quizId, quiz);
         savedQuizId = quizId;
+        addBacklogEvent(BACKLOG_EVENTS.USER_UPDATED_QUIZ, {
+          quizId: savedQuizId,
+          title: quizTitle,
+          questionCount: questions.length,
+          isPublic,
+          userId: auth.currentUser?.uid,
+        });
       } else {
         savedQuizId = await QuizService.createQuiz(quiz);
+        addBacklogEvent(BACKLOG_EVENTS.USER_CREATED_QUIZ, {
+          quizId: savedQuizId,
+          title: quizTitle,
+          questionCount: questions.length,
+          isPublic,
+          userId: auth.currentUser?.uid,
+        });
       }
 
       showAlert(
@@ -215,6 +231,7 @@ const QuizOverview: React.FC = () => {
       );
     } catch (error: any) {
       showAlert('error', 'Error', error.message || 'Failed to save quiz. Please try again.');
+      
     } finally {
       setLoading(false);
     }
@@ -358,6 +375,12 @@ const QuizOverview: React.FC = () => {
                 );
               }
             }
+            addBacklogEvent(BACKLOG_EVENTS.USER_DELETED_QUIZ, {  // Adapted for question deletion
+              questionId: questions[questionIndex].id,
+              quizId: quizId || 'new',
+              quizTitle,
+              userId: auth.currentUser?.uid,
+            });
             
             deleteQuestion(questionIndex);
             setAlert(prev => ({ ...prev, visible: false }));
@@ -383,7 +406,15 @@ const QuizOverview: React.FC = () => {
       if (!quizTitle.trim()) {
         setQuizTitle(topic);
       }
-      
+      addBacklogEvent(BACKLOG_EVENTS.USER_GENERATED_QUIZ_WITH_AI, {
+        topic,
+        questionCount,
+        questionType,
+        generatedQuestions: convertedQuestions.length,
+        quizId: quizId || 'new',
+        userId: auth.currentUser?.uid,
+        fromNote: !!content,
+      });
       extractTopicsFromQuestions();
       
       showAlert('success', 'Success', `Added ${convertedQuestions.length} question${convertedQuestions.length > 1 ? 's' : ''} to your quiz!`);

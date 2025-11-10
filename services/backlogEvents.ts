@@ -1,3 +1,4 @@
+// services/backlogEvents.ts
 export const BACKLOG_EVENTS = {
   USER_CREATED_NOTE: "user_created_note",
   USER_DELETED_NOTE: "user_deleted_note",
@@ -17,7 +18,6 @@ export const BACKLOG_EVENTS = {
   USER_UPDATED_NOTEBOOK_SETTINGS: "user_updated_notebook_settings",
   USER_CREATED_NOTEBOOK: "user_created_notebook",
   USER_DELETED_NOTEBOOK: "user_deleted_notebook",
-  USER_OPENED_NOTES_HOME: "user_opened_notes_home",
   USER_UPDATED_PROPERTIES: "user_updated_properties",
   USER_VIEWED_PUBLIC_NOTEBOOK: "user_viewed_public_notebook",
   USER_VIEWED_PUBLIC_NOTE: "user_viewed_public_note",
@@ -26,13 +26,23 @@ export const BACKLOG_EVENTS = {
   USER_LEFT_MULTIPLAYER_SESSION: "user_left_multiplayer_session",
   USER_TOGGLED_READY_IN_MULTIPLAYER: "user_toggled_ready_in_multiplayer",
   USER_STARTED_MULTIPLAYER_QUIZ: "user_started_multiplayer_quiz",
-  USER_SUBMITTED_MULTIPLAYER_ANSWER: "user_submitted_multiplayer_answer",
   USER_COMPLETED_MULTIPLAYER_QUIZ: "user_completed_multiplayer_quiz",
   USER_LEFT_MULTIPLAYER_GAME: "user_left_multiplayer_game",
   USER_GENERATED_QUIZ_WITH_AI: "user_generated_quiz_with_ai",
   USER_SAVED_QUIZ: "user_saved_quiz",
   USER_STARTED_QUIZ: "user_started_quiz",
   USER_COMPLETED_QUIZ: "user_completed_quiz",
+  USER_EDITED_QUIZ: "user_edited_quiz",
+  USER_DELETED_QUIZ: "user_deleted_quiz",
+  USER_VIEWED_QUIZ_RESULTS: "user_viewed_quiz_results",
+  USER_SEARCHED_USERS:"user_search_user",
+  USER_SENT_FRIEND_REQUEST:"user_sent_friend_request",
+  USER_ACCEPTED_FRIEND_REQUEST: "user_accepted_friend_request",
+  USER_REJECTED_FRIEND_REQUEST: "user_rejected_friend_request",
+  USER_UPDATED_QUIZ: "user_updated_quiz",
+  USER_VIEWED_QUIZ: "user_viewed_quiz",
+  USER_VIEWED_QUIZ_LIST: "user_viewed_quiz_list",
+  USER_EDIT_QUIZ: "user_edit_quiz"
 } as const;
 
 export type BacklogEvent = typeof BACKLOG_EVENTS[keyof typeof BACKLOG_EVENTS];

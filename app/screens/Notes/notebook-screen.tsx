@@ -26,6 +26,8 @@ import {
 } from "react-native";
 
 // Import service functions
+import { useBacklogLogger } from "@/hooks/useBackLogLogger";
+import { BACKLOG_EVENTS } from "@/services/backlogEvents";
 import { createNote, deleteNote, getNotesInNotebook, syncNotePropertiesWithNotebook, updateNotebook } from '../../../services/notes-service';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -81,7 +83,7 @@ export default function NotebookScreen() {
   const { user } = useAuth();
   const uid = user?.uid;
   const lottieRef = useRef<LottieView>(null);
-
+  const { addBacklogEvent } = useBacklogLogger();
   // Add early return for unauthenticated users
   if (!uid) {
     return (
@@ -178,6 +180,7 @@ export default function NotebookScreen() {
               },
             ]
           );
+          addBacklogEvent("notebook_access_denied", { notebookId: id });
           return;
         }
         const notebookData = {
@@ -204,6 +207,7 @@ export default function NotebookScreen() {
           },
         ]
       );
+      addBacklogEvent("notebook_fetch_error", { notebookId: id, error: String(error) });
     }
   };
 
@@ -239,6 +243,13 @@ export default function NotebookScreen() {
     }
   };
 
+  // ✅ ADDED: Log opening notebook
+  useEffect(() => {
+    if (notebookId) {
+      addBacklogEvent(BACKLOG_EVENTS.USER_OPENED_NOTEBOOK, { notebookId });
+    }
+  }, [notebookId]);
+  
   useEffect(() => {
     loadData();
   }, [notebookId, uid]);
@@ -286,6 +297,7 @@ export default function NotebookScreen() {
         pathname: "./note-editor",
         params: { noteId: docId, notebookId },
       });
+      addBacklogEvent(BACKLOG_EVENTS.USER_CREATED_NOTE, { notebookId, noteId: docId });
     } catch (error) {
       console.error("Error creating note:", error);
       showAlert(
@@ -300,6 +312,7 @@ export default function NotebookScreen() {
           },
         ]
       );
+      addBacklogEvent("note_creation_error", { notebookId, error: String(error) });
     }
   };
 
@@ -333,6 +346,7 @@ export default function NotebookScreen() {
                   },
                 ]
               );
+              addBacklogEvent(BACKLOG_EVENTS.USER_DELETED_NOTE, { notebookId, noteId });
             } catch (error) {
               console.error("Error deleting note:", error);
               showAlert(
@@ -347,6 +361,7 @@ export default function NotebookScreen() {
                   },
                 ]
               );
+              addBacklogEvent("note_deletion_error", { notebookId, noteId, error: String(error) });
             }
           },
           style: 'primary',
@@ -384,6 +399,7 @@ export default function NotebookScreen() {
           },
         ]
       );
+      addBacklogEvent(BACKLOG_EVENTS.USER_UPDATED_NOTEBOOK_SETTINGS, { notebookId, isPublic: isPublicToggle });
     } catch (error) {
       console.error("Error updating notebook settings:", error);
       showAlert(
@@ -398,6 +414,7 @@ export default function NotebookScreen() {
           },
         ]
       );
+      addBacklogEvent("notebook_settings_error", { notebookId, error: String(error) });
     } finally {
       setSavingSettings(false);
     }
@@ -436,6 +453,7 @@ export default function NotebookScreen() {
                   },
                 ]
               );
+              addBacklogEvent("notebook_properties_synced", { notebookId });
             } catch (error) {
               console.error("Error syncing properties:", error);
               showAlert(
@@ -450,6 +468,7 @@ export default function NotebookScreen() {
                   },
                 ]
               );
+              addBacklogEvent("notebook_properties_sync_error", { notebookId, error: String(error) });
             }
           },
           style: 'primary',
