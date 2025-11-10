@@ -1,4 +1,4 @@
-//app/screens/User/change-password.tsx
+//app/screens/User/forgot-password.tsx
 import { useBacklogLogger } from "@/hooks/useBackLogLogger";
 import { Montserrat_400Regular, Montserrat_600SemiBold, Montserrat_700Bold, useFonts } from '@expo-google-fonts/montserrat';
 import { Ionicons } from '@expo/vector-icons';
@@ -35,6 +35,7 @@ export default function ForgotPasswordScreen() {
   const [fadeAnim] = useState(new Animated.Value(0));
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [resendTimer, setResendTimer] = useState(0);
 
   // Fade in animation when step changes
   useEffect(() => {
@@ -45,6 +46,15 @@ export default function ForgotPasswordScreen() {
       useNativeDriver: true,
     }).start();
   }, [step]);
+
+  useEffect(() => {
+    if (resendTimer > 0) {
+      const interval = setInterval(() => {
+        setResendTimer(prev => prev - 1);
+      }, 1000);
+      return () => clearInterval(interval);
+    }
+  }, [resendTimer]);
 
   const handleSendOtp = async () => {
     if (!email.trim()) {
@@ -77,8 +87,9 @@ export default function ForgotPasswordScreen() {
         throw new Error(data.error || 'Failed to send OTP');
       }
 
-      Alert.alert("Success", "OTP has been sent to your email.");
+      // Alert.alert("Success", "OTP has been sent to your email.");
       setStep(2);
+      setResendTimer(60); // Start 60-second timer after sending OTP
       addBacklogEvent("otp_sent", { step: 1, email: email.trim().toLowerCase() });
     } catch (error: any) {
       Alert.alert("Error", error.message || "Failed to send OTP");
@@ -167,6 +178,7 @@ export default function ForgotPasswordScreen() {
               setOtp("");
               setNewPassword("");
               setConfirmPassword("");
+              setResendTimer(0); // Reset timer on back
             }
           }
         ]
@@ -355,10 +367,12 @@ export default function ForgotPasswordScreen() {
               <TouchableOpacity 
                 style={styles.resendButton}
                 onPress={handleSendOtp}
-                disabled={isLoading}
+                disabled={isLoading || resendTimer > 0}
               >
-                <Ionicons name="refresh" size={16} color="#fa709a" style={{ marginRight: 6 }} />
-                <Text style={styles.resendText}>Resend OTP</Text>
+                <Ionicons name="refresh" size={16} color={resendTimer > 0 ? "#666" : "#fa709a"} style={{ marginRight: 6 }} />
+                <Text style={[styles.resendText, resendTimer > 0 && styles.resendTextDisabled]}>
+                  {resendTimer > 0 ? `Resend in ${resendTimer}s` : 'Resend OTP'}
+                </Text>
               </TouchableOpacity>
             </View>
           )}
@@ -500,5 +514,8 @@ const styles = StyleSheet.create({
     color: "#fa709a",
     fontSize: 15,
     fontFamily: 'Montserrat_600SemiBold',
+  },
+  resendTextDisabled: {
+    color: "#666",
   },
 });

@@ -544,8 +544,8 @@ app.post("/sendOtp", async (req, res) => {
     await transporter.sendMail({
       from: '"Rubric" <rubric.capstone@gmail.com>',
       to: email,
-      subject: "One Time Password",
-      text: `Your OTP code is ${otp}. It expires in 5 minutes.`,
+      subject: "OTP for Changing Your Password",
+      text: `Your OTP for changing your Rubric account password is ${otp}. It expires in 5 minutes.`,
     });
 
     res.status(200).send({ success: true, message: "OTP sent successfully" });

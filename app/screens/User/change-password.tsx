@@ -4,6 +4,7 @@ import { Montserrat_400Regular, Montserrat_600SemiBold, Montserrat_700Bold, useF
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from "expo-router";
+import { getAuth } from "firebase/auth"; // Added for auth
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -25,20 +26,23 @@ export default function ChangePasswordScreen() {
     Montserrat_700Bold,
   });
 
-  const [email, setEmail] = useState("");
+  // Removed email state, as it's now auto-filled from auth
   const [otp, setOtp] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [step, setStep] = useState(1);
+  const [step, setStep] = useState<1 | 2>(1); // Updated to match change-email steps
   const [isLoading, setIsLoading] = useState(false);
   const [fadeAnim] = useState(new Animated.Value(0));
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [resendTimer, setResendTimer] = useState(0); // New state for resend timer
   const router = useRouter();
+  const auth = getAuth(); // Added for auth
+  const currentEmail = auth.currentUser?.email; // Auto-use current user's email
   const { addBacklogEvent } = useBacklogLogger();
+
   // Fade in animation when step changes
   useEffect(() => {
-    fadeAnim.setValue(0);
     Animated.timing(fadeAnim, {
       toValue: 1,
       duration: 400,
@@ -46,16 +50,30 @@ export default function ChangePasswordScreen() {
     }).start();
   }, [step]);
 
-  const handleSendOtp = async () => {
-    if (!email.trim()) {
-      Alert.alert("Error", "Please enter your email");
-      addBacklogEvent("password_change_validation_error", { step: 1, error: "empty_email" });
-      return;
+  // Timer effect for resend countdown
+  useEffect(() => {
+    if (resendTimer > 0) {
+      const interval = setInterval(() => {
+        setResendTimer(prev => prev - 1);
+      }, 1000);
+      return () => clearInterval(interval);
     }
+  }, [resendTimer]);
 
-    if (!email.includes("@")) {
-      Alert.alert("Error", "Please enter a valid email address");
-      addBacklogEvent("password_change_validation_error", { step: 1, error: "invalid_email" });
+  // Check if user is authenticated (added for security)
+  useEffect(() => {
+    if (!auth.currentUser) {
+      Alert.alert("Error", "You must be logged in to change your password.", [
+        { text: "OK", onPress: () => router.back() }
+      ]);
+    }
+  }, []);
+
+  // STEP 1: Send OTP to the current email (updated to match change-email)
+  const handleSendOtp = async () => {
+    if (!currentEmail) {
+      Alert.alert("Error", "No authenticated user found.");
+      addBacklogEvent("password_change_error", { errorType: "no_auth", step: 1 });
       return;
     }
 
@@ -67,7 +85,7 @@ export default function ChangePasswordScreen() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ 
-          email: email.trim().toLowerCase() 
+          email: currentEmail, // Use currentEmail instead of user input
         }),
       });
 
@@ -77,18 +95,20 @@ export default function ChangePasswordScreen() {
         throw new Error(data.error || 'Failed to send OTP');
       }
 
-      Alert.alert("Success", "OTP has been sent to your email.");
+      // Alert.alert("OTP Sent", `An OTP has been sent to ${currentEmail}.`);
       setStep(2);
-      addBacklogEvent("otp_sent", { step: 1, email: email.trim().toLowerCase() });
+      setResendTimer(60); // Start 60-second timer after sending OTP
+      addBacklogEvent("otp_sent", { step: 1, email: currentEmail });
     } catch (error: any) {
       console.error("Send OTP error:", error);
-      Alert.alert("Error", error.message || "Failed to send OTP");
-      addBacklogEvent("otp_send_error", { step: 1, email: email.trim().toLowerCase(), error: error.message });
+      Alert.alert("Error", error.message || "Failed to send OTP.");
+      addBacklogEvent("otp_send_error", { step: 1, email: currentEmail, error: error.message });
     } finally {
       setIsLoading(false);
     }
   };
 
+  // STEP 2: Verify OTP and change password (updated)
   const handleVerifyOtp = async () => {
     if (!otp.trim() || !newPassword.trim() || !confirmPassword.trim()) {
       Alert.alert("Error", "Please fill in all fields");
@@ -122,7 +142,7 @@ export default function ChangePasswordScreen() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          email: email.trim().toLowerCase(),
+          email: currentEmail, // Use currentEmail
           otp: otp.trim(),
           newPassword,
         }),
@@ -145,22 +165,22 @@ export default function ChangePasswordScreen() {
             }
           ]
         );
-        addBacklogEvent("password_changed", { step: 2, email: email.trim().toLowerCase() });
+        addBacklogEvent("password_changed", { step: 2, email: currentEmail });
       } else {
         Alert.alert("Error", "Invalid or expired OTP");
-        addBacklogEvent("otp_verification_error", { step: 2, email: email.trim().toLowerCase(), error: "invalid_otp" });
+        addBacklogEvent("otp_verification_error", { step: 2, email: currentEmail, error: "invalid_otp" });
       }
     } catch (error: any) {
       console.error("Verify OTP error:", error);
       Alert.alert("Error", error.message || "Verification failed");
-      addBacklogEvent("password_change_error", { step: 2, email: email.trim().toLowerCase(), error: error.message });
+      addBacklogEvent("password_change_error", { step: 2, email: currentEmail, error: error.message });
     } finally {
       setIsLoading(false);
     }
   };
 
   const handleBack = () => {
-    if (step === 2) {
+    if (step > 1) {
       Alert.alert(
         "Go Back?",
         "Your progress will be lost. Do you want to go back?",
@@ -169,10 +189,13 @@ export default function ChangePasswordScreen() {
           {
             text: "Yes",
             onPress: () => {
-              setStep(1);
-              setOtp("");
-              setNewPassword("");
-              setConfirmPassword("");
+              if (step === 2) {
+                setStep(1);
+                setOtp("");
+                setNewPassword("");
+                setConfirmPassword("");
+                setResendTimer(0); // Reset timer on back
+              }
             }
           }
         ]
@@ -183,11 +206,25 @@ export default function ChangePasswordScreen() {
   };
 
   const getStepIcon = () => {
-    return step === 1 ? "mail" : "lock-closed";
+    switch (step) {
+      case 1:
+        return "mail";
+      case 2:
+        return "lock-closed";
+      default:
+        return "mail";
+    }
   };
 
   const getStepGradient = (): [string, string] => {
-    return step === 1 ? ['#667eea', '#764ba2'] : ['#fa709a', '#fee140'];
+    switch (step) {
+      case 1:
+        return ['#667eea', '#764ba2'];
+      case 2:
+        return ['#fa709a', '#fee140'];
+      default:
+        return ['#667eea', '#764ba2'];
+    }
   };
 
   return (
@@ -231,25 +268,19 @@ export default function ChangePasswordScreen() {
 
           <Text style={styles.title}>Change Password</Text>
           <Text style={styles.subtitle}>
-            {step === 1 
-              ? "Enter your email to receive a verification code" 
-              : "Enter the code and your new password"}
+            {step === 1 && "We'll send a verification code to your email"}
+            {step === 2 && "Enter the code and your new password"}
           </Text>
 
-          {step === 1 ? (
+          {/* STEP 1: Send OTP */}
+          {step === 1 && (
             <View style={styles.formContainer}>
-              <View style={styles.inputContainer}>
-                <Ionicons name="mail" size={20} color="#667eea" style={styles.inputIcon} />
-                <TextInput
-                  style={styles.input}
-                  placeholder="Enter your email"
-                  placeholderTextColor="#666"
-                  value={email}
-                  onChangeText={setEmail}
-                  keyboardType="email-address"
-                  autoCapitalize="none"
-                  editable={!isLoading}
-                />
+              <View style={styles.infoCard}>
+                <View style={styles.infoHeader}>
+                  <Ionicons name="mail" size={20} color="#667eea" />
+                  <Text style={styles.infoLabel}>Current Email</Text>
+                </View>
+                <Text style={styles.infoValue}>{currentEmail || "Not logged in"}</Text>
               </View>
 
               <TouchableOpacity 
@@ -274,7 +305,10 @@ export default function ChangePasswordScreen() {
                 </LinearGradient>
               </TouchableOpacity>
             </View>
-          ) : (
+          )}
+
+          {/* STEP 2: Verify OTP and Change Password */}
+          {step === 2 && (
             <View style={styles.formContainer}>
               <View style={styles.inputContainer}>
                 <Ionicons name="key" size={20} color="#fa709a" style={styles.inputIcon} />
@@ -357,14 +391,16 @@ export default function ChangePasswordScreen() {
                   )}
                 </LinearGradient>
               </TouchableOpacity>
-
+              
               <TouchableOpacity 
                 style={styles.resendButton}
                 onPress={handleSendOtp}
-                disabled={isLoading}
+                disabled={isLoading || resendTimer > 0}
               >
-                <Ionicons name="refresh" size={16} color="#fa709a" style={{ marginRight: 6 }} />
-                <Text style={styles.resendText}>Resend OTP</Text>
+                <Ionicons name="refresh" size={16} color={resendTimer > 0 ? "#666" : "#fa709a"} style={{ marginRight: 6 }} />
+                <Text style={[styles.resendText, resendTimer > 0 && styles.resendTextDisabled]}>
+                  {resendTimer > 0 ? `Resend in ${resendTimer}s` : 'Resend OTP'}
+                </Text>
               </TouchableOpacity>
             </View>
           )}
@@ -450,6 +486,33 @@ const styles = StyleSheet.create({
   formContainer: {
     width: '100%',
   },
+  infoCard: {
+    width: "100%",
+    backgroundColor: "rgba(255, 255, 255, 0.08)",
+    padding: 20,
+    borderRadius: 16,
+    marginBottom: 24,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  infoHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+    gap: 8,
+  },
+  infoLabel: {
+    color: "#aaa",
+    fontSize: 13,
+    fontFamily: 'Montserrat_600SemiBold',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  infoValue: {
+    color: "#fff",
+    fontSize: 16,
+    fontFamily: 'Montserrat_600SemiBold',
+  },
   inputContainer: {
     width: "100%",
     flexDirection: 'row',
@@ -506,5 +569,8 @@ const styles = StyleSheet.create({
     color: "#fa709a",
     fontSize: 15,
     fontFamily: 'Montserrat_600SemiBold',
+  },
+  resendTextDisabled: {
+    color: "#666",
   },
 });

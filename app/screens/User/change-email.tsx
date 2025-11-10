@@ -29,6 +29,7 @@ export default function ChangeEmail() {
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [isLoading, setIsLoading] = useState(false);
   const [fadeAnim] = useState(new Animated.Value(0));
+  const [resendTimer, setResendTimer] = useState(0);
   const router = useRouter();
   const auth = getAuth();
   const currentEmail = auth.currentUser?.email;
@@ -43,6 +44,15 @@ export default function ChangeEmail() {
       useNativeDriver: true,
     }).start();
   }, [step]);
+  // NEW: Timer effect for resend countdown (decrements every second)
+  useEffect(() => {
+    if (resendTimer > 0) {
+      const interval = setInterval(() => {
+        setResendTimer(prev => prev - 1);
+      }, 1000); // Decrement every 1 second
+      return () => clearInterval(interval); // Cleanup on unmount or change
+    }
+  }, [resendTimer]);
 
   // Check if user is authenticated
   useEffect(() => {
@@ -80,8 +90,9 @@ export default function ChangeEmail() {
       }
 
       if (data.success) {
-        Alert.alert("OTP Sent", `An OTP has been sent to ${currentEmail}.`);
+        // Alert.alert("OTP Sent", `An OTP has been sent to ${currentEmail}.`);
         setStep(2);
+        setResendTimer(60); // Start 60-second timer after sending OTP
         addBacklogEvent("otp_sent", { step: 1, email: currentEmail });
       }
     } catch (error: any) {
@@ -127,7 +138,7 @@ export default function ChangeEmail() {
       }
 
       if (data.success) {
-        Alert.alert("Verified", "OTP verified successfully. Now enter your new email.");
+        // Alert.alert("Verified", "OTP verified successfully. Now enter your new email.");
         setStep(3);
         addBacklogEvent("otp_verified", { step: 2, email: currentEmail });
       }
@@ -218,6 +229,7 @@ export default function ChangeEmail() {
               } else if (step === 2) {
                 setStep(1);
                 setOtp("");
+                setResendTimer(0); // Reset timer on back
               }
             }
           }
@@ -377,10 +389,12 @@ export default function ChangeEmail() {
               <TouchableOpacity 
                 style={styles.resendButton}
                 onPress={handleSendOtp}
-                disabled={isLoading}
+                disabled={isLoading || resendTimer > 0}
               >
-                <Ionicons name="refresh" size={16} color="#667eea" style={{ marginRight: 6 }} />
-                <Text style={styles.resendText}>Resend OTP</Text>
+                <Ionicons name="refresh" size={16} color={resendTimer > 0 ? "#666" : "#667eea"} style={{ marginRight: 6 }} />
+                <Text style={[styles.resendText, resendTimer > 0 && styles.resendTextDisabled]}>
+                  {resendTimer > 0 ? `Resend in ${resendTimer}s` : 'Resend OTP'}
+                </Text>
               </TouchableOpacity>
             </View>
           )}
@@ -586,5 +600,8 @@ const styles = StyleSheet.create({
     color: "#667eea",
     fontSize: 15,
     fontFamily: 'Montserrat_600SemiBold',
+  },
+  resendTextDisabled: {
+    color: "#666",
   },
 });
