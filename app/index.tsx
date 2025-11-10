@@ -41,6 +41,7 @@ const LoginScreen = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   const [showResendVerification, setShowResendVerification] = useState(false); //for resending
   const [error, setError] = useState<ErrorState>({
     visible: false,
@@ -266,15 +267,27 @@ const LoginScreen = () => {
             editable={!isLoading}
           />
           
-          <TextInput
-            style={styles.input}
-            placeholder="Password"
-            placeholderTextColor="#fff"
-            value={password}
-            onChangeText={setPassword}
-            secureTextEntry
-            editable={!isLoading}
-          />
+          <View style={styles.passwordContainer}>
+            <TextInput
+              style={[styles.input, { flex: 1, marginBottom: 0 }]}
+              placeholder="Password"
+              placeholderTextColor="#fff"
+              value={password}
+              onChangeText={setPassword}
+              secureTextEntry={!showPassword}
+              editable={!isLoading}
+            />
+            <TouchableOpacity
+              onPress={() => setShowPassword((prev) => !prev)}
+              style={styles.eyeIcon}
+            >
+              <Ionicons
+                name={showPassword ? "eye-off" : "eye"}
+                size={20}
+                color="#fff"
+              />
+            </TouchableOpacity>
+          </View>
 
           <TouchableOpacity 
             style={styles.forgotPasswordContainer}
@@ -565,5 +578,14 @@ const styles = StyleSheet.create({
     color: '#667eea',
     fontSize: 15,
     fontFamily: 'Montserrat_600SemiBold',
+  },
+  passwordContainer: {
+    width: '80%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 20
+  },
+  eyeIcon: {
+    padding: 8,
   },
 });
