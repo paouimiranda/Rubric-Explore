@@ -4,74 +4,339 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Email Already Verified</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <style>
-    body {
+    * {
       margin: 0;
       padding: 0;
-      font-family: "Poppins", sans-serif;
-      background: linear-gradient(135deg, #6a5acd, #836fff);
-      height: 100vh;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      min-height: 100vh;
       display: flex;
+      flex-direction: column;
       align-items: center;
       justify-content: center;
-      color: #fff;
-      text-align: center;
+      background: linear-gradient(135deg, #0A1C3C 0%, #1a2942 50%, #324762 100%);
+      color: #ffffff;
+      padding: 24px;
+      overflow: hidden;
+      position: relative;
+    }
+
+    /* Animated background particles */
+    body::before {
+      content: '';
+      position: absolute;
+      width: 200%;
+      height: 200%;
+      background-image: 
+        radial-gradient(circle at 20% 50%, rgba(102, 126, 234, 0.1) 0%, transparent 50%),
+        radial-gradient(circle at 80% 80%, rgba(100, 255, 218, 0.1) 0%, transparent 50%),
+        radial-gradient(circle at 40% 20%, rgba(79, 172, 254, 0.1) 0%, transparent 50%);
+      animation: float 20s ease-in-out infinite;
+    }
+
+    @keyframes float {
+      0%, 100% { transform: translate(0, 0) rotate(0deg); }
+      33% { transform: translate(-5%, 5%) rotate(5deg); }
+      66% { transform: translate(5%, -5%) rotate(-5deg); }
     }
 
     .container {
-      background: rgba(255, 255, 255, 0.1);
-      padding: 40px;
+      position: relative;
+      z-index: 1;
+      max-width: 480px;
+      width: 100%;
+      animation: fadeIn 600ms ease-out;
+    }
+
+    @keyframes fadeIn {
+      from {
+        opacity: 0;
+        transform: translateY(20px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    /* Glassmorphic card */
+    .card {
+      background: rgba(255, 255, 255, 0.08);
+      backdrop-filter: blur(20px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
       border-radius: 20px;
-      box-shadow: 0 8px 30px rgba(0,0,0,0.2);
-      max-width: 400px;
-      width: 90%;
-      backdrop-filter: blur(10px);
+      padding: 48px 24px;
+      box-shadow: 
+        0 8px 32px rgba(0, 0, 0, 0.3),
+        inset 0 1px 0 rgba(255, 255, 255, 0.1);
+      text-align: center;
+    }
+
+    /* Success icon badge with green gradient */
+    .icon-badge {
+      width: 100px;
+      height: 100px;
+      margin: 0 auto 32px;
+      background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+      border-radius: 24px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 
+        0 8px 24px rgba(56, 239, 125, 0.4),
+        0 4px 12px rgba(0, 0, 0, 0.2);
+      animation: successPop 600ms ease-out;
+    }
+
+    @keyframes successPop {
+      0% {
+        transform: scale(0);
+        opacity: 0;
+      }
+      50% {
+        transform: scale(1.1);
+      }
+      100% {
+        transform: scale(1);
+        opacity: 1;
+      }
+    }
+
+    .icon-badge i {
+      font-size: 48px;
+      color: #ffffff;
+    }
+
+    /* Checkmark animation */
+    .icon-badge i {
+      animation: checkmark 400ms ease-out 200ms both;
+    }
+
+    @keyframes checkmark {
+      0% {
+        transform: scale(0) rotate(-45deg);
+        opacity: 0;
+      }
+      100% {
+        transform: scale(1) rotate(0deg);
+        opacity: 1;
+      }
     }
 
     h1 {
-      font-size: 26px;
-      margin-bottom: 15px;
+      font-size: 28px;
+      font-weight: 700;
+      margin-bottom: 12px;
+      color: #ffffff;
     }
 
     p {
-      font-size: 15px;
+      font-size: 16px;
       line-height: 1.6;
+      color: rgba(255, 255, 255, 0.7);
+      margin-bottom: 32px;
     }
 
+    /* Info card with success indicator */
+    .info-card {
+      background: rgba(56, 239, 125, 0.1);
+      border: 1px solid rgba(56, 239, 125, 0.2);
+      border-radius: 12px;
+      padding: 16px;
+      margin-bottom: 32px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .info-card i {
+      font-size: 20px;
+      color: #38ef7d;
+      flex-shrink: 0;
+    }
+
+    .info-card span {
+      font-size: 14px;
+      color: rgba(255, 255, 255, 0.85);
+      text-align: left;
+    }
+
+    /* Gradient button */
     .button {
-      display: inline-block;
-      margin-top: 25px;
-      padding: 12px 25px;
-      background: #5a3dff;
-      color: #fff;
-      border-radius: 8px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      width: 100%;
+      height: 56px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: #ffffff;
+      font-size: 16px;
+      font-weight: 600;
       text-decoration: none;
-      font-weight: 500;
-      transition: 0.3s;
+      border-radius: 16px;
+      border: none;
+      cursor: pointer;
+      box-shadow: 
+        0 8px 24px rgba(102, 126, 234, 0.4),
+        0 4px 12px rgba(0, 0, 0, 0.2);
+      transition: all 300ms ease;
+      opacity: 1;
     }
 
     .button:hover {
-      background: #4a2fff;
       transform: translateY(-2px);
+      box-shadow: 
+        0 12px 32px rgba(102, 126, 234, 0.5),
+        0 6px 16px rgba(0, 0, 0, 0.3);
     }
 
+    .button:active {
+      transform: translateY(0);
+      opacity: 0.8;
+    }
+
+    .button i {
+      font-size: 20px;
+    }
+
+    /* Status badge */
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 16px;
+      background: rgba(56, 239, 125, 0.15);
+      border: 1px solid rgba(56, 239, 125, 0.3);
+      border-radius: 20px;
+      font-size: 14px;
+      font-weight: 600;
+      color: #38ef7d;
+      margin-bottom: 24px;
+    }
+
+    .status-badge i {
+      font-size: 14px;
+    }
+
+    /* Footer */
     footer {
-      position: absolute;
-      bottom: 20px;
-      width: 100%;
-      text-align: center;
-      font-size: 12px;
-      color: rgba(255,255,255,0.6);
+      position: relative;
+      margin-top: 32px;
+      font-size: 13px;
+      color: rgba(255, 255, 255, 0.4);
+      z-index: 1;
+    }
+
+    /* Additional info section */
+    .additional-info {
+      margin-top: 24px;
+      padding-top: 24px;
+      border-top: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .additional-info h3 {
+      font-size: 14px;
+      font-weight: 600;
+      color: rgba(255, 255, 255, 0.6);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 12px;
+    }
+
+    .info-items {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .info-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 12px;
+      background: rgba(255, 255, 255, 0.03);
+      border-radius: 10px;
+      font-size: 13px;
+      color: rgba(255, 255, 255, 0.7);
+    }
+
+    .info-item i {
+      font-size: 14px;
+      color: #4facfe;
+      flex-shrink: 0;
+    }
+
+    @media (max-width: 480px) {
+      .card {
+        padding: 40px 20px;
+      }
+
+      h1 {
+        font-size: 24px;
+      }
+
+      .icon-badge {
+        width: 80px;
+        height: 80px;
+      }
+
+      .icon-badge i {
+        font-size: 40px;
+      }
     }
   </style>
 </head>
 <body>
   <div class="container">
-    <h1>✅ Email Already Verified</h1>
-    <p>Your email address has already been verified. You can now safely return to the application.</p>
-    <a href="https://rubric-app-8f65c.web.app" class="button">Go to App</a>
-  </div>
+    <div class="card">
+      <div class="icon-badge">
+        <i class="fas fa-check-circle"></i>
+      </div>
+      
+      <div class="status-badge">
+        <i class="fas fa-shield-check"></i>
+        <span>Already Verified</span>
+      </div>
+      
+      <h1>Email Already Verified</h1>
+      <p>Your email address has already been verified. You can now safely return to the application and start using all features.</p>
+      
+      <div class="info-card">
+        <i class="fas fa-info-circle"></i>
+        <span>Your account is fully activated and ready to use. No further action required.</span>
+      </div>
+      
+      <a href="https://rubric-app-8f65c.web.app" class="button">
+        <i class="fas fa-arrow-right"></i>
+        <span>Go to App</span>
+      </a>
 
-  <footer>Rubric © 2025</footer>
+      <div class="additional-info">
+        <h3>Quick Access</h3>
+        <div class="info-items">
+          <div class="info-item">
+            <i class="fas fa-rocket"></i>
+            <span>All features are now unlocked</span>
+          </div>
+          <div class="info-item">
+            <i class="fas fa-lock"></i>
+            <span>Your account is secure</span>
+          </div>
+          <div class="info-item">
+            <i class="fas fa-clock"></i>
+            <span>No expiration on verification</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <footer>Rubric © 2025</footer>
+  </div>
 </body>
 </html>

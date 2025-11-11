@@ -36,3 +36,467 @@
   <a href="/">Go Home</a>
 </body>
 </html>
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Email Verified</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: linear-gradient(135deg, #0A1C3C 0%, #1a2942 50%, #324762 100%);
+      color: #ffffff;
+      padding: 24px;
+      overflow: hidden;
+      position: relative;
+    }
+
+    /* Animated background with success particles */
+    body::before {
+      content: '';
+      position: absolute;
+      width: 200%;
+      height: 200%;
+      background-image: 
+        radial-gradient(circle at 20% 50%, rgba(56, 239, 125, 0.15) 0%, transparent 50%),
+        radial-gradient(circle at 80% 80%, rgba(100, 255, 218, 0.12) 0%, transparent 50%),
+        radial-gradient(circle at 40% 20%, rgba(79, 172, 254, 0.1) 0%, transparent 50%);
+      animation: float 20s ease-in-out infinite;
+    }
+
+    @keyframes float {
+      0%, 100% { transform: translate(0, 0) rotate(0deg); }
+      33% { transform: translate(-5%, 5%) rotate(5deg); }
+      66% { transform: translate(5%, -5%) rotate(-5deg); }
+    }
+
+    /* Confetti animation */
+    .confetti {
+      position: absolute;
+      width: 10px;
+      height: 10px;
+      background: #38ef7d;
+      opacity: 0;
+      animation: confettiFall 3s ease-out forwards;
+    }
+
+    @keyframes confettiFall {
+      0% {
+        transform: translateY(-100vh) rotate(0deg);
+        opacity: 1;
+      }
+      100% {
+        transform: translateY(100vh) rotate(720deg);
+        opacity: 0;
+      }
+    }
+
+    .confetti:nth-child(1) { left: 10%; background: #38ef7d; animation-delay: 0s; }
+    .confetti:nth-child(2) { left: 20%; background: #667eea; animation-delay: 0.2s; }
+    .confetti:nth-child(3) { left: 30%; background: #f5576c; animation-delay: 0.4s; }
+    .confetti:nth-child(4) { left: 40%; background: #4facfe; animation-delay: 0.1s; }
+    .confetti:nth-child(5) { left: 50%; background: #fee140; animation-delay: 0.3s; }
+    .confetti:nth-child(6) { left: 60%; background: #38ef7d; animation-delay: 0.5s; }
+    .confetti:nth-child(7) { left: 70%; background: #667eea; animation-delay: 0.15s; }
+    .confetti:nth-child(8) { left: 80%; background: #f5576c; animation-delay: 0.35s; }
+    .confetti:nth-child(9) { left: 90%; background: #4facfe; animation-delay: 0.25s; }
+
+    .container {
+      position: relative;
+      z-index: 1;
+      max-width: 480px;
+      width: 100%;
+      animation: fadeIn 600ms ease-out;
+    }
+
+    @keyframes fadeIn {
+      from {
+        opacity: 0;
+        transform: translateY(20px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    /* Glassmorphic card */
+    .card {
+      background: rgba(255, 255, 255, 0.08);
+      backdrop-filter: blur(20px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 20px;
+      padding: 48px 24px;
+      box-shadow: 
+        0 8px 32px rgba(0, 0, 0, 0.3),
+        inset 0 1px 0 rgba(255, 255, 255, 0.1);
+      text-align: center;
+    }
+
+    /* Success icon badge with animated checkmark */
+    .icon-badge {
+      width: 120px;
+      height: 120px;
+      margin: 0 auto 32px;
+      background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+      border-radius: 28px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 
+        0 12px 32px rgba(56, 239, 125, 0.5),
+        0 6px 16px rgba(0, 0, 0, 0.2);
+      animation: successBounce 800ms cubic-bezier(0.68, -0.55, 0.265, 1.55);
+      position: relative;
+    }
+
+    @keyframes successBounce {
+      0% {
+        transform: scale(0);
+        opacity: 0;
+      }
+      50% {
+        transform: scale(1.15);
+      }
+      100% {
+        transform: scale(1);
+        opacity: 1;
+      }
+    }
+
+    /* Pulsing ring effect */
+    .icon-badge::before {
+      content: '';
+      position: absolute;
+      width: 100%;
+      height: 100%;
+      border-radius: 28px;
+      border: 2px solid #38ef7d;
+      animation: pulse 2s ease-out infinite;
+    }
+
+    @keyframes pulse {
+      0% {
+        transform: scale(1);
+        opacity: 1;
+      }
+      100% {
+        transform: scale(1.3);
+        opacity: 0;
+      }
+    }
+
+    .icon-badge i {
+      font-size: 56px;
+      color: #ffffff;
+      animation: checkmark 500ms ease-out 300ms both;
+    }
+
+    @keyframes checkmark {
+      0% {
+        transform: scale(0) rotate(-45deg);
+        opacity: 0;
+      }
+      100% {
+        transform: scale(1) rotate(0deg);
+        opacity: 1;
+      }
+    }
+
+    /* Success badge */
+    .success-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 20px;
+      background: rgba(56, 239, 125, 0.2);
+      border: 1px solid rgba(56, 239, 125, 0.4);
+      border-radius: 24px;
+      font-size: 14px;
+      font-weight: 700;
+      color: #38ef7d;
+      margin-bottom: 20px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .success-badge i {
+      font-size: 14px;
+      animation: spin 1s ease-in-out;
+    }
+
+    @keyframes spin {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
+
+    h1 {
+      font-size: 32px;
+      font-weight: 700;
+      margin-bottom: 12px;
+      color: #ffffff;
+      line-height: 1.2;
+    }
+
+    p {
+      font-size: 16px;
+      line-height: 1.6;
+      color: rgba(255, 255, 255, 0.7);
+      margin-bottom: 32px;
+    }
+
+    /* Info cards */
+    .info-cards {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      margin-bottom: 32px;
+    }
+
+    .info-card {
+      background: rgba(56, 239, 125, 0.08);
+      border: 1px solid rgba(56, 239, 125, 0.15);
+      border-radius: 12px;
+      padding: 16px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      text-align: left;
+    }
+
+    .info-card i {
+      font-size: 20px;
+      color: #38ef7d;
+      flex-shrink: 0;
+    }
+
+    .info-card span {
+      font-size: 14px;
+      color: rgba(255, 255, 255, 0.85);
+      font-weight: 500;
+    }
+
+    /* Gradient buttons */
+    .button-group {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .btn-primary {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      width: 100%;
+      height: 56px;
+      background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+      color: #ffffff;
+      font-size: 16px;
+      font-weight: 600;
+      text-decoration: none;
+      border-radius: 16px;
+      border: none;
+      cursor: pointer;
+      box-shadow: 
+        0 8px 24px rgba(56, 239, 125, 0.4),
+        0 4px 12px rgba(0, 0, 0, 0.2);
+      transition: all 300ms ease;
+    }
+
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 
+        0 12px 32px rgba(56, 239, 125, 0.5),
+        0 6px 16px rgba(0, 0, 0, 0.3);
+    }
+
+    .btn-primary:active {
+      transform: translateY(0);
+      opacity: 0.8;
+    }
+
+    .btn-primary i {
+      font-size: 20px;
+    }
+
+    .btn-secondary {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      width: 100%;
+      height: 48px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      color: rgba(255, 255, 255, 0.8);
+      font-size: 14px;
+      font-weight: 600;
+      text-decoration: none;
+      border-radius: 12px;
+      transition: all 200ms ease;
+    }
+
+    .btn-secondary:hover {
+      background: rgba(255, 255, 255, 0.1);
+      border-color: rgba(255, 255, 255, 0.2);
+      color: #ffffff;
+    }
+
+    .btn-secondary i {
+      font-size: 16px;
+    }
+
+    /* Next steps */
+    .next-steps {
+      margin-top: 32px;
+      padding-top: 32px;
+      border-top: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .next-steps h3 {
+      font-size: 14px;
+      font-weight: 600;
+      color: rgba(255, 255, 255, 0.6);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 16px;
+    }
+
+    .step-items {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .step-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px;
+      background: rgba(255, 255, 255, 0.03);
+      border-radius: 10px;
+      font-size: 13px;
+      color: rgba(255, 255, 255, 0.7);
+    }
+
+    .step-number {
+      width: 24px;
+      height: 24px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      font-weight: 700;
+      color: #ffffff;
+      flex-shrink: 0;
+    }
+
+    @media (max-width: 480px) {
+      .card {
+        padding: 40px 20px;
+      }
+
+      h1 {
+        font-size: 28px;
+      }
+
+      .icon-badge {
+        width: 100px;
+        height: 100px;
+      }
+
+      .icon-badge i {
+        font-size: 48px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <!-- Confetti elements -->
+  <div class="confetti"></div>
+  <div class="confetti"></div>
+  <div class="confetti"></div>
+  <div class="confetti"></div>
+  <div class="confetti"></div>
+  <div class="confetti"></div>
+  <div class="confetti"></div>
+  <div class="confetti"></div>
+  <div class="confetti"></div>
+
+  <div class="container">
+    <div class="card">
+      <div class="icon-badge">
+        <i class="fas fa-check-circle"></i>
+      </div>
+      
+      <div class="success-badge">
+        <i class="fas fa-certificate"></i>
+        <span>Verified</span>
+      </div>
+      
+      <h1>Email Verified Successfully!</h1>
+      <p>Your email has been confirmed. Your account is now fully activated and ready to use.</p>
+      
+      <div class="info-cards">
+        <div class="info-card">
+          <i class="fas fa-unlock"></i>
+          <span>All features are now unlocked and accessible</span>
+        </div>
+        <div class="info-card">
+          <i class="fas fa-shield-check"></i>
+          <span>Your account security has been confirmed</span>
+        </div>
+        <div class="info-card">
+          <i class="fas fa-rocket"></i>
+          <span>You can start using the Rubric app immediately</span>
+        </div>
+      </div>
+      
+      <div class="button-group">
+        <a href="/" class="btn-primary">
+          <i class="fas fa-arrow-right"></i>
+          <span>Open Rubric App</span>
+        </a>
+        <button onclick="window.close()" class="btn-secondary">
+          <i class="fas fa-times-circle"></i>
+          <span>Close This Window</span>
+        </button>
+      </div>
+
+      <div class="next-steps">
+        <h3>What's Next?</h3>
+        <div class="step-items">
+          <div class="step-item">
+            <div class="step-number">1</div>
+            <span>Complete your profile setup</span>
+          </div>
+          <div class="step-item">
+            <div class="step-number">2</div>
+            <span>Explore available features</span>
+          </div>
+          <div class="step-item">
+            <div class="step-number">3</div>
+            <span>Start creating your first project</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

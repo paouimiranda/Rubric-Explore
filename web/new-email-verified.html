@@ -4,54 +4,417 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Email Updated</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
     body {
-      background: linear-gradient(135deg, #5a3dff, #836fff);
-      color: white;
-      font-family: "Poppins", sans-serif;
-      height: 100vh;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: linear-gradient(135deg, #0A1C3C 0%, #1a2942 50%, #324762 100%);
+      color: #ffffff;
+      padding: 24px;
+      overflow: hidden;
+      position: relative;
+    }
+
+    /* Animated background particles */
+    body::before {
+      content: '';
+      position: absolute;
+      width: 200%;
+      height: 200%;
+      background-image: 
+        radial-gradient(circle at 20% 50%, rgba(102, 126, 234, 0.12) 0%, transparent 50%),
+        radial-gradient(circle at 80% 80%, rgba(56, 239, 125, 0.1) 0%, transparent 50%),
+        radial-gradient(circle at 40% 20%, rgba(79, 172, 254, 0.1) 0%, transparent 50%);
+      animation: float 20s ease-in-out infinite;
+    }
+
+    @keyframes float {
+      0%, 100% { transform: translate(0, 0) rotate(0deg); }
+      33% { transform: translate(-5%, 5%) rotate(5deg); }
+      66% { transform: translate(5%, -5%) rotate(-5deg); }
+    }
+
+    .container {
+      position: relative;
+      z-index: 1;
+      max-width: 480px;
+      width: 100%;
+      animation: fadeIn 600ms ease-out;
+    }
+
+    @keyframes fadeIn {
+      from {
+        opacity: 0;
+        transform: translateY(20px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    /* Glassmorphic card */
+    .box {
+      background: rgba(255, 255, 255, 0.08);
+      backdrop-filter: blur(20px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 20px;
+      padding: 48px 24px;
+      box-shadow: 
+        0 8px 32px rgba(0, 0, 0, 0.3),
+        inset 0 1px 0 rgba(255, 255, 255, 0.1);
+      text-align: center;
+    }
+
+    /* Icon badge with blue-green gradient */
+    .icon-badge {
+      width: 100px;
+      height: 100px;
+      margin: 0 auto 32px;
+      background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+      border-radius: 24px;
       display: flex;
       align-items: center;
       justify-content: center;
-      text-align: center;
+      box-shadow: 
+        0 8px 24px rgba(79, 172, 254, 0.4),
+        0 4px 12px rgba(0, 0, 0, 0.2);
+      animation: iconBounce 800ms cubic-bezier(0.68, -0.55, 0.265, 1.55);
+      position: relative;
     }
-    .box {
-      background: rgba(255,255,255,0.15);
-      padding: 40px;
-      border-radius: 16px;
-      max-width: 420px;
-      width: 90%;
-      box-shadow: 0 8px 30px rgba(0,0,0,0.3);
-      backdrop-filter: blur(8px);
+
+    @keyframes iconBounce {
+      0% {
+        transform: scale(0) rotate(-180deg);
+        opacity: 0;
+      }
+      50% {
+        transform: scale(1.15) rotate(10deg);
+      }
+      100% {
+        transform: scale(1) rotate(0deg);
+        opacity: 1;
+      }
     }
+
+    /* Rotating ring effect */
+    .icon-badge::before {
+      content: '';
+      position: absolute;
+      width: 100%;
+      height: 100%;
+      border-radius: 24px;
+      border: 2px solid #4facfe;
+      animation: rotate 3s linear infinite;
+      opacity: 0.5;
+    }
+
+    @keyframes rotate {
+      from { transform: rotate(0deg) scale(1.2); opacity: 0.5; }
+      to { transform: rotate(360deg) scale(1.2); opacity: 0; }
+    }
+
+    .icon-badge i {
+      font-size: 48px;
+      color: #ffffff;
+      animation: iconPop 500ms ease-out 300ms both;
+    }
+
+    @keyframes iconPop {
+      0% {
+        transform: scale(0);
+        opacity: 0;
+      }
+      100% {
+        transform: scale(1);
+        opacity: 1;
+      }
+    }
+
+    /* Success badge */
+    .success-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 20px;
+      background: rgba(56, 239, 125, 0.2);
+      border: 1px solid rgba(56, 239, 125, 0.4);
+      border-radius: 24px;
+      font-size: 14px;
+      font-weight: 700;
+      color: #38ef7d;
+      margin-bottom: 20px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .success-badge i {
+      font-size: 14px;
+    }
+
     h1 {
-      font-size: 24px;
-      margin-bottom: 15px;
+      font-size: 28px;
+      font-weight: 700;
+      margin-bottom: 12px;
+      color: #ffffff;
+      line-height: 1.2;
     }
+
     p {
-      font-size: 15px;
-      margin-bottom: 25px;
+      font-size: 16px;
+      line-height: 1.6;
+      color: rgba(255, 255, 255, 0.7);
+      margin-bottom: 32px;
     }
-    a {
-      display: inline-block;
-      background: #fff;
-      color: #5a3dff;
-      padding: 12px 24px;
+
+    /* Info cards */
+    .info-cards {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      margin-bottom: 32px;
+    }
+
+    .info-card {
+      background: rgba(79, 172, 254, 0.08);
+      border: 1px solid rgba(79, 172, 254, 0.15);
+      border-radius: 12px;
+      padding: 16px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      text-align: left;
+    }
+
+    .info-card i {
+      font-size: 20px;
+      color: #4facfe;
+      flex-shrink: 0;
+    }
+
+    .info-card-content {
+      flex: 1;
+    }
+
+    .info-card-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: #ffffff;
+      margin-bottom: 4px;
+    }
+
+    .info-card-text {
+      font-size: 13px;
+      color: rgba(255, 255, 255, 0.7);
+      line-height: 1.4;
+    }
+
+    /* Gradient button */
+    .btn-primary {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      width: 100%;
+      height: 56px;
+      background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+      color: #ffffff;
+      font-size: 16px;
+      font-weight: 600;
       text-decoration: none;
-      border-radius: 8px;
-      font-weight: 500;
-      transition: 0.3s;
+      border-radius: 16px;
+      border: none;
+      cursor: pointer;
+      box-shadow: 
+        0 8px 24px rgba(79, 172, 254, 0.4),
+        0 4px 12px rgba(0, 0, 0, 0.2);
+      transition: all 300ms ease;
     }
-    a:hover {
-      background: #f2f2f2;
+
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 
+        0 12px 32px rgba(79, 172, 254, 0.5),
+        0 6px 16px rgba(0, 0, 0, 0.3);
+    }
+
+    .btn-primary:active {
+      transform: translateY(0);
+      opacity: 0.8;
+    }
+
+    .btn-primary i {
+      font-size: 20px;
+    }
+
+    /* Timeline section */
+    .timeline {
+      margin-top: 32px;
+      padding-top: 32px;
+      border-top: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .timeline h3 {
+      font-size: 14px;
+      font-weight: 600;
+      color: rgba(255, 255, 255, 0.6);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 16px;
+    }
+
+    .timeline-items {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .timeline-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      padding: 12px;
+      background: rgba(255, 255, 255, 0.03);
+      border-radius: 10px;
+      font-size: 13px;
+      color: rgba(255, 255, 255, 0.7);
+    }
+
+    .timeline-icon {
+      width: 32px;
+      height: 32px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .timeline-icon i {
+      font-size: 14px;
+      color: #ffffff;
+    }
+
+    .timeline-content {
+      flex: 1;
+      padding-top: 4px;
+    }
+
+    .timeline-title {
+      font-weight: 600;
+      color: #ffffff;
+      margin-bottom: 4px;
+    }
+
+    @media (max-width: 480px) {
+      .box {
+        padding: 40px 20px;
+      }
+
+      h1 {
+        font-size: 24px;
+      }
+
+      .icon-badge {
+        width: 80px;
+        height: 80px;
+      }
+
+      .icon-badge i {
+        font-size: 40px;
+      }
     }
   </style>
 </head>
 <body>
-  <div class="box">
-    <h1>✅ Email Updated Successfully!</h1>
-    <p>Your email address has been verified and updated. You can now return to the app.</p>
-    <a href="https://rubric-app-8f65c.web.app">Go to App</a>
+  <div class="container">
+    <div class="box">
+      <div class="icon-badge">
+        <i class="fas fa-envelope-circle-check"></i>
+      </div>
+      
+      <div class="success-badge">
+        <i class="fas fa-check-circle"></i>
+        <span>Updated</span>
+      </div>
+      
+      <h1>Email Updated Successfully!</h1>
+      <p>Your email address has been verified and updated in our system. All future communications will be sent to your new email.</p>
+      
+      <div class="info-cards">
+        <div class="info-card">
+          <i class="fas fa-shield-check"></i>
+          <div class="info-card-content">
+            <div class="info-card-title">Verified & Secure</div>
+            <div class="info-card-text">Your new email has been confirmed</div>
+          </div>
+        </div>
+        <div class="info-card">
+          <i class="fas fa-sync"></i>
+          <div class="info-card-content">
+            <div class="info-card-title">Changes Applied</div>
+            <div class="info-card-text">All services updated automatically</div>
+          </div>
+        </div>
+        <div class="info-card">
+          <i class="fas fa-bell"></i>
+          <div class="info-card-content">
+            <div class="info-card-title">Notifications Active</div>
+            <div class="info-card-text">You'll receive updates at your new email</div>
+          </div>
+        </div>
+      </div>
+      
+      <a href="https://rubric-app-8f65c.web.app" class="btn-primary">
+        <i class="fas fa-arrow-right"></i>
+        <span>Return to App</span>
+      </a>
+
+      <div class="timeline">
+        <h3>What Happened</h3>
+        <div class="timeline-items">
+          <div class="timeline-item">
+            <div class="timeline-icon">
+              <i class="fas fa-1"></i>
+            </div>
+            <div class="timeline-content">
+              <div class="timeline-title">Email Update Requested</div>
+              <div>You initiated the email change process</div>
+            </div>
+          </div>
+          <div class="timeline-item">
+            <div class="timeline-icon">
+              <i class="fas fa-2"></i>
+            </div>
+            <div class="timeline-content">
+              <div class="timeline-title">Verification Link Sent</div>
+              <div>Confirmation sent to your new email address</div>
+            </div>
+          </div>
+          <div class="timeline-item">
+            <div class="timeline-icon">
+              <i class="fas fa-3"></i>
+            </div>
+            <div class="timeline-content">
+              <div class="timeline-title">Email Confirmed</div>
+              <div>Your account is now updated and active</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </body>
 </html>
