@@ -736,7 +736,7 @@ app.get("/verifyNewEmail", async (req, res) => {
 
     await db.collection("email_change_requests").doc(oldEmail).delete();
 
-    return res.redirect("https://rubric-app-8f65c.web.app/home");
+    return res.redirect("https://rubric-app-8f65c.web.app/new-email-verified");
   } catch (err: any) {
     console.error(err);
     return res.status(500).send("Failed to verify new email.");
