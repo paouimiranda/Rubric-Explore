@@ -1,4 +1,4 @@
-// components/Interface/friend-card.tsx (Updated with Profile Navigation)
+// components/Interface/friend-card.tsx (Updated with Profile Navigation and Menu)
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import React from 'react';
@@ -10,9 +10,21 @@ interface FriendCardProps {
   onChatPress?: () => void;
   username?: string;
   onProfilePress?: () => void;
+  onMenuPress?: () => void;  // NEW: For opening the triple dot menu
+  isMuted?: boolean;  // NEW: For mute indicator
+  isPinned?: boolean;  // NEW: For pin indicator
 }
 
-export default function FriendCard({ name, status, onChatPress, username, onProfilePress }: FriendCardProps) {
+export default function FriendCard({ 
+  name, 
+  status, 
+  onChatPress, 
+  username, 
+  onProfilePress, 
+  onMenuPress,  // NEW
+  isMuted = false,  // NEW
+  isPinned = false,  // NEW
+}: FriendCardProps) {
   const getStatusColor = () => {
     switch (status) {
       case 'online':
@@ -64,76 +76,97 @@ export default function FriendCard({ name, status, onChatPress, username, onProf
   };
 
   return (
-    <TouchableOpacity 
-      style={styles.card}
-      onPress={onProfilePress}
-      activeOpacity={0.7}
-      disabled={!onProfilePress}
-    >
-      <View style={styles.leftSection}>
-        <View style={styles.avatarContainer}>
-          <LinearGradient
-            colors={getAvatarGradient()} 
-            style={styles.avatar}
-          >
-            <Text style={styles.avatarText}>
-              {name.charAt(0).toUpperCase()}
-            </Text>
-          </LinearGradient>
-          <View style={[styles.statusIndicator, { backgroundColor: getStatusColor() }]}>
-            <View style={styles.statusPulse} />
+    <View style={styles.cardWrapper}>  {/* NEW: Wrapper for indicators */}
+      <TouchableOpacity 
+        style={styles.card}
+        onPress={onProfilePress}
+        activeOpacity={0.7}
+        disabled={!onProfilePress}
+      >
+        <View style={styles.leftSection}>
+          <View style={styles.avatarContainer}>
+            <LinearGradient
+              colors={getAvatarGradient()} 
+              style={styles.avatar}
+            >
+              <Text style={styles.avatarText}>
+                {name ? name.charAt(0).toUpperCase() : '?'}  {/* FIXED: Safety check for empty name */}
+              </Text>
+            </LinearGradient>
+            <View style={[styles.statusIndicator, { backgroundColor: getStatusColor() }]}>
+              <View style={styles.statusPulse} />
+            </View>
+          </View>
+          
+          <View style={styles.userInfo}>
+            <Text style={styles.name} numberOfLines={1}>{name}</Text>
+            {username && (
+              <Text style={styles.username} numberOfLines={1}>@{username}</Text>
+            )}
+            <View style={styles.statusRow}>
+              <Ionicons name={getStatusIcon()} size={12} color={getStatusColor()} />
+              <Text style={[styles.statusText, { color: getStatusColor() }]}>
+                {getStatusText()}
+              </Text>
+            </View>
           </View>
         </View>
-        
-        <View style={styles.userInfo}>
-          <Text style={styles.name} numberOfLines={1}>{name}</Text>
-          {username && (
-            <Text style={styles.username} numberOfLines={1}>@{username}</Text>
-          )}
-          <View style={styles.statusRow}>
-            <Ionicons name={getStatusIcon()} size={12} color={getStatusColor()} />
-            <Text style={[styles.statusText, { color: getStatusColor() }]}>
-              {getStatusText()}
-            </Text>
-          </View>
-        </View>
-      </View>
 
-      <View style={styles.rightSection}>
-        {onChatPress && (
+        <View style={styles.rightSection}>
+          {onChatPress && (
+            <TouchableOpacity 
+              style={styles.chatButton}
+              onPress={(e) => {
+                e.stopPropagation();
+                onChatPress();
+              }}
+              activeOpacity={0.7}
+            >
+              <LinearGradient
+                colors={['rgba(59, 130, 246, 0.15)', 'rgba(37, 99, 235, 0.15)']}
+                style={styles.chatButtonGradient}
+              >
+                <Ionicons name="chatbubble" size={18} color="#3b82f6" />
+              </LinearGradient>
+            </TouchableOpacity>
+          )}
+          
           <TouchableOpacity 
-            style={styles.chatButton}
+            style={styles.moreButton}
             onPress={(e) => {
               e.stopPropagation();
-              onChatPress();
+              onMenuPress && onMenuPress();  // NEW: Call onMenuPress
             }}
             activeOpacity={0.7}
           >
-            <LinearGradient
-              colors={['rgba(59, 130, 246, 0.15)', 'rgba(37, 99, 235, 0.15)']}
-              style={styles.chatButtonGradient}
-            >
-              <Ionicons name="chatbubble" size={18} color="#3b82f6" />
-            </LinearGradient>
+            <Ionicons name="ellipsis-vertical" size={18} color="#94A3B8" />
           </TouchableOpacity>
-        )}
-        
-        <TouchableOpacity 
-          style={styles.moreButton}
-          onPress={(e) => {
-            e.stopPropagation();
-            // Add more options menu here if needed
-          }}
-          activeOpacity={0.7}
-        >
-          <Ionicons name="ellipsis-vertical" size={18} color="#94A3B8" />
-        </TouchableOpacity>
-      </View>
-    </TouchableOpacity>
+        </View>
+      </TouchableOpacity>
+      
+      {/* NEW: Mute indicator */}
+      {isMuted && (
+        <View style={styles.muteIndicator}>
+          <Ionicons name="volume-mute" size={14} color="#f59e0b" />
+        </View>
+      )}
+      
+      {/* NEW: Pin indicator */}
+      {isPinned && (
+        <View style={styles.pinIndicator}>
+          <Ionicons name="pin" size={14} color="#10b981" />
+        </View>
+      )}
+    </View>
   );
 }
 
+
 const styles = StyleSheet.create({
+  cardWrapper: {  // NEW: Wrapper to position indicators
+    position: 'relative',
+    marginBottom: 10,
+  },
   card: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -141,7 +174,6 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(31, 41, 55, 0.7)',
     padding: 14,
     borderRadius: 16,
-    marginBottom: 10,
     borderWidth: 1,
     borderColor: 'rgba(75, 85, 99, 0.3)',
   },
@@ -237,5 +269,31 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: 'rgba(31, 41, 55, 0.5)',
+  },
+  muteIndicator: {  // NEW: Positioned top-right
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    backgroundColor: 'rgba(31, 41, 55, 0.8)',
+    borderRadius: 10,
+    padding: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  pinIndicator: {  // NEW: Positioned top-left
+    position: 'absolute',
+    top: 8,
+    left: 8,
+    backgroundColor: 'rgba(31, 41, 55, 0.8)',
+    borderRadius: 10,
+    padding: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 2,
   },
 });
