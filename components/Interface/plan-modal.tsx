@@ -7,6 +7,7 @@ import React, { useEffect, useState } from 'react';
 import {
     Alert,
     Animated,
+    Dimensions,
     KeyboardAvoidingView,
     Modal,
     Platform,
@@ -17,6 +18,8 @@ import {
     TouchableOpacity,
     View,
 } from 'react-native';
+
+const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 interface PlanModalProps {
   visible: boolean;
@@ -38,9 +41,6 @@ export default function PlanModal({
   const [planTime, setPlanTime] = useState('');
   const [planCategory, setPlanCategory] = useState<Plan['category']>('personal');
   const [planPriority, setPlanPriority] = useState<Plan['priority']>('medium');
-  // NOTE: Tags feature has been removed - priority and category are sufficient for organization
-  // const [planTags, setPlanTags] = useState<string[]>([]);
-  // const [tagInput, setTagInput] = useState('');
   
   // Picker states
   const [timePickerVisible, setTimePickerVisible] = useState(false);
@@ -52,21 +52,21 @@ export default function PlanModal({
   const [errors, setErrors] = useState({ title: false, time: false });
   const [isSaving, setIsSaving] = useState(false);
   
-  const fadeAnim = React.useRef(new Animated.Value(0)).current;
-  const scaleAnim = React.useRef(new Animated.Value(0.8)).current;
+  const slideAnim = React.useRef(new Animated.Value(SCREEN_HEIGHT)).current;
+  const backdropAnim = React.useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     if (visible) {
       Animated.parallel([
-        Animated.timing(fadeAnim, {
-          toValue: 1,
-          duration: 300,
+        Animated.spring(slideAnim, {
+          toValue: 0,
+          tension: 65,
+          friction: 11,
           useNativeDriver: true,
         }),
-        Animated.spring(scaleAnim, {
+        Animated.timing(backdropAnim, {
           toValue: 1,
-          tension: 50,
-          friction: 7,
+          duration: 300,
           useNativeDriver: true,
         }),
       ]).start();
@@ -78,16 +78,31 @@ export default function PlanModal({
         setPlanTime(editingPlan.time);
         setPlanCategory(editingPlan.category);
         setPlanPriority(editingPlan.priority);
-        // setPlanTags(editingPlan.tags || []); // Tags removed
       } else {
         resetForm();
       }
       setErrors({ title: false, time: false });
-    } else {
-      fadeAnim.setValue(0);
-      scaleAnim.setValue(0.8);
     }
   }, [visible, editingPlan]);
+
+  const handleClose = () => {
+    Animated.parallel([
+      Animated.timing(slideAnim, {
+        toValue: SCREEN_HEIGHT,
+        duration: 250,
+        useNativeDriver: true,
+      }),
+      Animated.timing(backdropAnim, {
+        toValue: 0,
+        duration: 250,
+        useNativeDriver: true,
+      }),
+    ]).start(() => {
+      onClose();
+      slideAnim.setValue(SCREEN_HEIGHT);
+      backdropAnim.setValue(0);
+    });
+  };
 
   const resetForm = () => {
     setPlanTitle('');
@@ -96,8 +111,6 @@ export default function PlanModal({
     setPlanTime('');
     setPlanCategory('personal');
     setPlanPriority('medium');
-    // setPlanTags([]); // Tags removed
-    // setTagInput(''); // Tags removed
   };
 
   const validateForm = () => {
@@ -124,7 +137,7 @@ export default function PlanModal({
         time: planTime,
         category: planCategory,
         priority: planPriority,
-        tags: [], // Tags feature removed
+        tags: [],
         status: 'pending' as const,
         isPublic: false,
       };
@@ -135,7 +148,8 @@ export default function PlanModal({
         await PlannerService.createPlan(planData);
       }
 
-      onSave();
+      handleClose();
+      setTimeout(() => onSave(), 300);
     } catch (error) {
       console.error('Error saving plan:', error);
       Alert.alert('Error', 'Failed to save plan');
@@ -143,10 +157,6 @@ export default function PlanModal({
       setIsSaving(false);
     }
   };
-
-  // Tags functionality removed - not needed with priority and category
-  // const addTag = useCallback(() => { ... }, [tagInput, planTags]);
-  // const removeTag = useCallback((tag: string) => { ... }, [planTags]);
 
   const getCategoryIcon = (category: string) => {
     const icons: Record<string, string> = {
@@ -168,24 +178,42 @@ export default function PlanModal({
     return icons[priority] || 'flag';
   };
 
+  if (!visible) return null;
+
   return (
-    <Modal visible={visible} transparent animationType="fade">
+    <Modal visible={visible} transparent animationType="none">
       <KeyboardAvoidingView 
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.modalOverlay}
       >
-        <TouchableOpacity 
-          style={styles.backdrop} 
-          activeOpacity={1} 
-          onPress={onClose}
-        />
+        {/* Backdrop */}
+        <Animated.View 
+          style={[
+            styles.backdrop,
+            { opacity: backdropAnim }
+          ]}
+        >
+          <TouchableOpacity 
+            style={StyleSheet.absoluteFill}
+            activeOpacity={1} 
+            onPress={handleClose}
+          />
+        </Animated.View>
         
+        {/* Sliding Content */}
         <Animated.View
           style={[
             styles.modalContent,
-            { opacity: fadeAnim, transform: [{ scale: scaleAnim }] },
+            {
+              transform: [{ translateY: slideAnim }]
+            }
           ]}
         >
+          {/* Drag Indicator */}
+          <View style={styles.dragIndicatorContainer}>
+            <View style={styles.dragIndicator} />
+          </View>
+
           {/* Header */}
           <LinearGradient
             colors={['#667eea', '#764ba2']}
@@ -193,48 +221,50 @@ export default function PlanModal({
             end={{ x: 1, y: 1 }}
             style={styles.modalHeader}
           >
-            <View style={styles.headerTop}>
-              {editingPlan && (
-                <View style={styles.headerIconContainer}>
-                  <Ionicons 
-                    name="create-outline" 
-                    size={28} 
-                    color="#fff" 
-                  />
+            <View style={styles.headerContent}>
+              <View style={styles.headerLeft}>
+                {editingPlan && (
+                  <View style={styles.headerIconContainer}>
+                    <Ionicons name="create-outline" size={24} color="#fff" />
+                  </View>
+                )}
+                <View>
+                  <Text style={styles.modalTitle}>
+                    {editingPlan ? 'Edit Plan' : 'Create New Plan'}
+                  </Text>
+                  <Text style={styles.modalSubtitle}>
+                    {editingPlan ? 'Update your plan details' : 'Fill in the details below'}
+                  </Text>
                 </View>
-              )}
-              {!editingPlan && <View style={{ width: 48 }} />}
+              </View>
               <TouchableOpacity 
-                onPress={onClose} 
+                onPress={handleClose} 
                 style={styles.closeButton}
                 activeOpacity={0.7}
               >
-                <Ionicons name="close" size={28} color="#fff" />
+                <Ionicons name="close" size={26} color="#fff" />
               </TouchableOpacity>
             </View>
-            <Text style={styles.modalTitle}>
-              {editingPlan ? 'Edit Plan' : 'Create New Plan'}
-            </Text>
-            <Text style={styles.modalSubtitle}>
-              {editingPlan ? 'Update your plan details' : 'Fill in the details below'}
-            </Text>
           </LinearGradient>
 
           <ScrollView 
             style={styles.modalBody}
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
+            bounces={false}
           >
             {/* Title Section */}
             <View style={styles.section}>
-              <Text style={styles.sectionLabel}>
-                Title <Text style={styles.required}>*</Text>
-              </Text>
+              <View style={styles.labelContainer}>
+                <Ionicons name="document-text" size={16} color="#4facfe" />
+                <Text style={styles.sectionLabel}>
+                  Title <Text style={styles.required}>*</Text>
+                </Text>
+              </View>
               <View style={[
                 styles.inputContainer, 
                 errors.title && styles.inputError
               ]}>
-                <Ionicons name="document-text-outline" size={20} color="#4facfe" />
                 <TextInput
                   placeholder="What do you want to do?"
                   placeholderTextColor="#666"
@@ -247,20 +277,20 @@ export default function PlanModal({
                 />
               </View>
               {errors.title && (
-                <Text style={styles.errorText}>Title is required</Text>
+                <View style={styles.errorContainer}>
+                  <Ionicons name="alert-circle" size={14} color="#ff6b6b" />
+                  <Text style={styles.errorText}>Title is required</Text>
+                </View>
               )}
             </View>
 
             {/* Description Section */}
             <View style={styles.section}>
-              <Text style={styles.sectionLabel}>Description</Text>
+              <View style={styles.labelContainer}>
+                <Ionicons name="list" size={16} color="#4facfe" />
+                <Text style={styles.sectionLabel}>Description</Text>
+              </View>
               <View style={[styles.inputContainer, styles.textAreaContainer]}>
-                <Ionicons 
-                  name="list-outline" 
-                  size={20} 
-                  color="#4facfe" 
-                  style={styles.textAreaIcon} 
-                />
                 <TextInput
                   placeholder="Add more details..."
                   placeholderTextColor="#666"
@@ -273,22 +303,27 @@ export default function PlanModal({
                 />
               </View>
               <Text style={styles.charCount}>
-                {planDescription.length}/500
+                {planDescription.length}/500 characters
               </Text>
             </View>
 
             {/* Date & Time Section */}
             <View style={styles.section}>
-              <Text style={styles.sectionLabel}>When</Text>
+              <View style={styles.labelContainer}>
+                <Ionicons name="time" size={16} color="#4facfe" />
+                <Text style={styles.sectionLabel}>
+                  When <Text style={styles.required}>*</Text>
+                </Text>
+              </View>
               <View style={styles.rowContainer}>
                 <TouchableOpacity
                   style={[styles.inputContainer, styles.halfWidth]}
                   onPress={() => setDatePickerVisible(true)}
                   activeOpacity={0.7}
                 >
-                  <Ionicons name="calendar" size={20} color="#4facfe" />
+                  <Ionicons name="calendar-outline" size={20} color="#4facfe" />
                   <Text style={styles.inputText}>
-                    {moment(planDate).format('MMM D')}
+                    {moment(planDate).format('MMM DD, YYYY')}
                   </Text>
                 </TouchableOpacity>
 
@@ -301,17 +336,20 @@ export default function PlanModal({
                   onPress={() => setTimePickerVisible(true)}
                   activeOpacity={0.7}
                 >
-                  <Ionicons name="time" size={20} color="#4facfe" />
+                  <Ionicons name="time-outline" size={20} color="#4facfe" />
                   <Text style={[
                     styles.inputText,
                     !planTime && styles.placeholderText
                   ]}>
-                    {planTime || 'Set time *'}
+                    {planTime || 'Set time'}
                   </Text>
                 </TouchableOpacity>
               </View>
               {errors.time && (
-                <Text style={styles.errorText}>Time is required</Text>
+                <View style={styles.errorContainer}>
+                  <Ionicons name="alert-circle" size={14} color="#ff6b6b" />
+                  <Text style={styles.errorText}>Time is required</Text>
+                </View>
               )}
             </View>
 
@@ -346,175 +384,189 @@ export default function PlanModal({
               />
             )}
 
-            {/* Category Section */}
-            <View style={styles.section}>
-              <Text style={styles.sectionLabel}>Category</Text>
-              <TouchableOpacity
-                style={styles.inputContainer}
-                onPress={() => setCategoryPickerVisible(!categoryPickerVisible)}
-                activeOpacity={0.7}
-              >
-                <LinearGradient
-                  colors={PlannerService.getCategoryColor(planCategory) as any}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                  style={styles.categoryIconContainer}
+            {/* Category & Priority Row */}
+            <View style={styles.rowContainer}>
+              {/* Category Section */}
+              <View style={[styles.section, styles.halfWidth, styles.noMargin]}>
+                <View style={styles.labelContainer}>
+                  <Ionicons name="apps" size={16} color="#4facfe" />
+                  <Text style={styles.sectionLabel}>Category</Text>
+                </View>
+                <TouchableOpacity
+                  style={styles.inputContainer}
+                  onPress={() => setCategoryPickerVisible(!categoryPickerVisible)}
+                  activeOpacity={0.7}
                 >
-                  <Ionicons 
-                    name={getCategoryIcon(planCategory) as any} 
-                    size={18} 
-                    color="#fff" 
-                  />
-                </LinearGradient>
-                <Text style={styles.inputText}>
-                  {planCategory.charAt(0).toUpperCase() + planCategory.slice(1)}
-                </Text>
-                <Ionicons 
-                  name={categoryPickerVisible ? "chevron-up" : "chevron-down"} 
-                  size={20} 
-                  color="#aaa" 
-                />
-              </TouchableOpacity>
-
-              {categoryPickerVisible && (
-                <View style={styles.pickerContainer}>
-                  {(['work', 'personal', 'health', 'education', 'other'] as const).map((cat) => (
-                    <TouchableOpacity
-                      key={cat}
-                      style={[
-                        styles.pickerOption,
-                        planCategory === cat && styles.pickerOptionSelected
-                      ]}
-                      onPress={() => {
-                        setPlanCategory(cat);
-                        setCategoryPickerVisible(false);
-                      }}
-                      activeOpacity={0.7}
-                    >
-                      <LinearGradient
-                        colors={PlannerService.getCategoryColor(cat) as any}
-                        start={{ x: 0, y: 0 }}
-                        end={{ x: 1, y: 1 }}
-                        style={styles.pickerIconBadge}
-                      >
-                        <Ionicons 
-                          name={getCategoryIcon(cat) as any} 
-                          size={16} 
-                          color="#fff" 
-                        />
-                      </LinearGradient>
-                      <Text style={styles.pickerText}>
-                        {cat.charAt(0).toUpperCase() + cat.slice(1)}
-                      </Text>
-                      {planCategory === cat && (
-                        <Ionicons name="checkmark-circle" size={22} color="#4facfe" />
-                      )}
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              )}
-            </View>
-
-            {/* Priority Section */}
-            <View style={styles.section}>
-              <Text style={styles.sectionLabel}>Priority</Text>
-              <TouchableOpacity
-                style={styles.inputContainer}
-                onPress={() => setPriorityPickerVisible(!priorityPickerVisible)}
-                activeOpacity={0.7}
-              >
-                <View style={[
-                  styles.priorityIndicator,
-                  { backgroundColor: PlannerService.getPriorityColor(planPriority) }
-                ]}>
-                  <Ionicons 
-                    name={getPriorityIcon(planPriority) as any} 
-                    size={16} 
-                    color="#fff" 
-                  />
-                </View>
-                <Text style={styles.inputText}>
-                  {planPriority.charAt(0).toUpperCase() + planPriority.slice(1)} Priority
-                </Text>
-                <Ionicons 
-                  name={priorityPickerVisible ? "chevron-up" : "chevron-down"} 
-                  size={20} 
-                  color="#aaa" 
-                />
-              </TouchableOpacity>
-
-              {priorityPickerVisible && (
-                <View style={styles.pickerContainer}>
-                  {(['low', 'medium', 'high'] as const).map((pri) => (
-                    <TouchableOpacity
-                      key={pri}
-                      style={[
-                        styles.pickerOption,
-                        planPriority === pri && styles.pickerOptionSelected
-                      ]}
-                      onPress={() => {
-                        setPlanPriority(pri);
-                        setPriorityPickerVisible(false);
-                      }}
-                      activeOpacity={0.7}
-                    >
-                      <View style={[
-                        styles.priorityColorBadge,
-                        { backgroundColor: PlannerService.getPriorityColor(pri) }
-                      ]}>
-                        <Ionicons 
-                          name={getPriorityIcon(pri) as any} 
-                          size={16} 
-                          color="#fff" 
-                        />
-                      </View>
-                      <Text style={styles.pickerText}>
-                        {pri.charAt(0).toUpperCase() + pri.slice(1)}
-                      </Text>
-                      {planPriority === pri && (
-                        <Ionicons name="checkmark-circle" size={22} color="#4facfe" />
-                      )}
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              )}
-            </View>
-
-            {/* Action Buttons */}
-            <View style={styles.actionButtons}>
-              <TouchableOpacity
-                style={styles.saveButtonContainer}
-                onPress={savePlan}
-                activeOpacity={0.8}
-                disabled={isSaving}
-              >
-                <LinearGradient
-                  colors={isSaving ? ['#666', '#888'] : ['#4facfe', '#00f2fe']}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                  style={styles.saveButton}
-                >
-                  <Ionicons 
-                    name={isSaving ? "hourglass-outline" : "checkmark-circle"} 
-                    size={22} 
-                    color="#fff" 
-                  />
-                  <Text style={styles.saveText}>
-                    {isSaving ? 'Saving...' : (editingPlan ? 'Update Plan' : 'Create Plan')}
+                  <LinearGradient
+                    colors={PlannerService.getCategoryColor(planCategory) as any}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={styles.categoryIconContainer}
+                  >
+                    <Ionicons 
+                      name={getCategoryIcon(planCategory) as any} 
+                      size={16} 
+                      color="#fff" 
+                    />
+                  </LinearGradient>
+                  <Text style={styles.inputTextCompact} numberOfLines={1}>
+                    {planCategory.charAt(0).toUpperCase() + planCategory.slice(1)}
                   </Text>
-                </LinearGradient>
-              </TouchableOpacity>
+                  <Ionicons 
+                    name={categoryPickerVisible ? "chevron-up" : "chevron-down"} 
+                    size={18} 
+                    color="#aaa" 
+                  />
+                </TouchableOpacity>
+              </View>
 
-              <TouchableOpacity
-                onPress={onClose}
-                style={styles.cancelButton}
-                activeOpacity={0.7}
-                disabled={isSaving}
-              >
-                <Text style={styles.cancelText}>Cancel</Text>
-              </TouchableOpacity>
+              {/* Priority Section */}
+              <View style={[styles.section, styles.halfWidth, styles.noMargin]}>
+                <View style={styles.labelContainer}>
+                  <Ionicons name="flag" size={16} color="#4facfe" />
+                  <Text style={styles.sectionLabel}>Priority</Text>
+                </View>
+                <TouchableOpacity
+                  style={styles.inputContainer}
+                  onPress={() => setPriorityPickerVisible(!priorityPickerVisible)}
+                  activeOpacity={0.7}
+                >
+                  <View style={[
+                    styles.priorityIndicator,
+                    { backgroundColor: PlannerService.getPriorityColor(planPriority) }
+                  ]}>
+                    <Ionicons 
+                      name={getPriorityIcon(planPriority) as any} 
+                      size={14} 
+                      color="#fff" 
+                    />
+                  </View>
+                  <Text style={styles.inputTextCompact} numberOfLines={1}>
+                    {planPriority.charAt(0).toUpperCase() + planPriority.slice(1)}
+                  </Text>
+                  <Ionicons 
+                    name={priorityPickerVisible ? "chevron-up" : "chevron-down"} 
+                    size={18} 
+                    color="#aaa" 
+                  />
+                </TouchableOpacity>
+              </View>
             </View>
+
+            {/* Category Picker */}
+            {categoryPickerVisible && (
+              <View style={[styles.pickerContainer, styles.fullWidth]}>
+                {(['work', 'personal', 'health', 'education', 'other'] as const).map((cat) => (
+                  <TouchableOpacity
+                    key={cat}
+                    style={[
+                      styles.pickerOption,
+                      planCategory === cat && styles.pickerOptionSelected
+                    ]}
+                    onPress={() => {
+                      setPlanCategory(cat);
+                      setCategoryPickerVisible(false);
+                    }}
+                    activeOpacity={0.7}
+                  >
+                    <LinearGradient
+                      colors={PlannerService.getCategoryColor(cat) as any}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 1 }}
+                      style={styles.pickerIconBadge}
+                    >
+                      <Ionicons 
+                        name={getCategoryIcon(cat) as any} 
+                        size={16} 
+                        color="#fff" 
+                      />
+                    </LinearGradient>
+                    <Text style={styles.pickerText}>
+                      {cat.charAt(0).toUpperCase() + cat.slice(1)}
+                    </Text>
+                    {planCategory === cat && (
+                      <Ionicons name="checkmark-circle" size={20} color="#4facfe" />
+                    )}
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
+
+            {/* Priority Picker */}
+            {priorityPickerVisible && (
+              <View style={[styles.pickerContainer, styles.fullWidth]}>
+                {(['low', 'medium', 'high'] as const).map((pri) => (
+                  <TouchableOpacity
+                    key={pri}
+                    style={[
+                      styles.pickerOption,
+                      planPriority === pri && styles.pickerOptionSelected
+                    ]}
+                    onPress={() => {
+                      setPlanPriority(pri);
+                      setPriorityPickerVisible(false);
+                    }}
+                    activeOpacity={0.7}
+                  >
+                    <View style={[
+                      styles.priorityColorBadge,
+                      { backgroundColor: PlannerService.getPriorityColor(pri) }
+                    ]}>
+                      <Ionicons 
+                        name={getPriorityIcon(pri) as any} 
+                        size={16} 
+                        color="#fff" 
+                      />
+                    </View>
+                    <Text style={styles.pickerText}>
+                      {pri.charAt(0).toUpperCase() + pri.slice(1)} Priority
+                    </Text>
+                    {planPriority === pri && (
+                      <Ionicons name="checkmark-circle" size={20} color="#4facfe" />
+                    )}
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
+
+            {/* Bottom Spacing for Safe Area */}
+            <View style={{ height: 100 }} />
           </ScrollView>
+
+          {/* Fixed Bottom Action Buttons */}
+          <View style={styles.bottomBar}>
+            <TouchableOpacity
+              style={[styles.cancelButton, { marginRight: 12 }]}
+              onPress={handleClose}
+              activeOpacity={0.7}
+              disabled={isSaving}
+            >
+              <Text style={styles.cancelText}>Cancel</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.saveButtonContainer}
+              onPress={savePlan}
+              activeOpacity={0.8}
+              disabled={isSaving}
+            >
+              <LinearGradient
+                colors={isSaving ? ['#666', '#888'] : ['#4facfe', '#00f2fe']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.saveButton}
+              >
+                <Ionicons 
+                  name={isSaving ? "hourglass-outline" : "checkmark-circle"} 
+                  size={20} 
+                  color="#fff" 
+                />
+                <Text style={styles.saveText}>
+                  {isSaving ? 'Saving...' : (editingPlan ? 'Update' : 'Create')}
+                </Text>
+              </LinearGradient>
+            </TouchableOpacity>
+          </View>
         </Animated.View>
       </KeyboardAvoidingView>
     </Modal>
@@ -523,46 +575,57 @@ export default function PlanModal({
 
 const styles = StyleSheet.create({
   modalOverlay: { 
-    flex: 1, 
-    justifyContent: 'center', 
-    alignItems: 'center',
+    flex: 1,
   },
   backdrop: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.75)',
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
   },
   modalContent: { 
-    width: '90%', 
-    maxWidth: 440, 
-    maxHeight: '92%', 
-    backgroundColor: '#1a2744', 
-    borderRadius: 24, 
-    overflow: 'hidden', 
-    borderWidth: 1, 
-    borderColor: 'rgba(255, 255, 255, 0.1)',
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: SCREEN_HEIGHT * 0.92,
+    backgroundColor: '#1a2744',
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    overflow: 'hidden',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 10 },
+    shadowOffset: { width: 0, height: -4 },
     shadowOpacity: 0.3,
     shadowRadius: 20,
-    elevation: 10,
+    elevation: 20,
+  },
+  dragIndicatorContainer: {
+    paddingTop: 12,
+    paddingBottom: 8,
+    alignItems: 'center',
+  },
+  dragIndicator: {
+    width: 40,
+    height: 4,
+    backgroundColor: 'rgba(255, 255, 255, 0.3)',
+    borderRadius: 2,
   },
   modalHeader: { 
-    padding: 24,
-    paddingTop: 20,
+    paddingHorizontal: 20,
+    paddingVertical: 20,
   },
-  headerTop: {
+  headerContent: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
+  },
+  headerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    flex: 1,
   },
   headerIconContainer: {
-    width: 48,
-    height: 48,
+    width: 44,
+    height: 44,
     borderRadius: 12,
     backgroundColor: 'rgba(255, 255, 255, 0.15)',
     justifyContent: 'center',
@@ -577,28 +640,37 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   modalTitle: { 
-    fontSize: 26, 
+    fontSize: 22, 
     fontWeight: '700', 
     color: '#fff',
-    marginBottom: 4,
+    marginBottom: 2,
   },
   modalSubtitle: {
-    fontSize: 14,
+    fontSize: 13,
     color: 'rgba(255, 255, 255, 0.7)',
     fontWeight: '400',
   },
   modalBody: { 
-    padding: 20,
-    paddingTop: 4,
+    flex: 1,
+    paddingHorizontal: 20,
+    paddingTop: 15,
   },
   section: {
-    marginBottom: 24,
+    marginBottom: 20,
+  },
+  noMargin: {
+    marginBottom: 0,
+  },
+  labelContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 10,
   },
   sectionLabel: {
     fontSize: 13,
     fontWeight: '600',
     color: '#aaa',
-    marginBottom: 8,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
@@ -609,12 +681,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row', 
     alignItems: 'center', 
     backgroundColor: 'rgba(255, 255, 255, 0.06)', 
-    borderRadius: 14, 
-    paddingHorizontal: 16, 
-    paddingVertical: 14, 
+    borderRadius: 12, 
+    paddingHorizontal: 14, 
+    paddingVertical: 13, 
     borderWidth: 1.5, 
     borderColor: 'rgba(255, 255, 255, 0.08)', 
-    gap: 12,
+    gap: 10,
   },
   inputError: {
     borderColor: 'rgba(255, 107, 107, 0.5)',
@@ -623,26 +695,28 @@ const styles = StyleSheet.create({
   textAreaContainer: { 
     alignItems: 'flex-start',
     minHeight: 100,
-  },
-  textAreaIcon: { 
-    marginTop: 2,
-    alignSelf: 'flex-start',
+    paddingTop: 13,
   },
   input: { 
     flex: 1, 
-    fontSize: 16, 
+    fontSize: 15, 
     color: '#fff', 
     fontWeight: '400',
   },
   textArea: { 
     minHeight: 80, 
     textAlignVertical: 'top',
-    paddingTop: 0,
   },
   inputText: { 
     flex: 1, 
-    fontSize: 16, 
+    fontSize: 15, 
     color: '#fff', 
+    fontWeight: '500',
+  },
+  inputTextCompact: {
+    flex: 1,
+    fontSize: 14,
+    color: '#fff',
     fontWeight: '500',
   },
   placeholderText: {
@@ -650,16 +724,21 @@ const styles = StyleSheet.create({
     fontWeight: '400',
   },
   charCount: {
-    fontSize: 12,
+    fontSize: 11,
     color: '#666',
     textAlign: 'right',
-    marginTop: 4,
+    marginTop: 6,
+  },
+  errorContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 8,
+    marginLeft: 2,
   },
   errorText: {
     fontSize: 12,
     color: '#ff6b6b',
-    marginTop: 6,
-    marginLeft: 4,
   },
   rowContainer: {
     flexDirection: 'row',
@@ -668,114 +747,103 @@ const styles = StyleSheet.create({
   halfWidth: {
     flex: 1,
   },
+  fullWidth: {
+    marginTop: 12,
+  },
   categoryIconContainer: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
+    width: 32,
+    height: 32,
+    borderRadius: 8,
     justifyContent: 'center',
     alignItems: 'center',
   },
   priorityIndicator: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
+    width: 32,
+    height: 32,
+    borderRadius: 8,
     justifyContent: 'center',
     alignItems: 'center',
   },
   pickerContainer: { 
     backgroundColor: 'rgba(255, 255, 255, 0.04)', 
-    borderRadius: 14, 
+    borderRadius: 12, 
     padding: 4, 
-    marginTop: 8, 
+    marginBottom: 12,
     borderWidth: 1, 
     borderColor: 'rgba(255, 255, 255, 0.08)',
   },
   pickerOption: { 
     flexDirection: 'row', 
     alignItems: 'center', 
-    padding: 14, 
-    borderRadius: 10, 
+    padding: 12, 
+    borderRadius: 8, 
     gap: 12,
   },
   pickerOptionSelected: {
-    backgroundColor: 'rgba(79, 172, 254, 0.1)',
+    backgroundColor: 'rgba(79, 172, 254, 0.12)',
   },
   pickerIconBadge: { 
-    width: 36, 
-    height: 36, 
-    borderRadius: 10, 
+    width: 32, 
+    height: 32, 
+    borderRadius: 8, 
     justifyContent: 'center', 
     alignItems: 'center',
   },
   priorityColorBadge: { 
-    width: 36, 
-    height: 36, 
-    borderRadius: 10,
+    width: 32, 
+    height: 32, 
+    borderRadius: 8,
     justifyContent: 'center',
     alignItems: 'center',
   },
   pickerText: { 
     flex: 1, 
-    fontSize: 15, 
+    fontSize: 14, 
     color: '#fff', 
     fontWeight: '500',
   },
-  tagsDisplayContainer: { 
-    flexDirection: 'row', 
-    flexWrap: 'wrap', 
-    gap: 8, 
-    marginTop: 12,
-  },
-  tagDisplay: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    backgroundColor: 'rgba(79, 172, 254, 0.15)', 
-    paddingHorizontal: 12, 
-    paddingVertical: 8, 
-    borderRadius: 10, 
-    gap: 6, 
-    borderWidth: 1.5, 
-    borderColor: 'rgba(79, 172, 254, 0.3)',
-  },
-  tagDisplayText: { 
-    color: '#4facfe', 
-    fontSize: 13, 
-    fontWeight: '600',
-  },
-  actionButtons: {
-    marginTop: 8,
-    marginBottom: 8,
+  bottomBar: {
+    flexDirection: 'row',
+    padding: 20,
+    paddingBottom: Platform.OS === 'ios' ? 34 : 20,
+    backgroundColor: '#1a2744',
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255, 255, 255, 0.08)',
   },
   saveButtonContainer: { 
-    marginBottom: 12,
+    flex: 2,
   },
   saveButton: { 
-    height: 56, 
-    borderRadius: 14, 
+    height: 52, 
+    borderRadius: 12, 
     flexDirection: 'row', 
     justifyContent: 'center', 
     alignItems: 'center', 
-    gap: 10, 
+    gap: 8, 
     shadowColor: '#4facfe', 
-    shadowOffset: { width: 0, height: 6 }, 
+    shadowOffset: { width: 0, height: 4 }, 
     shadowOpacity: 0.3, 
-    shadowRadius: 12, 
-    elevation: 8,
+    shadowRadius: 8, 
+    elevation: 6,
   },
   saveText: { 
     color: '#fff', 
-    fontSize: 17, 
+    fontSize: 16, 
     fontWeight: '700',
   },
   cancelButton: { 
+    flex: 1,
     alignItems: 'center', 
+    justifyContent: 'center',
     paddingVertical: 14,
-    borderRadius: 14,
-    backgroundColor: 'rgba(255, 107, 107, 0.1)',
+    borderRadius: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
   },
   cancelText: { 
-    color: '#ff6b6b', 
-    fontSize: 16, 
+    color: '#aaa', 
+    fontSize: 15, 
     fontWeight: '600',
   },
 });
