@@ -1,5 +1,6 @@
 // components/InAppNotification.tsx
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import React, { useEffect, useRef } from 'react';
 import {
     Animated,
@@ -25,18 +26,26 @@ export default function InAppNotification({
   onPress,
   onDismiss
 }: InAppNotificationProps) {
-  const slideAnim = useRef(new Animated.Value(-100)).current;
+  const slideAnim = useRef(new Animated.Value(-120)).current;
+  const opacityAnim = useRef(new Animated.Value(0)).current;
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (visible) {
       // Slide in
-      Animated.spring(slideAnim, {
-        toValue: 0,
-        useNativeDriver: true,
-        tension: 50,
-        friction: 8,
-      }).start();
+      Animated.parallel([
+        Animated.spring(slideAnim, {
+          toValue: 0,
+          useNativeDriver: true,
+          tension: 65,
+          friction: 9,
+        }),
+        Animated.timing(opacityAnim, {
+          toValue: 1,
+          duration: 300,
+          useNativeDriver: true,
+        }),
+      ]).start();
 
       // Auto dismiss after 4 seconds
       timeoutRef.current = setTimeout(() => {
@@ -44,11 +53,18 @@ export default function InAppNotification({
       }, 4000);
     } else {
       // Slide out
-      Animated.timing(slideAnim, {
-        toValue: -100,
-        duration: 300,
-        useNativeDriver: true,
-      }).start();
+      Animated.parallel([
+        Animated.timing(slideAnim, {
+          toValue: -120,
+          duration: 300,
+          useNativeDriver: true,
+        }),
+        Animated.timing(opacityAnim, {
+          toValue: 0,
+          duration: 300,
+          useNativeDriver: true,
+        }),
+      ]).start();
     }
 
     return () => {
@@ -59,17 +75,31 @@ export default function InAppNotification({
   }, [visible]);
 
   const dismissNotification = () => {
-    Animated.timing(slideAnim, {
-      toValue: -100,
-      duration: 300,
-      useNativeDriver: true,
-    }).start(() => {
+    Animated.parallel([
+      Animated.timing(slideAnim, {
+        toValue: -120,
+        duration: 300,
+        useNativeDriver: true,
+      }),
+      Animated.timing(opacityAnim, {
+        toValue: 0,
+        duration: 300,
+        useNativeDriver: true,
+      }),
+    ]).start(() => {
       onDismiss();
     });
   };
 
   const handlePress = () => {
-    dismissNotification();
+    // Clear timeout to prevent auto-dismiss from interfering
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+      timeoutRef.current = null;
+    }
+    
+    // Immediately call onPress without dismissing animation
+    // The parent will handle setting visible to false
     onPress();
   };
 
@@ -81,34 +111,55 @@ export default function InAppNotification({
         styles.container,
         {
           transform: [{ translateY: slideAnim }],
+          opacity: opacityAnim,
         },
       ]}
     >
       <TouchableOpacity
-        style={styles.notification}
+        style={styles.notificationWrapper}
         onPress={handlePress}
-        activeOpacity={0.9}
+        activeOpacity={0.85}
       >
-        <View style={styles.iconContainer}>
-          <Ionicons name="chatbubble" size={24} color="#0EA5E9" />
-        </View>
-        
-        <View style={styles.content}>
-          <Text style={styles.senderName} numberOfLines={1}>
-            {senderName}
-          </Text>
-          <Text style={styles.message} numberOfLines={2}>
-            {message}
-          </Text>
-        </View>
-
-        <TouchableOpacity
-          style={styles.closeButton}
-          onPress={dismissNotification}
-          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        {/* Subtle gradient border */}
+        <LinearGradient
+          colors={['rgba(79, 172, 254, 0.2)', 'rgba(0, 242, 254, 0.15)']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.gradientBorder}
         >
-          <Ionicons name="close" size={20} color="#94A3B8" />
-        </TouchableOpacity>
+          <View style={styles.notification}>
+            {/* Small gradient icon */}
+            <View style={styles.iconContainer}>
+              <LinearGradient
+                colors={['#4facfe', '#00f2fe']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.iconGradient}
+              >
+                <Ionicons name="chatbubble" size={18} color="#FFF" />
+              </LinearGradient>
+            </View>
+            
+            {/* Content */}
+            <View style={styles.content}>
+              <Text style={styles.senderName} numberOfLines={1}>
+                {senderName}
+              </Text>
+              <Text style={styles.message} numberOfLines={1}>
+                {message}
+              </Text>
+            </View>
+
+            {/* Close button */}
+            <TouchableOpacity
+              style={styles.closeButton}
+              onPress={dismissNotification}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <Ionicons name="close" size={16} color="#94A3B8" />
+            </TouchableOpacity>
+          </View>
+        </LinearGradient>
       </TouchableOpacity>
     </Animated.View>
   );
@@ -117,15 +168,22 @@ export default function InAppNotification({
 const styles = StyleSheet.create({
   container: {
     position: 'absolute',
-    top: Platform.OS === 'ios' ? 50 : 10,
+    top: Platform.OS === 'ios' ? 60 : 40,
     left: 16,
     right: 16,
     zIndex: 9999,
     elevation: 10,
   },
+  notificationWrapper: {
+    borderRadius: 12,
+  },
+  gradientBorder: {
+    borderRadius: 12,
+    padding: 1,
+  },
   notification: {
     backgroundColor: '#1E293B',
-    borderRadius: 12,
+    borderRadius: 11,
     padding: 12,
     flexDirection: 'row',
     alignItems: 'center',
@@ -135,16 +193,20 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 8,
     borderWidth: 1,
-    borderColor: '#334155',
+    borderColor: 'rgba(255, 255, 255, 0.08)',
   },
   iconContainer: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(14, 165, 233, 0.1)',
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    marginRight: 10,
+    overflow: 'hidden',
+  },
+  iconGradient: {
+    width: '100%',
+    height: '100%',
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 12,
   },
   content: {
     flex: 1,

@@ -65,7 +65,7 @@ const styles = StyleSheet.create({
     right: 0,
   },
   bottomNav: {
-    height: 60,
+    height: 50,
     backgroundColor: 'white',
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
@@ -98,8 +98,8 @@ const styles = StyleSheet.create({
     zIndex: 10,
   },
   middleButton: {
-    width: 70,
-    height: 70,
+    width: 60,
+    height: 60,
     borderRadius: 40,
     backgroundColor: 'white',
     justifyContent: 'center',
@@ -113,8 +113,8 @@ const styles = StyleSheet.create({
     // borderColor: '#F0F0F0',
   },
   middleIcon: {
-    width: 55,
-    height: 55,
+    width: 50,
+    height: 50,
     tintColor: '#2D425E',
   },
 });
