@@ -1,4 +1,5 @@
 // app/screens/Chat/chat-screen.tsx
+import { useNotifications } from '@/app/contexts/NotificationContext';
 import { auth } from '@/firebase';
 import {
   createOrGetConversation,
@@ -32,6 +33,9 @@ export default function ChatScreen() {
     otherUserId: string;
     otherUserName: string;
   }>();
+
+  const { setActiveConversationId } = useNotifications();
+  
   
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState('');
@@ -71,6 +75,18 @@ export default function ChatScreen() {
 
     return () => unsubscribe();
   }, [conversationId, currentUser]);
+
+  useEffect(() => {
+    if (conversationId) {
+      // Tell the notification system we're viewing this conversation
+      setActiveConversationId(conversationId);
+    }
+
+    return () => {
+      // Clear when leaving the chat
+      setActiveConversationId(null);
+    };
+  }, [conversationId]);
 
   const initializeChat = async () => {
     if (!currentUser || !otherUserId) return;

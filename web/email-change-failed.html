@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Email Update Failed</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: linear-gradient(135deg, #0A1C3C 0%, #1a2942 50%, #324762 100%);
+      color: #ffffff;
+      padding: 24px;
+      overflow: hidden;
+      position: relative;
+    }
+
+    /* Animated background particles */
+    body::before {
+      content: '';
+      position: absolute;
+      width: 200%;
+      height: 200%;
+      background-image: 
+        radial-gradient(circle at 20% 50%, rgba(245, 87, 108, 0.1) 0%, transparent 50%),
+        radial-gradient(circle at 80% 80%, rgba(240, 147, 251, 0.08) 0%, transparent 50%),
+        radial-gradient(circle at 40% 20%, rgba(250, 112, 154, 0.1) 0%, transparent 50%);
+      animation: float 20s ease-in-out infinite;
+    }
+
+    @keyframes float {
+      0%, 100% { transform: translate(0, 0) rotate(0deg); }
+      33% { transform: translate(-5%, 5%) rotate(5deg); }
+      66% { transform: translate(5%, -5%) rotate(-5deg); }
+    }
+
+    .container {
+      position: relative;
+      z-index: 1;
+      max-width: 480px;
+      width: 100%;
+      animation: fadeIn 600ms ease-out;
+    }
+
+    @keyframes fadeIn {
+      from {
+        opacity: 0;
+        transform: translateY(20px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    /* Glassmorphic card */
+    .box {
+      background: rgba(255, 255, 255, 0.08);
+      backdrop-filter: blur(20px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 20px;
+      padding: 48px 24px;
+      box-shadow: 
+        0 8px 32px rgba(0, 0, 0, 0.3),
+        inset 0 1px 0 rgba(255, 255, 255, 0.1);
+      text-align: center;
+    }
+
+    /* Icon badge with red-pink gradient */
+    .icon-badge {
+      width: 100px;
+      height: 100px;
+      margin: 0 auto 32px;
+      background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+      border-radius: 24px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 
+        0 8px 24px rgba(245, 87, 108, 0.4),
+        0 4px 12px rgba(0, 0, 0, 0.2);
+      animation: shake 600ms cubic-bezier(.36,.07,.19,.97) both;
+      position: relative;
+    }
+
+    @keyframes shake {
+      0%, 100% { transform: translateX(0); }
+      10%, 30%, 50%, 70%, 90% { transform: translateX(-8px); }
+      20%, 40%, 60%, 80% { transform: translateX(8px); }
+    }
+
+    /* Warning pulse effect */
+    .icon-badge::before {
+      content: '';
+      position: absolute;
+      width: 100%;
+      height: 100%;
+      border-radius: 24px;
+      border: 2px solid #f5576c;
+      animation: warningPulse 2s ease-out infinite;
+    }
+
+    @keyframes warningPulse {
+      0% {
+        transform: scale(1);
+        opacity: 1;
+      }
+      100% {
+        transform: scale(1.3);
+        opacity: 0;
+      }
+    }
+
+    .icon-badge i {
+      font-size: 48px;
+      color: #ffffff;
+      animation: iconShake 500ms ease-out 300ms both;
+    }
+
+    @keyframes iconShake {
+      0% {
+        transform: scale(0) rotate(-45deg);
+        opacity: 0;
+      }
+      100% {
+        transform: scale(1) rotate(0deg);
+        opacity: 1;
+      }
+    }
+
+    /* Error badge */
+    .error-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 20px;
+      background: rgba(245, 87, 108, 0.2);
+      border: 1px solid rgba(245, 87, 108, 0.4);
+      border-radius: 24px;
+      font-size: 14px;
+      font-weight: 700;
+      color: #f5576c;
+      margin-bottom: 20px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .error-badge i {
+      font-size: 14px;
+    }
+
+    h1 {
+      font-size: 28px;
+      font-weight: 700;
+      margin-bottom: 12px;
+      color: #ffffff;
+      line-height: 1.2;
+    }
+
+    p {
+      font-size: 16px;
+      line-height: 1.6;
+      color: rgba(255, 255, 255, 0.7);
+      margin-bottom: 32px;
+    }
+
+    /* Info card with error details */
+    .error-details {
+      background: rgba(245, 87, 108, 0.1);
+      border: 1px solid rgba(245, 87, 108, 0.2);
+      border-radius: 12px;
+      padding: 16px;
+      margin-bottom: 32px;
+      text-align: left;
+    }
+
+    .error-details-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+
+    .error-details-header i {
+      font-size: 18px;
+      color: #f5576c;
+    }
+
+    .error-details-header span {
+      font-size: 14px;
+      font-weight: 600;
+      color: #f5576c;
+    }
+
+    .error-details-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      padding-left: 28px;
+    }
+
+    .error-reason {
+      font-size: 13px;
+      color: rgba(255, 255, 255, 0.8);
+      line-height: 1.5;
+      position: relative;
+    }
+
+    .error-reason::before {
+      content: '•';
+      position: absolute;
+      left: -12px;
+      color: #f5576c;
+    }
+
+    /* Action buttons */
+    .button-group {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      margin-bottom: 32px;
+    }
+
+    .btn-primary {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      width: 100%;
+      height: 56px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: #ffffff;
+      font-size: 16px;
+      font-weight: 600;
+      text-decoration: none;
+      border-radius: 16px;
+      border: none;
+      cursor: pointer;
+      box-shadow: 
+        0 8px 24px rgba(102, 126, 234, 0.4),
+        0 4px 12px rgba(0, 0, 0, 0.2);
+      transition: all 300ms ease;
+    }
+
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 
+        0 12px 32px rgba(102, 126, 234, 0.5),
+        0 6px 16px rgba(0, 0, 0, 0.3);
+    }
+
+    .btn-primary:active {
+      transform: translateY(0);
+      opacity: 0.8;
+    }
+
+    .btn-primary i {
+      font-size: 20px;
+    }
+
+    .btn-secondary {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      width: 100%;
+      height: 48px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      color: rgba(255, 255, 255, 0.8);
+      font-size: 14px;
+      font-weight: 600;
+      text-decoration: none;
+      border-radius: 12px;
+      transition: all 200ms ease;
+    }
+
+    .btn-secondary:hover {
+      background: rgba(255, 255, 255, 0.1);
+      border-color: rgba(255, 255, 255, 0.2);
+      color: #ffffff;
+    }
+
+    .btn-secondary i {
+      font-size: 16px;
+    }
+
+    /* Help section */
+    .help-section {
+      padding-top: 32px;
+      border-top: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .help-section h3 {
+      font-size: 14px;
+      font-weight: 600;
+      color: rgba(255, 255, 255, 0.6);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 16px;
+    }
+
+    .help-items {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .help-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px;
+      background: rgba(255, 255, 255, 0.03);
+      border-radius: 10px;
+      font-size: 13px;
+      color: rgba(255, 255, 255, 0.7);
+      text-decoration: none;
+      transition: all 200ms ease;
+    }
+
+    .help-item:hover {
+      background: rgba(255, 255, 255, 0.06);
+      transform: translateX(4px);
+    }
+
+    .help-item i {
+      font-size: 16px;
+      color: #4facfe;
+      flex-shrink: 0;
+    }
+
+    @media (max-width: 480px) {
+      .box {
+        padding: 40px 20px;
+      }
+
+      h1 {
+        font-size: 24px;
+      }
+
+      .icon-badge {
+        width: 80px;
+        height: 80px;
+      }
+
+      .icon-badge i {
+        font-size: 40px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="box">
+      <div class="icon-badge">
+        <i class="fas fa-circle-xmark"></i>
+      </div>
+      
+      <div class="error-badge">
+        <i class="fas fa-triangle-exclamation"></i>
+        <span>Update Failed</span>
+      </div>
+      
+      <h1>Email Update Failed</h1>
+      <p>We couldn't complete your email update request. This may have happened for several reasons.</p>
+      
+      <div class="error-details">
+        <div class="error-details-header">
+          <i class="fas fa-circle-info"></i>
+          <span>Common Reasons</span>
+        </div>
+        <div class="error-details-list">
+          <div class="error-reason">The verification link may have expired</div>
+          <div class="error-reason">The email address is already in use</div>
+          <div class="error-reason">Invalid or corrupted verification token</div>
+          <div class="error-reason">Network or server connectivity issues</div>
+        </div>
+      </div>
+      
+      <div class="button-group">
+        <a href="https://rubric-app-8f65c.web.app" class="btn-primary">
+          <i class="fas fa-rotate"></i>
+          <span>Try Again</span>
+        </a>
+        <a href="https://rubric-app-8f65c.web.app" class="btn-secondary">
+          <i class="fas fa-house"></i>
+          <span>Return to App</span>
+        </a>
+      </div>
+
+      <div class="help-section">
+        <h3>Need Help?</h3>
+        <div class="help-items">
+          <a href="#" class="help-item">
+            <i class="fas fa-envelope"></i>
+            <span>Request a new verification link</span>
+          </a>
+          <a href="#" class="help-item">
+            <i class="fas fa-headset"></i>
+            <span>Contact support for assistance</span>
+          </a>
+          <a href="#" class="help-item">
+            <i class="fas fa-book"></i>
+            <span>View email change guidelines</span>
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

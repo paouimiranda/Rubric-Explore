@@ -12,6 +12,7 @@ import 'react-native-get-random-values';
 import 'react-native-reanimated';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { NotificationProvider } from './contexts/NotificationContext';
 import Loading from './screens/Misc/loading'; // ✅ your custom loading screen
 
 // ✅ ADDED: Import backlog logger
@@ -109,6 +110,7 @@ function RootNavigator() {
 export default function RootLayout() {
   return (
     <AuthProvider>
+      <NotificationProvider>
       <LinearGradient
         colors={['#324762', '#0F2245']}
         start={{ x: 1, y: 0.5 }}
@@ -122,6 +124,7 @@ export default function RootLayout() {
           </SafeAreaView>
         </SafeAreaProvider>
       </LinearGradient>
+      </NotificationProvider>
     </AuthProvider>
   );
 }
