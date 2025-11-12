@@ -1,5 +1,6 @@
 // Enhanced friendlist.tsx with Neo-Glassmorphic Design
 
+import { useNotifications } from '@/app/contexts/NotificationContext';
 import ChatList from '@/components/Interface/chat-list';
 import { CustomAlertModal } from '@/components/Interface/custom-alert-modal';
 import FriendCard from '@/components/Interface/friend-card';
@@ -66,6 +67,7 @@ export default function Friendlist() {
   const [refreshing, setRefreshing] = useState(false);
   const [searchLoading, setSearchLoading] = useState(false);
   const [unreadChatCount, setUnreadChatCount] = useState(0);
+  const { muteFriend, unmuteFriend, isFriendMuted } = useNotifications();
   
   // ADDED: State for the menu
   const [menuVisible, setMenuVisible] = useState(false);
@@ -101,19 +103,19 @@ export default function Friendlist() {
     }).start();
   }, []);
   useEffect(() => {
-  const loadPreferences = async () => {
-    if (!currentUser) return;
-    try {
-      const prefs = await getUserPreferences(currentUser.uid);
-      setMutedFriends(new Set(prefs.mutedFriends));
-      setPinnedFriends(new Set(prefs.pinnedFriends));
-    } catch (error) {
-      console.error('Error loading preferences:', error);
-      // Optionally show an alert or fallback (e.g., showAlert with an error message)
-    }
-  };
-  loadPreferences();
-}, [currentUser]);  // Runs when currentUser changes (e.g., on login)
+    const loadPreferences = async () => {
+      if (!currentUser) return;
+      try {
+        const prefs = await getUserPreferences(currentUser.uid);
+        // UPDATED: Load muted friends into context (instead of local state)
+        prefs.mutedFriends.forEach(friendId => muteFriend(friendId));
+        setPinnedFriends(new Set(prefs.pinnedFriends));  // Keep pinned local or move to context if needed
+      } catch (error) {
+        console.error('Error loading preferences:', error);
+      }
+    };
+    loadPreferences();
+  }, [currentUser, muteFriend]);
 
   const showAlert = (
     type: 'info' | 'success' | 'error' | 'warning',
@@ -237,30 +239,31 @@ export default function Friendlist() {
 };
 
   const handleMute = async (friend: Friend) => {
-  if (!currentUser) return;
-  const isCurrentlyMuted = mutedFriends.has(friend.uid);
-  try {
-    // Update local state immediately for UI feedback
-    const newMuted = new Set(mutedFriends);
-    if (isCurrentlyMuted) {
-      newMuted.delete(friend.uid);
-      showAlert('success', 'Unmuted', `${friend.displayName} notifications are now enabled.`, [{ text: 'OK', onPress: closeAlert }]);
-    } else {
-      newMuted.add(friend.uid);
-      showAlert('success', 'Muted', `${friend.displayName} notifications are now muted.`, [{ text: 'OK', onPress: closeAlert }]);
+    if (!currentUser) return;
+    const isCurrentlyMuted = isFriendMuted(friend.uid);  // UPDATED: Use context check
+    try {
+      if (isCurrentlyMuted) {
+        unmuteFriend(friend.uid);  // UPDATED: Use context function
+        showAlert('success', 'Unmuted', `${friend.displayName} notifications are now enabled.`, [{ text: 'OK', onPress: closeAlert }]);
+      } else {
+        muteFriend(friend.uid);  // UPDATED: Use context function
+        showAlert('success', 'Muted', `${friend.displayName} notifications are now muted.`, [{ text: 'OK', onPress: closeAlert }]);
+      }
+      
+      // Persist to Firestore (unchanged)
+      await toggleMuteFriend(currentUser.uid, friend.uid, isCurrentlyMuted);
+    } catch (error) {
+      // UPDATED: Revert using context
+      if (isCurrentlyMuted) {
+        muteFriend(friend.uid);  // Re-mute on error
+      } else {
+        unmuteFriend(friend.uid);  // Re-unmute on error
+      }
+      showAlert('error', 'Error', 'Failed to update mute status. Please try again.', [{ text: 'OK', onPress: closeAlert }]);
+      console.error('Error in handleMute:', error);
     }
-    setMutedFriends(newMuted);
-
-    // Persist to Firebase
-    await toggleMuteFriend(currentUser.uid, friend.uid, isCurrentlyMuted);
-  } catch (error) {
-    // Revert local state on error
-    setMutedFriends(new Set(mutedFriends));  // Reset to original
-    showAlert('error', 'Error', 'Failed to update mute status. Please try again.', [{ text: 'OK', onPress: closeAlert }]);
-    console.error('Error in handleMute:', error);
-  }
-  closeMenu();
-};
+    closeMenu();
+  };
 
   const handlePin = async (friend: Friend) => {
   if (!currentUser) return;
@@ -596,7 +599,7 @@ export default function Friendlist() {
                     onChatPress={() => startChatWithFriend(friend)}
                     onProfilePress={() => navigateToProfile(friend.uid)}
                     onMenuPress={() => openMenu(friend)}  // ADDED: Prop for opening menu
-                    isMuted={mutedFriends.has(friend.uid)}  // ADDED: Prop for mute status
+                    isMuted={isFriendMuted(friend.uid)} // ADDED: Prop for mute status
                     isPinned={pinnedFriends.has(friend.uid)}  // ADDED: Prop for pin status
                   />
                 ))
