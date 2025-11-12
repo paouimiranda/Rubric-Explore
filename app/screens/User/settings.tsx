@@ -9,9 +9,10 @@ import { LinearGradient } from 'expo-linear-gradient';
 import * as Linking from 'expo-linking';
 import { useRouter } from 'expo-router';
 import { signOut } from 'firebase/auth';
+import { addDoc, collection } from 'firebase/firestore'; // Added for Firestore
 import React, { useEffect, useState } from 'react';
-import { Animated, LogBox, SafeAreaView, ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
-import { auth } from '../../../firebase';
+import { Animated, LogBox, Modal, SafeAreaView, ScrollView, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { auth, db } from '../../../firebase'; // Added db import (assuming it's exported from firebase.ts)
 import { useAuth } from '../../contexts/AuthContext';
 import TermsModal from '../Misc/t&c';
 
@@ -59,6 +60,14 @@ const SettingsScreen = () => {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
 
   const [showPrivacyModal, setShowPrivacyModal] = useState(false);
+  
+  // Modal states for Contact Support and Submit Feedback
+  const [showContactModal, setShowContactModal] = useState(false);
+  const [showFeedbackModal, setShowFeedbackModal] = useState(false);
+  const [contactSubject, setContactSubject] = useState(''); // NEW: Subject for contact support
+  const [contactMessage, setContactMessage] = useState('');
+   const [feedbackSubject, setFeedbackSubject] = useState(''); // NEW: Subject for feedback
+  const [feedbackMessage, setFeedbackMessage] = useState('');
   
   // Custom Alert Modal state
   const [alertConfig, setAlertConfig] = useState<{
@@ -127,6 +136,128 @@ const SettingsScreen = () => {
         },
       ],
     });
+  };
+
+  // Function to handle sending contact support message to Firebase
+  const handleSendContactSupport = async () => {
+    if (!contactMessage.trim()) {
+      setAlertConfig({
+        visible: true,
+        type: 'warning',
+        title: 'Empty Message',
+        message: 'Please enter a message before sending.',
+        buttons: [
+          {
+            text: 'OK',
+            onPress: () => setAlertConfig(prev => ({ ...prev, visible: false })),
+            style: 'primary',
+          },
+        ],
+      });
+      return;
+    }
+
+    try {
+      await addDoc(collection(db, 'contactSupportMessages'), {
+        userId: user?.uid || 'anonymous',
+        subject: contactSubject, // NEW: Include subject
+        message: contactMessage,
+        type: 'contact_support',
+        timestamp: new Date(),
+      });
+      setAlertConfig({
+        visible: true,
+        type: 'success',
+        title: 'Message Sent',
+        message: 'Your support request has been sent successfully.',
+        buttons: [
+          {
+            text: 'OK',
+            onPress: () => setAlertConfig(prev => ({ ...prev, visible: false })),
+            style: 'primary',
+          },
+        ],
+      });
+      setShowContactModal(false);
+      setContactSubject(''); // NEW: Clear subject
+      setContactMessage('');
+    } catch (error) {
+      console.error('❌ Error sending contact support:', error);
+      setAlertConfig({
+        visible: true,
+        type: 'error',
+        title: 'Send Failed',
+        message: 'Failed to send your message. Please try again.',
+        buttons: [
+          {
+            text: 'OK',
+            onPress: () => setAlertConfig(prev => ({ ...prev, visible: false })),
+            style: 'primary',
+          },
+        ],
+      });
+    }
+  };
+
+  // Function to handle sending feedback to Firebase
+  const handleSendFeedback = async () => {
+    if (!feedbackMessage.trim()) {
+      setAlertConfig({
+        visible: true,
+        type: 'warning',
+        title: 'Empty Feedback',
+        message: 'Please enter feedback before sending.',
+        buttons: [
+          {
+            text: 'OK',
+            onPress: () => setAlertConfig(prev => ({ ...prev, visible: false })),
+            style: 'primary',
+          },
+        ],
+      });
+      return;
+    }
+
+    try {
+      await addDoc(collection(db, 'feedbacks'), {
+        userId: user?.uid || 'anonymous',
+        subject: feedbackSubject, // NEW: Include subject
+        message: feedbackMessage,
+        type: 'feedback',
+        timestamp: new Date(),
+      });
+      setAlertConfig({
+        visible: true,
+        type: 'success',
+        title: 'Feedback Sent',
+        message: 'Thank you for your feedback!',
+        buttons: [
+          {
+            text: 'OK',
+            onPress: () => setAlertConfig(prev => ({ ...prev, visible: false })),
+            style: 'primary',
+          },
+        ],
+      });
+      setShowFeedbackModal(false);
+      setFeedbackSubject(''); // NEW: Clear subject
+      setFeedbackMessage('');
+    } catch (error) {
+      console.error('❌ Error sending feedback:', error);
+      setAlertConfig({
+        visible: true,
+        type: 'error',
+        title: 'Send Failed',
+        message: 'Failed to send your feedback. Please try again.',
+        buttons: [
+          {
+            text: 'OK',
+            onPress: () => setAlertConfig(prev => ({ ...prev, visible: false })),
+            style: 'primary',
+          },
+        ],
+      });
+    }
   };
 
   const t = translations[lang];
@@ -262,7 +393,7 @@ const SettingsScreen = () => {
     </TouchableOpacity>
   );
 
-  return (
+   return (
     <LinearGradient colors={gradientColors} style={styles.gradient}>
       <SafeAreaView style={styles.safeArea}>
         <ScrollView contentContainerStyle={styles.container}>
@@ -318,9 +449,9 @@ const SettingsScreen = () => {
             sectionKey="support"
             gradientColors={['#fa709a', '#fee140']}
           >
-            <ActionButton label="Contact Support" iconName="chatbubbles" onPress={() => {}} />
+            <ActionButton label="Contact Support" iconName="chatbubbles" onPress={() => setShowContactModal(true)} />
             <ActionButton label="FAQ" iconName="help-buoy" onPress={() => {}} />
-            <ActionButton label="Submit Feedback" iconName="megaphone" onPress={() => {}} />
+            <ActionButton label="Submit Feedback" iconName="megaphone" onPress={() => setShowFeedbackModal(true)} />
           </SettingCard>
 
           <SettingCard 
@@ -364,6 +495,142 @@ const SettingsScreen = () => {
           onClose={() => setShowPrivacyModal(false)} 
         />
         
+        {/* Contact Support Modal */}
+        <Modal
+          visible={showContactModal}
+          animationType="slide"
+          transparent={true}
+          onRequestClose={() => setShowContactModal(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <LinearGradient
+              colors={gradientColors}
+              style={styles.modalContent}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+            >
+              <Text style={[styles.modalTitle, { color: textColor }]}>Contact Support</Text>
+              <TextInput
+                style={[styles.subjectInput, { color: textColor, borderColor: isDarkMode ? '#555' : '#ccc' }]} // NEW: Subject input
+                placeholder="Subject"
+                placeholderTextColor={isDarkMode ? '#aaa' : '#666'}
+                value={contactSubject}
+                onChangeText={setContactSubject}
+              />
+              <TextInput
+                style={[styles.textInput, { color: textColor, borderColor: isDarkMode ? '#555' : '#ccc' }]}
+                placeholder="Describe your concern..."
+                placeholderTextColor={isDarkMode ? '#aaa' : '#666'}
+                multiline
+                value={contactMessage}
+                onChangeText={setContactMessage}
+              />
+              <View style={styles.modalButtons}>
+                <TouchableOpacity 
+                  onPress={() => {
+                    setShowContactModal(false);
+                    setContactSubject(''); // NEW: Clear subject
+                    setContactMessage('');
+                  }}
+                  style={styles.modalButton}
+                  activeOpacity={0.7}
+                >
+                  <LinearGradient
+                    colors={['#eb3349', '#ff7340ff']}
+                    style={styles.cancelButton}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                  >
+                    <Text style={styles.cancelButtonText}>Cancel</Text>
+                  </LinearGradient>
+                </TouchableOpacity>
+                <TouchableOpacity 
+                  onPress={handleSendContactSupport}
+                  style={styles.modalButton}
+                  activeOpacity={0.7}
+                >
+                  <LinearGradient
+                    colors={['#fa709a', '#fee140']}
+                    style={styles.primaryButton}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                  >
+                    <Text style={styles.primaryButtonText}>Send</Text>
+                  </LinearGradient>
+                </TouchableOpacity>
+              </View>
+            </LinearGradient>
+          </View>
+        </Modal>
+
+        {/* Submit Feedback Modal */}
+        <Modal
+          visible={showFeedbackModal}
+          animationType="slide"
+          transparent={true}
+          onRequestClose={() => setShowFeedbackModal(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <LinearGradient
+              colors={gradientColors}
+              style={styles.modalContent}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+            >
+              <Text style={[styles.modalTitle, { color: textColor }]}>Submit Feedback</Text>
+              <TextInput
+                style={[styles.subjectInput, { color: textColor, borderColor: isDarkMode ? '#555' : '#ccc' }]} // NEW: Subject input
+                placeholder="Subject"
+                placeholderTextColor={isDarkMode ? '#aaa' : '#666'}
+                value={feedbackSubject}
+                onChangeText={setFeedbackSubject}
+              />
+              <TextInput
+                style={[styles.textInput, { color: textColor, borderColor: isDarkMode ? '#555' : '#ccc' }]}
+                placeholder="Share your feedback..."
+                placeholderTextColor={isDarkMode ? '#aaa' : '#666'}
+                multiline
+                value={feedbackMessage}
+                onChangeText={setFeedbackMessage}
+              />
+              <View style={styles.modalButtons}>
+                <TouchableOpacity 
+                  onPress={() => {
+                    setShowFeedbackModal(false);
+                    setFeedbackSubject(''); // NEW: Clear subject
+                    setFeedbackMessage('');
+                  }}
+                  style={styles.modalButton}
+                  activeOpacity={0.7}
+                >
+                  <LinearGradient
+                    colors={['#eb3349', '#ff7340ff']}
+                    style={styles.cancelButton}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                  >
+                    <Text style={styles.cancelButtonText}>Cancel</Text>
+                  </LinearGradient>
+                </TouchableOpacity>
+                <TouchableOpacity 
+                  onPress={handleSendFeedback}
+                  style={styles.modalButton}
+                  activeOpacity={0.7}
+                >
+                  <LinearGradient
+                    colors={['#fa709a', '#fee140']}
+                    style={styles.primaryButton}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                  >
+                    <Text style={styles.primaryButtonText}>Send</Text>
+                  </LinearGradient>
+                </TouchableOpacity>
+              </View>
+            </LinearGradient>
+          </View>
+        </Modal>
+        
         {/* Custom Alert Modal */}
         <CustomAlertModal
           visible={alertConfig.visible}
@@ -378,8 +645,7 @@ const SettingsScreen = () => {
       </SafeAreaView>
     </LinearGradient>
   );
-};
-
+}
 export default SettingsScreen;
 
 const styles = StyleSheet.create({
@@ -520,5 +786,84 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontFamily: 'Montserrat_600SemiBold',
     letterSpacing: 0.5,
+  },
+  modalOverlay: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  },
+  modalContent: {
+    width: '80%',
+    borderRadius: 16,
+    padding: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontFamily: 'Montserrat_600SemiBold',
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  modalSubtitle: {
+    fontSize: 16,
+    fontFamily: 'Montserrat_400Regular',
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  textInput: {
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 16,
+    fontFamily: 'Montserrat_400Regular',
+    minHeight: 100,
+    textAlignVertical: 'top',
+    marginBottom: 20,
+  },
+  modalButtons: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalButton: {
+    flex: 1,
+    marginHorizontal: 5,
+  },
+  cancelButton: {
+    borderRadius: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cancelButtonText: {
+    color: '#ffffff',
+    fontSize: 16,
+    fontFamily: 'Montserrat_600SemiBold',
+  },
+  primaryButton: {
+    borderRadius: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  primaryButtonText: {
+    color: '#ffffff',
+    fontSize: 16,
+    fontFamily: 'Montserrat_600SemiBold',
+  },
+  subjectInput: { // NEW: Style for subject input
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 16,
+    fontFamily: 'Montserrat_400Regular',
+    marginBottom: 12,
   },
 });
