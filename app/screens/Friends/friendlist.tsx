@@ -13,7 +13,7 @@ import {
   getUserFriends,
   listenToFriendRequests,
   rejectFriendRequest,
-  removeFriend,
+  removeFriend, // ADDED: For unfriending
   SearchUser,
   searchUsers,
   sendFriendRequest,
@@ -27,7 +27,7 @@ import LottieView from 'lottie-react-native';
 import React, { useEffect, useRef, useState } from 'react';
 import {
   Animated,
-  Modal,
+  Modal, // ADDED: For the menu
   RefreshControl,
   SafeAreaView,
   ScrollView,
@@ -64,10 +64,13 @@ export default function Friendlist() {
   const [refreshing, setRefreshing] = useState(false);
   const [searchLoading, setSearchLoading] = useState(false);
   const [unreadChatCount, setUnreadChatCount] = useState(0);
+
+  // ADDED: State for the menu
   const [menuVisible, setMenuVisible] = useState(false);
   const [selectedFriend, setSelectedFriend] = useState<Friend | null>(null);
   const [mutedFriends, setMutedFriends] = useState<Set<string>>(new Set());  // UIDs of muted friends
   const [pinnedFriends, setPinnedFriends] = useState<Set<string>>(new Set());  // UIDs of pinned friends
+
   const [alertConfig, setAlertConfig] = useState<{
     visible: boolean;
     type: 'info' | 'success' | 'error' | 'warning';
@@ -141,54 +144,55 @@ export default function Friendlist() {
     }
   }, [search, activeTab]);
 
-    // NEW: Handlers for menu actions
+  // ADDED: Menu handlers
   const openMenu = (friend: Friend) => {
     setSelectedFriend(friend);
     setMenuVisible(true);
   };
+
   const closeMenu = () => {
     setMenuVisible(false);
     setSelectedFriend(null);
   };
 
-    const handleUnfriend = async (friend: Friend) => {
-    if (!currentUser) return;
-    showAlert(
-      'warning',
-      'Unfriend',
-      `Are you sure you want to unfriend ${friend.displayName}?`,
-      [
-        { text: 'Cancel', style: 'cancel', onPress: closeMenu },
-        {
-          text: 'Unfriend',
-          style: 'primary',
-          onPress: async () => {
-            closeMenu();
-            try {
-              await removeFriend(currentUser.uid, friend.uid);
-              showAlert(
-                'success',
-                'Unfriended',
-                `${friend.displayName} has been removed from your friends.`,
-                [{ text: 'OK', style: 'primary', onPress: () => closeAlert() }]
-              );
-              loadFriends();  // Reload friends list
-            } catch (error) {
-              showAlert(
-                'error',
-                'Error',
-                'Failed to unfriend. Please try again.',
-                [{ text: 'OK', style: 'primary', onPress: () => closeAlert() }]
-              );
-              addBacklogEvent("unfriend_error", { friendUsername: friend.username, error: String(error) });
-            }
-          },
+ const handleUnfriend = async (friend: Friend) => {
+  if (!currentUser) return;
+  showAlert(
+    'warning',
+    'Unfriend',
+    `Are you sure you want to unfriend ${friend.displayName}?`,
+    [
+      { text: 'Cancel', style: 'cancel', onPress: closeMenu },
+      {
+        text: 'Unfriend',
+        style: 'primary',
+        onPress: async () => {
+          closeMenu();
+          try {
+            await removeFriend(currentUser.uid, friend.uid);
+            showAlert(
+              'success',
+              'Unfriended',
+              `${friend.displayName} has been removed from your friends.`,
+              [{ text: 'OK', style: 'primary', onPress: () => closeAlert() }]
+            );
+            loadFriends();
+          } catch (error) {
+            showAlert(
+              'error',
+              'Error',
+              'Failed to unfriend. Please try again.',
+              [{ text: 'OK', style: 'primary', onPress: () => closeAlert() }]
+            );
+            addBacklogEvent("unfriend_error", { friendUsername: friend.username, error: String(error) });  // FIXED: Removed space
+          }
         },
-      ]
-    );
-  };
+      },
+    ]
+  );
+};
 
-    const handleMute = (friend: Friend) => {
+  const handleMute = (friend: Friend) => {
     const newMuted = new Set(mutedFriends);
     if (newMuted.has(friend.uid)) {
       newMuted.delete(friend.uid);
@@ -369,8 +373,6 @@ export default function Friendlist() {
     );
   };
 
-  
-
   const onRefresh = async () => {
     setRefreshing(true);
     if (activeTab === 'friends') {
@@ -382,8 +384,6 @@ export default function Friendlist() {
     }
     setRefreshing(false);
   };
-
-  
 
   const navigateToProfile = (userId: string) => {
     router.push({
@@ -406,7 +406,7 @@ export default function Friendlist() {
 
   const getFilteredFriends = () => {
     if (!search.trim()) {
-      // NEW: Sort pinned friends to the top
+      // ADDED: Sort pinned friends to the top
       return [...friends].sort((a, b) => {
         const aPinned = pinnedFriends.has(a.uid);
         const bPinned = pinnedFriends.has(b.uid);
@@ -514,9 +514,9 @@ export default function Friendlist() {
                     status={friend.isOnline ? 'online' : 'offline'}
                     onChatPress={() => startChatWithFriend(friend)}
                     onProfilePress={() => navigateToProfile(friend.uid)}
-                    onMenuPress={() => openMenu(friend)}  // NEW: Prop for opening menu
-                    isMuted={mutedFriends.has(friend.uid)}  // NEW: Prop for mute status
-                    isPinned={pinnedFriends.has(friend.uid)}  // NEW: Prop for pin status
+                    onMenuPress={() => openMenu(friend)}  // ADDED: Prop for opening menu
+                    isMuted={mutedFriends.has(friend.uid)}  // ADDED: Prop for mute status
+                    isPinned={pinnedFriends.has(friend.uid)}  // ADDED: Prop for pin status
                   />
                 ))
               ) : (
@@ -815,37 +815,37 @@ export default function Friendlist() {
           buttons={alertConfig.buttons}
           onClose={closeAlert}
         />
+        
+        {/* ADDED: Menu Modal */}
         <Modal
-      visible={menuVisible}
-      transparent
-      animationType="fade"
-      onRequestClose={closeMenu}
-    >
-      <TouchableOpacity style={styles.menuOverlay} onPress={closeMenu} activeOpacity={1}>
-        <View style={styles.menuContainer}>
-          <TouchableOpacity style={styles.menuOption} onPress={() => selectedFriend && handleUnfriend(selectedFriend)}>
-            <Ionicons name="person-remove" size={20} color="#ef4444" />
-            <Text style={styles.menuOptionText}>Unfriend</Text>
+          visible={menuVisible}
+          transparent
+          animationType="fade"
+          onRequestClose={closeMenu}
+        >
+          <TouchableOpacity style={styles.menuOverlay} onPress={closeMenu} activeOpacity={1}>
+            <View style={styles.menuContainer}>
+              <TouchableOpacity style={styles.menuOption} onPress={() => selectedFriend && handleUnfriend(selectedFriend)}>
+                <Ionicons name="person-remove" size={20} color="#ef4444" />
+                <Text style={styles.menuOptionText}>Unfriend</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.menuOption} onPress={() => selectedFriend && handleMute(selectedFriend)}>
+                <Ionicons name={mutedFriends.has(selectedFriend?.uid || '') ? "volume-high" : "volume-mute"} size={20} color="#f59e0b" />
+                <Text style={styles.menuOptionText}>{mutedFriends.has(selectedFriend?.uid || '') ? 'Unmute' : 'Mute'}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.menuOption} onPress={() => selectedFriend && handlePin(selectedFriend)}>
+                <Ionicons name={pinnedFriends.has(selectedFriend?.uid || '') ? "pin-outline" : "pin"} size={20} color="#10b981" />
+                <Text style={styles.menuOptionText}>{pinnedFriends.has(selectedFriend?.uid || '') ? 'Unpin' : 'Pin'}</Text>
+              </TouchableOpacity>
+            </View>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.menuOption} onPress={() => selectedFriend && handleMute(selectedFriend)}>
-            <Ionicons name={mutedFriends.has(selectedFriend?.uid || '') ? "volume-high" : "volume-mute"} size={20} color="#f59e0b" />
-            <Text style={styles.menuOptionText}>{mutedFriends.has(selectedFriend?.uid || '') ? 'Unmute' : 'Mute'}</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.menuOption} onPress={() => selectedFriend && handlePin(selectedFriend)}>
-            <Ionicons name={pinnedFriends.has(selectedFriend?.uid || '') ? "pin-outline" : "pin"} size={20} color="#10b981" />
-            <Text style={styles.menuOptionText}>{pinnedFriends.has(selectedFriend?.uid || '') ? 'Unpin' : 'Pin'}</Text>
-          </TouchableOpacity>
-        </View>
-      </TouchableOpacity>
-    </Modal>
+        </Modal>
+        
         <BottomNavigation />
       </SafeAreaView>
     </LinearGradient>
   );
 }
-
-// Search Result Card Component
-// ... (all imports and component code unchanged until SearchResultCard)
 
 // Search Result Card Component
 const SearchResultCard = ({ user, onSendRequest, onViewProfile }: { 
@@ -979,8 +979,6 @@ const FriendRequestCard = ({ request, onAccept, onReject, onViewProfile }: {
     </LinearGradient>
   </View>
 );
-
-// ... (styles unchanged)
 
 const styles = StyleSheet.create({
   container: { 
