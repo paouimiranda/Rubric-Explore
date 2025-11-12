@@ -816,11 +816,20 @@ const RichTextToolbar: React.FC<RichTextToolbarProps> = ({ getEditor, onMetadata
 
 const styles = StyleSheet.create({
   toolbarContainer: {
-    backgroundColor: 'rgba(30, 41, 59, 0.95)',
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(255, 255, 255, 0.1)',
-    paddingVertical: 4,
+    backgroundColor: 'rgba(30, 41, 59, 0.98)',
+    borderRadius: 40,
+    paddingVertical: 1,
     maxHeight: 60,
+    marginHorizontal: 5,
+    marginVertical: 8,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 8,
   },
   scrollContent: {
     alignItems: 'center',
@@ -837,11 +846,11 @@ const styles = StyleSheet.create({
     borderRadius: 6,
   },
   customButton: {
-    width: 44,
-    height: 44,
+    width: 30,
+    height: 30,
     justifyContent: 'center',
     alignItems: 'center',
-    marginHorizontal: 4,
+    marginHorizontal: 5,
     borderRadius: 6,
     position: 'relative',
   },

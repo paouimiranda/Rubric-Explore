@@ -1,5 +1,6 @@
 // app/screens/Notes/note-editor.tsx 
 import { Note, NotebookProperty } from "@/app/types/notebook";
+import NoteSidebar from "@/components/Interface/note-sidebar";
 import RichTextEditor, { RichTextEditorRef } from '@/components/Interface/rich-text-editor';
 import RichTextToolbar from "@/components/Interface/rich-text-toolbar";
 import SharingModal from "@/components/Interface/sharing-modal";
@@ -7,10 +8,10 @@ import { db } from "@/firebase";
 import { useCollaborativeEditing } from '@/hooks/CollaborativeEditing';
 import { useBacklogLogger } from "@/hooks/useBackLogLogger";
 import { BACKLOG_EVENTS } from "@/services/backlogEvents";
-import { updateNote } from '@/services/notes-service';
+import { getNotesInNotebook, updateNote } from '@/services/notes-service';
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import { router, useLocalSearchParams } from "expo-router";
+import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import {
   doc,
   getDoc
@@ -36,6 +37,7 @@ import {
 import { useAuth } from "../../contexts/AuthContext";
 import OCRModal from "./ocr";
 import PropertiesModal from './properties';
+
 type NoteEditorProps = {
   isSharedAccess?: boolean;
   sharedPermission?: "view" | "edit";
@@ -51,6 +53,7 @@ export default function NoteEditor({
   const uid = user?.uid;
   const { addBacklogEvent } = useBacklogLogger();
   const hasLoggedOpen = useRef(false);
+  
   if (!uid) {
     return (
       <LinearGradient colors={["#324762", "#0A1C3C"]} style={styles.loadingContainer}>
@@ -83,6 +86,11 @@ export default function NoteEditor({
   const [ellipsisMenuVisible, setEllipsisMenuVisible] = useState(false);
   const [showCollaborators, setShowCollaborators] = useState(false);
   const [metadataModalVisible, setMetadataModalVisible] = useState(false);
+  
+  // Sidebar state
+  const [sidebarVisible, setSidebarVisible] = useState(false);
+  const [notebookNotes, setNotebookNotes] = useState<Note[]>([]);
+  const [notebookTitle, setNotebookTitle] = useState('');
     
   const richEditorRef = useRef<RichTextEditorRef>(null);
   
@@ -176,11 +184,56 @@ export default function NoteEditor({
 
   const autoSaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Fetch notebook notes for sidebar
+  const fetchNotebookNotes = useCallback(async () => {
+    if (!notebookId || !uid) return;
+    
+    try {
+      const notes = await getNotesInNotebook(notebookId as string, uid);
+      setNotebookNotes(notes as any);
+    } catch (error) {
+      console.error("Error fetching notebook notes:", error);
+    }
+  }, [notebookId, uid]);
+
+  // Fetch notebook title
+  const fetchNotebookTitle = useCallback(async () => {
+    if (!notebookId) return;
+    
+    try {
+      const docRef = doc(db, "notebooks", notebookId as string);
+      const snap = await getDoc(docRef);
+      if (snap.exists()) {
+        setNotebookTitle(snap.data().title || 'Untitled Notebook');
+      }
+    } catch (error) {
+      console.error("Error fetching notebook title:", error);
+    }
+  }, [notebookId]);
+
+  // Refresh notebook notes when focusing
+  useFocusEffect(
+    useCallback(() => {
+      if (notebookId && uid) {
+        fetchNotebookNotes();
+      }
+    }, [notebookId, uid, fetchNotebookNotes])
+  );
+
+  // Fetch note data when noteId changes
   useEffect(() => {
     if (routeNoteId && uid) {
       fetchNote(routeNoteId as string);
     }
   }, [routeNoteId, uid]);
+
+  // Fetch notebook metadata separately
+  useEffect(() => {
+    if (notebookId) {
+      fetchNotebookTitle();
+      fetchNotebookNotes();
+    }
+  }, [notebookId, fetchNotebookTitle, fetchNotebookNotes]);
 
   useEffect(() => {
     if (note && properties !== note.properties) {
@@ -306,6 +359,25 @@ export default function NoteEditor({
     }
   };
 
+  const handleNoteSelect = useCallback((noteId: string) => {
+    // Close sidebar first to prevent animation conflicts
+    setSidebarVisible(false);
+    
+    // Use setTimeout to defer state updates until after the current render cycle
+    setTimeout(() => {
+      // Save current note before switching
+      if (hasUnsavedChanges) {
+        saveNote(false);
+      }
+      
+      // Navigate to new note
+      router.replace({
+        pathname: "./note-editor",
+        params: { noteId, notebookId },
+      });
+    }, 300); // Match sidebar close animation duration
+  }, [hasUnsavedChanges, notebookId]);
+
   const handleOCRTextInsert = useCallback((text: string) => {
     if (effectiveIsSharedAccess && effectiveSharedPermission === "view") return;
     
@@ -349,8 +421,11 @@ export default function NoteEditor({
       <SafeAreaView style={styles.container}>
         {/* Minimalist Header */}
         <View style={styles.header}>
-          <TouchableOpacity style={styles.iconButton} onPress={handleBack}>
-            <Ionicons name="arrow-back" size={22} color="#fff" />
+          <TouchableOpacity 
+            style={styles.iconButton} 
+            onPress={() => setSidebarVisible(true)}
+          >
+            <Ionicons name="menu" size={22} color="#fff" />
           </TouchableOpacity>
           
           <View style={styles.headerRight}>
@@ -497,10 +572,22 @@ export default function NoteEditor({
               onUndo={collaborative.undo}
               onRedo={collaborative.redo}
               canUndo={collaborative.canUndo}
-              canRedo={collaborative.canRedo}              
+              canRedo={collaborative.canRedo}     
+              style={styles.toolbar}         
             />
           )}
         </KeyboardAvoidingView>
+
+        {/* Note Sidebar */}
+        <NoteSidebar
+          visible={sidebarVisible}
+          onClose={() => setSidebarVisible(false)}
+          notes={notebookNotes as any}
+          currentNoteId={routeNoteId as string}
+          notebookId={notebookId as string}
+          notebookTitle={notebookTitle}
+          onNoteSelect={handleNoteSelect}
+        />
 
         {/* Ellipsis Bottom Sheet Menu */}
         <Modal
@@ -761,7 +848,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 20,
-    paddingVertical: 16,
+    paddingVertical: 8,
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(255, 255, 255, 0.05)',
   },
@@ -780,6 +867,7 @@ const styles = StyleSheet.create({
   },
   scrollView: {
     flex: 1,
+    paddingBottom: 98,
   },
   titleInput: {
     fontSize: 32,
@@ -939,4 +1027,11 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#1f2937',
   },
-})
+  toolbar: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    marginBottom: 20,
+  },
+});
