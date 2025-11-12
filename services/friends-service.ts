@@ -1,6 +1,8 @@
 // services/friendsService.ts
 import {
   addDoc,
+  arrayRemove,
+  arrayUnion,
   collection,
   deleteDoc,
   doc,
@@ -127,19 +129,33 @@ export const searchUsers = async (
   }
 };
 
-// Send friend request
+// Send friend request - UPDATED: Clean up any leftover requests from current user before sending
 export const sendFriendRequest = async (
   fromUserId: string, 
   toUserId: string
 ): Promise<boolean> => {
   try {
-    // Check if request already exists
+    // NEW: Clean up any existing requests FROM the current user TO the target user (any status)
+    // This handles leftovers from unfriending/re-adding without affecting requests from the other user
+    const cleanupQuery = query(
+      collection(db, 'friendRequests'),
+      where('fromUserId', '==', fromUserId),
+      where('toUserId', '==', toUserId)
+    );
+    
+    const cleanupSnapshot = await getDocs(cleanupQuery);
+    if (!cleanupSnapshot.empty) {
+      console.log('sendFriendRequest Debug: Cleaning up leftover request(s)', cleanupSnapshot.docs.map(doc => doc.id));
+      await Promise.all(cleanupSnapshot.docs.map(doc => deleteDoc(doc.ref)));
+    }
+    
+    // Now check if request already exists (should be clean after cleanup)
     const existingRequest = await checkExistingFriendRequest(fromUserId, toUserId);
     if (existingRequest) {
       throw new Error('Friend request already sent or friendship already exists');
     }
     
-    // Create friend request document
+    // Create new friend request document
     const requestData = {
       fromUserId,
       toUserId,
@@ -150,7 +166,7 @@ export const sendFriendRequest = async (
     
     await addDoc(collection(db, 'friendRequests'), requestData);
     
-    // Update recipient's pending requests count (optional)
+    // Update recipient's pending requests count
     await updateDoc(doc(db, 'users', toUserId), {
       pendingRequests: increment(1),
       updatedAt: serverTimestamp()
@@ -182,17 +198,19 @@ const checkExistingFriendRequest = async (
       where('toUserId', '==', userId1)
     );
     
-    // Check if already friends
+    // Check if already friends (filter by status to only detect active friendships)
     const friendshipQuery1 = query(
       collection(db, 'friendships'),
       where('user1Id', '==', userId1),
-      where('user2Id', '==', userId2)
+      where('user2Id', '==', userId2),
+      where('status', '==', 'active')  // Ensures only active friendships are detected
     );
     
     const friendshipQuery2 = query(
       collection(db, 'friendships'),
       where('user1Id', '==', userId2),
-      where('user2Id', '==', userId1)
+      where('user2Id', '==', userId1),
+      where('status', '==', 'active')  // Ensures only active friendships are detected
     );
     
     const [request1, request2, friendship1, friendship2]: QuerySnapshot<DocumentData>[] = await Promise.all([
@@ -202,12 +220,25 @@ const checkExistingFriendRequest = async (
       getDocs(friendshipQuery2)
     ]);
     
+    // DEBUG LOGS: Check console to see what's detected
+    console.log('checkExistingFriendRequest Debug:', {
+      userId1,
+      userId2,
+      request1Empty: request1.empty,
+      request2Empty: request2.empty,
+      friendship1Empty: friendship1.empty,
+      friendship2Empty: friendship2.empty,
+      friendship1Docs: friendship1.docs.map(doc => doc.data()),  // Log friendship data
+      friendship2Docs: friendship2.docs.map(doc => doc.data())
+    });
+    
     return !request1.empty || !request2.empty || !friendship1.empty || !friendship2.empty;
   } catch (error) {
     console.error('Error checking existing friend request:', error);
     return false;
   }
 };
+
 
 // Get friend requests received by user
 export const getFriendRequests = async (userId: string): Promise<FriendRequest[]> => {
@@ -438,7 +469,7 @@ export const removeFriend = async (
   friendUserId: string
 ): Promise<boolean> => {
   try {
-    // Find and delete friendship document
+    // Find and delete friendship document (unchanged)
     const friendshipQuery1 = query(
       collection(db, 'friendships'),
       where('user1Id', '==', currentUserId),
@@ -461,30 +492,72 @@ export const removeFriend = async (
     const friendshipDoc = !snapshot1.empty ? snapshot1.docs[0] : 
                           !snapshot2.empty ? snapshot2.docs[0] : null;
     
+    // UPDATED: Find and delete ALL friend requests between the users (any status: pending, accepted, rejected)
+    const requestQuery1 = query(
+      collection(db, 'friendRequests'),
+      where('fromUserId', '==', currentUserId),
+      where('toUserId', '==', friendUserId)
+      // Removed status filter to catch ALL requests
+    );
+    
+    const requestQuery2 = query(
+      collection(db, 'friendRequests'),
+      where('fromUserId', '==', friendUserId),
+      where('toUserId', '==', currentUserId)
+      // Removed status filter to catch ALL requests
+    );
+    
+    const [requestSnapshot1, requestSnapshot2]: [QuerySnapshot<DocumentData>, QuerySnapshot<DocumentData>] = await Promise.all([
+      getDocs(requestQuery1),
+      getDocs(requestQuery2)
+    ]);
+    
+    const requestDoc = !requestSnapshot1.empty ? requestSnapshot1.docs[0] : 
+                       !requestSnapshot2.empty ? requestSnapshot2.docs[0] : null;
+    
+    // Collect all docs to delete
+    const docsToDelete = [];
     if (friendshipDoc) {
-      await deleteDoc(friendshipDoc.ref);
+      docsToDelete.push({ type: 'friendship', doc: friendshipDoc });
+    }
+    if (requestDoc) {
+      docsToDelete.push({ type: 'request', doc: requestDoc });
+    }
+    
+    // Log what we're deleting
+    console.log('removeFriend Debug: Docs to delete:', docsToDelete.map(d => ({ type: d.type, id: d.doc.id, data: d.doc.data() })));
+    
+    // Delete all found docs
+    if (docsToDelete.length > 0) {
+      await Promise.all(docsToDelete.map(d => deleteDoc(d.doc.ref)));
+      console.log('removeFriend Debug: All deletes successful');
       
-      // Update both users' friend counts
-      await Promise.all([
-        updateDoc(doc(db, 'users', currentUserId), {
-          friends: increment(-1),
-          updatedAt: serverTimestamp()
-        }),
-        updateDoc(doc(db, 'users', friendUserId), {
-          friends: increment(-1),
-          updatedAt: serverTimestamp()
-        })
-      ]);
+      // Update both users' friend counts (only if friendship was deleted)
+      if (friendshipDoc) {
+        await Promise.all([
+          updateDoc(doc(db, 'users', currentUserId), {
+            friends: increment(-1),
+            updatedAt: serverTimestamp()
+          }),
+          updateDoc(doc(db, 'users', friendUserId), {
+            friends: increment(-1),
+            updatedAt: serverTimestamp()
+          })
+        ]);
+      }
       
       return true;
     }
     
+    console.log('removeFriend Debug: No docs found to delete');
     throw new Error('Friendship not found');
   } catch (error) {
     console.error('Error removing friend:', error);
     throw new Error('Failed to remove friend');
   }
 };
+
+
 
 // Get mutual friends
 export const getMutualFriends = async (
@@ -504,5 +577,63 @@ export const getMutualFriends = async (
   } catch (error) {
     console.error('Error getting mutual friends:', error);
     throw new Error('Failed to get mutual friends');
+  }
+};
+// NEW: Load muted and pinned friends for a user
+export const getUserPreferences = async (userId: string): Promise<{ mutedFriends: string[]; pinnedFriends: string[] }> => {
+  try {
+    const userDoc = await getDoc(doc(db, 'users', userId));
+    if (userDoc.exists()) {
+      const data = userDoc.data();
+      return {
+        mutedFriends: data.mutedFriends || [],
+        pinnedFriends: data.pinnedFriends || [],
+      };
+    }
+    return { mutedFriends: [], pinnedFriends: [] }; // Default if no doc
+  } catch (error) {
+    console.error('Error loading user preferences:', error);
+    throw new Error('Failed to load user preferences');
+  }
+};
+// NEW: Toggle mute for a friend (add/remove from array)
+export const toggleMuteFriend = async (userId: string, friendId: string, isMuted: boolean): Promise<void> => {
+  try {
+    const userRef = doc(db, 'users', userId);
+    if (isMuted) {
+      await updateDoc(userRef, {
+        mutedFriends: arrayRemove(friendId), // Remove from muted
+        updatedAt: serverTimestamp(),
+      });
+    } else {
+      await updateDoc(userRef, {
+        mutedFriends: arrayUnion(friendId), // Add to muted
+        updatedAt: serverTimestamp(),
+      });
+    }
+  } catch (error) {
+    console.error('Error toggling mute:', error);
+    throw new Error('Failed to toggle mute');
+  }
+};
+
+// NEW: Toggle pin for a friend (add/remove from array)
+export const togglePinFriend = async (userId: string, friendId: string, isPinned: boolean): Promise<void> => {
+  try {
+    const userRef = doc(db, 'users', userId);
+    if (isPinned) {
+      await updateDoc(userRef, {
+        pinnedFriends: arrayRemove(friendId), // Remove from pinned
+        updatedAt: serverTimestamp(),
+      });
+    } else {
+      await updateDoc(userRef, {
+        pinnedFriends: arrayUnion(friendId), // Add to pinned
+        updatedAt: serverTimestamp(),
+      });
+    }
+  } catch (error) {
+    console.error('Error toggling pin:', error);
+    throw new Error('Failed to toggle pin');
   }
 };

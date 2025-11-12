@@ -11,6 +11,7 @@ import {
   acceptFriendRequest,
   getFriendRequests,
   getUserFriends,
+  getUserPreferences,
   listenToFriendRequests,
   rejectFriendRequest,
   removeFriend, // ADDED: For unfriending
@@ -18,6 +19,7 @@ import {
   searchUsers,
   sendFriendRequest,
   FriendRequest as ServiceFriendRequest,
+  toggleMuteFriend, togglePinFriend,
   User,
 } from '@/services/friends-service';
 import { Ionicons } from '@expo/vector-icons';
@@ -64,7 +66,7 @@ export default function Friendlist() {
   const [refreshing, setRefreshing] = useState(false);
   const [searchLoading, setSearchLoading] = useState(false);
   const [unreadChatCount, setUnreadChatCount] = useState(0);
-
+  
   // ADDED: State for the menu
   const [menuVisible, setMenuVisible] = useState(false);
   const [selectedFriend, setSelectedFriend] = useState<Friend | null>(null);
@@ -98,6 +100,20 @@ export default function Friendlist() {
       useNativeDriver: true,
     }).start();
   }, []);
+  useEffect(() => {
+  const loadPreferences = async () => {
+    if (!currentUser) return;
+    try {
+      const prefs = await getUserPreferences(currentUser.uid);
+      setMutedFriends(new Set(prefs.mutedFriends));
+      setPinnedFriends(new Set(prefs.pinnedFriends));
+    } catch (error) {
+      console.error('Error loading preferences:', error);
+      // Optionally show an alert or fallback (e.g., showAlert with an error message)
+    }
+  };
+  loadPreferences();
+}, [currentUser]);  // Runs when currentUser changes (e.g., on login)
 
   const showAlert = (
     type: 'info' | 'success' | 'error' | 'warning',
@@ -168,23 +184,51 @@ export default function Friendlist() {
         style: 'primary',
         onPress: async () => {
           closeMenu();
+          // Store original state for reversion on error
+          const originalFriends = [...friends];
+          const originalMuted = new Set(mutedFriends);
+          const originalPinned = new Set(pinnedFriends);
+          
           try {
-            await removeFriend(currentUser.uid, friend.uid);
+            // Optimistically update local state
+            setFriends(prev => prev.filter(f => f.uid !== friend.uid));
+            setMutedFriends(prev => {
+              const newSet = new Set(prev);
+              newSet.delete(friend.uid);
+              return newSet;
+            });
+            setPinnedFriends(prev => {
+              const newSet = new Set(prev);
+              newSet.delete(friend.uid);
+              return newSet;
+            });
+            
+            // Persist cleanup to Firestore (remove from mute/pin arrays)
+            await Promise.all([
+              toggleMuteFriend(currentUser.uid, friend.uid, true), // Force remove from muted
+              togglePinFriend(currentUser.uid, friend.uid, true),  // Force remove from pinned
+              removeFriend(currentUser.uid, friend.uid),
+            ]);
+            
             showAlert(
               'success',
               'Unfriended',
               `${friend.displayName} has been removed from your friends.`,
               [{ text: 'OK', style: 'primary', onPress: () => closeAlert() }]
             );
-            loadFriends();
           } catch (error) {
+            // Revert all local state on error
+            setFriends(originalFriends);
+            setMutedFriends(originalMuted);
+            setPinnedFriends(originalPinned);
+            
             showAlert(
               'error',
               'Error',
               'Failed to unfriend. Please try again.',
               [{ text: 'OK', style: 'primary', onPress: () => closeAlert() }]
             );
-            addBacklogEvent("unfriend_error", { friendUsername: friend.username, error: String(error) });  // FIXED: Removed space
+            addBacklogEvent("unfriend_error", { friendUsername: friend.username, error: String(error) });
           }
         },
       },
@@ -192,9 +236,13 @@ export default function Friendlist() {
   );
 };
 
-  const handleMute = (friend: Friend) => {
+  const handleMute = async (friend: Friend) => {
+  if (!currentUser) return;
+  const isCurrentlyMuted = mutedFriends.has(friend.uid);
+  try {
+    // Update local state immediately for UI feedback
     const newMuted = new Set(mutedFriends);
-    if (newMuted.has(friend.uid)) {
+    if (isCurrentlyMuted) {
       newMuted.delete(friend.uid);
       showAlert('success', 'Unmuted', `${friend.displayName} notifications are now enabled.`, [{ text: 'OK', onPress: closeAlert }]);
     } else {
@@ -202,13 +250,25 @@ export default function Friendlist() {
       showAlert('success', 'Muted', `${friend.displayName} notifications are now muted.`, [{ text: 'OK', onPress: closeAlert }]);
     }
     setMutedFriends(newMuted);
-    closeMenu();
-    
-  };
 
-  const handlePin = (friend: Friend) => {
+    // Persist to Firebase
+    await toggleMuteFriend(currentUser.uid, friend.uid, isCurrentlyMuted);
+  } catch (error) {
+    // Revert local state on error
+    setMutedFriends(new Set(mutedFriends));  // Reset to original
+    showAlert('error', 'Error', 'Failed to update mute status. Please try again.', [{ text: 'OK', onPress: closeAlert }]);
+    console.error('Error in handleMute:', error);
+  }
+  closeMenu();
+};
+
+  const handlePin = async (friend: Friend) => {
+  if (!currentUser) return;
+  const isCurrentlyPinned = pinnedFriends.has(friend.uid);
+  try {
+    // Update local state immediately
     const newPinned = new Set(pinnedFriends);
-    if (newPinned.has(friend.uid)) {
+    if (isCurrentlyPinned) {
       newPinned.delete(friend.uid);
       showAlert('success', 'Unpinned', `${friend.displayName} is no longer pinned.`, [{ text: 'OK', onPress: closeAlert }]);
     } else {
@@ -216,9 +276,17 @@ export default function Friendlist() {
       showAlert('success', 'Pinned', `${friend.displayName} is now pinned to the top.`, [{ text: 'OK', onPress: closeAlert }]);
     }
     setPinnedFriends(newPinned);
-    closeMenu();
-    
-  };
+
+    // Persist to Firebase
+    await togglePinFriend(currentUser.uid, friend.uid, isCurrentlyPinned);
+  } catch (error) {
+    // Revert local state on error
+    setPinnedFriends(new Set(pinnedFriends));  // Reset to original
+    showAlert('error', 'Error', 'Failed to update pin status. Please try again.', [{ text: 'OK', onPress: closeAlert }]);
+    console.error('Error in handlePin:', error);
+  }
+  closeMenu();
+};
 
   const loadUnreadCount = async () => {
     if (!currentUser) return;
@@ -263,53 +331,66 @@ export default function Friendlist() {
   };
 
   const handleSearch = async (searchTerm: string) => {
-    if (!currentUser || !searchTerm.trim()) {
-      setSearchResults([]);
-      return;
-    }
-    
-    try {
-      setSearchLoading(true);
-      const results = await searchUsers(searchTerm, currentUser.uid);
-      setSearchResults(results);
-      addBacklogEvent(BACKLOG_EVENTS.USER_SEARCHED_USERS, { searchTerm });
-    } catch (error) {
-      console.error('Error searching users:', error);
-      showAlert(
-        'error',
-        'Search Error',
-        'Failed to search users. Please try again.',
-        [{ text: 'OK', style: 'primary', onPress: () => closeAlert() }]
-      );
-      addBacklogEvent("user_search_error", { searchTerm, error: String(error) });
-    } finally {
-      setSearchLoading(false);
-    }
-  };
+  if (!currentUser || !searchTerm.trim()) {
+    setSearchResults([]);
+    return;
+  }
+  
+  try {
+    setSearchLoading(true);
+    const results = await searchUsers(searchTerm, currentUser.uid);
+    // NEW: Filter out users who are already friends (prevents re-add attempts while friendship persists)
+    const filteredResults = results.filter(user => !friends.some(friend => friend.uid === user.uid));
+    setSearchResults(filteredResults);
+    addBacklogEvent(BACKLOG_EVENTS.USER_SEARCHED_USERS, { searchTerm });
+  } catch (error) {
+    console.error('Error searching users:', error);
+    showAlert(
+      'error',
+      'Search Error',
+      'Failed to search users. Please try again.',
+      [{ text: 'OK', style: 'primary', onPress: () => closeAlert() }]
+    );
+    addBacklogEvent("user_search_error", { searchTerm, error: String(error) });
+  } finally {
+    setSearchLoading(false);
+  }
+};
 
   const handleSendFriendRequest = async (userId: string, username: string) => {
-    if (!currentUser) return;
-    
-    try {
-      await sendFriendRequest(currentUser.uid, userId);
-      showAlert(
-        'success',
-        'Request Sent',
-        `Friend request sent to ${username}`,
-        [{ text: 'OK', style: 'primary', onPress: () => closeAlert() }]
-      );
-      setSearchResults(prev => prev.filter(user => user.uid !== userId));
-      addBacklogEvent(BACKLOG_EVENTS.USER_SENT_FRIEND_REQUEST, { recipientUsername: username });
-    } catch (error) {
-      showAlert(
-        'error',
-        'Error',
-        'Failed to send friend request. Please try again.',
-        [{ text: 'OK', style: 'primary', onPress: () => closeAlert() }]
-      );
-      addBacklogEvent("friend_request_send_error", { recipientUsername: username, error: String(error) });
-    }
-  };
+  if (!currentUser) return;
+  
+  // NEW: Local check - don't send if already a friend (handles local state mismatches)
+  if (friends.some(friend => friend.uid === userId)) {
+    showAlert(
+      'warning',
+      'Already Friends',
+      `${username} is already your friend.`,
+      [{ text: 'OK', onPress: () => closeAlert() }]
+    );
+    return;
+  }
+  
+  try {
+    await sendFriendRequest(currentUser.uid, userId);
+    showAlert(
+      'success',
+      'Request Sent',
+      `Friend request sent to ${username}`,
+      [{ text: 'OK', style: 'primary', onPress: () => closeAlert() }]
+    );
+    setSearchResults(prev => prev.filter(user => user.uid !== userId));
+    addBacklogEvent(BACKLOG_EVENTS.USER_SENT_FRIEND_REQUEST, { recipientUsername: username });
+  } catch (error) {
+    showAlert(
+      'error',
+      'Error',
+      'Failed to send friend request. Please try again.',
+      [{ text: 'OK', style: 'primary', onPress: () => closeAlert() }]
+    );
+    addBacklogEvent("friend_request_send_error", { recipientUsername: username, error: String(error) });
+  }
+};
 
   const handleAcceptRequest = async (request: FriendRequest) => {
     try {
