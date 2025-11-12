@@ -1,20 +1,20 @@
 // components/Chat/ChatList.tsx
 import { auth } from '@/firebase';
 import {
-    ConversationPreview,
-    getUserConversations,
-    listenToConversations
+  ConversationPreview,
+  getUserConversations,
+  listenToConversations
 } from '@/services/chat-service';
 import { useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
-    ActivityIndicator,
-    RefreshControl,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View
+  ActivityIndicator,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
 } from 'react-native';
 
 interface ChatListProps {
