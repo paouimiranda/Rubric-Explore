@@ -76,7 +76,7 @@ export default function FriendCard({
   };
 
   return (
-    <View style={styles.cardWrapper}>  {/* NEW: Wrapper for indicators */}
+    <View style={styles.cardWrapper}> 
       <TouchableOpacity 
         style={styles.card}
         onPress={onProfilePress}
@@ -90,7 +90,7 @@ export default function FriendCard({
               style={styles.avatar}
             >
               <Text style={styles.avatarText}>
-                {name ? name.charAt(0).toUpperCase() : '?'}  {/* FIXED: Safety check for empty name */}
+                {name ? name.charAt(0).toUpperCase() : '?'} 
               </Text>
             </LinearGradient>
             <View style={[styles.statusIndicator, { backgroundColor: getStatusColor() }]}>
@@ -135,7 +135,7 @@ export default function FriendCard({
             style={styles.moreButton}
             onPress={(e) => {
               e.stopPropagation();
-              onMenuPress && onMenuPress();  // NEW: Call onMenuPress
+              onMenuPress && onMenuPress();  
             }}
             activeOpacity={0.7}
           >
@@ -144,14 +144,14 @@ export default function FriendCard({
         </View>
       </TouchableOpacity>
       
-      {/* NEW: Mute indicator */}
+    
       {isMuted && (
         <View style={styles.muteIndicator}>
           <Ionicons name="volume-mute" size={14} color="#f59e0b" />
         </View>
       )}
       
-      {/* NEW: Pin indicator */}
+      
       {isPinned && (
         <View style={styles.pinIndicator}>
           <Ionicons name="pin" size={14} color="#10b981" />
