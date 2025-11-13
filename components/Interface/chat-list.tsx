@@ -142,7 +142,7 @@ export default function ChatList({ refreshing = false, onRefresh }: ChatListProp
               conversation.otherUser.isOnline && styles.onlineAvatar
             ]}>
               <Text style={styles.avatarText}>
-                {conversation.otherUser.displayName.charAt(0).toUpperCase()}
+                {((conversation.otherUser.displayName || '').charAt(0).toUpperCase() || '?')}
               </Text>
             </View>
             {conversation.otherUser.isOnline && <View style={styles.onlineIndicator} />}
