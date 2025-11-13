@@ -7,10 +7,16 @@ import React, { createContext, useContext, useEffect, useRef, useState } from 'r
 
 interface NotificationContextType {
   setActiveConversationId: (id: string | null) => void;
+  muteFriend: (friendId: string) => void;  // Mute a specific friend
+  unmuteFriend: (friendId: string) => void;  // Unmute a specific friend
+  isFriendMuted: (friendId: string) => boolean;  // Check if a friend is muted
 }
 
 const NotificationContext = createContext<NotificationContextType>({
   setActiveConversationId: () => {},
+  muteFriend: () => {},
+  unmuteFriend: () => {},
+  isFriendMuted: () => false,
 });
 
 export const useNotifications = () => useContext(NotificationContext);
@@ -25,8 +31,24 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
   } | null>(null);
   
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
+  const [mutedFriends, setMutedFriends] = useState<Set<string>>(new Set());  // Global muted friends state
   const previousConversations = useRef<ConversationPreview[]>([]);
   const router = useRouter();
+
+  // Functions to manage muted friends
+  const muteFriend = (friendId: string) => {
+    setMutedFriends(prev => new Set(prev).add(friendId));
+  };
+  
+  const unmuteFriend = (friendId: string) => {
+    setMutedFriends(prev => {
+      const newSet = new Set(prev);
+      newSet.delete(friendId);
+      return newSet;
+    });
+  };
+  
+  const isFriendMuted = (friendId: string) => mutedFriends.has(friendId);
 
   useEffect(() => {
     const currentUser = auth.currentUser;
@@ -53,12 +75,10 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
           
           const isFromOtherUser = conv.lastMessage.senderId !== currentUser.uid;
           const isNotActiveChat = conv.id !== activeConversationId;
+          const isSenderMuted = isFriendMuted(conv.otherUser.id);  // Check if sender is muted
 
-          // Only show notification if:
-          // 1. There's a new message (not a new conversation on first load)
-          // 2. It's not from us
-          // 3. We're not currently viewing this conversation
-          if (hasNewMessage && isFromOtherUser && isNotActiveChat) {
+          // Only show notification if all conditions are met, including sender not muted
+          if (hasNewMessage && isFromOtherUser && isNotActiveChat && !isSenderMuted) {
             console.log('New message notification:', {
               from: conv.otherUser.displayName,
               message: conv.lastMessage.text,
@@ -82,7 +102,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
       console.log('Cleaning up notification listener');
       unsubscribe();
     };
-  }, [activeConversationId]);
+  }, [activeConversationId]);  // FIXED: Removed mutedFriends from dependencies to prevent re-runs
 
   const handleNotificationPress = () => {
     if (!notification) return;
@@ -113,7 +133,12 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
   };
 
   return (
-    <NotificationContext.Provider value={{ setActiveConversationId }}>
+    <NotificationContext.Provider value={{ 
+      setActiveConversationId, 
+      muteFriend,  // Provide mute function
+      unmuteFriend,  // Provide unmute function
+      isFriendMuted  // Provide check function
+    }}>
       {children}
       
       {notification && (
