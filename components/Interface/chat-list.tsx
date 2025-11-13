@@ -29,11 +29,19 @@ export default function ChatList({ refreshing = false, onRefresh }: ChatListProp
   const currentUser = auth.currentUser;
 
   useEffect(() => {
-    if (!currentUser) return;
-
+    if (!currentUser) return;  // Early return if null (type guard for TypeScript)
+    
     // Set up real-time listener for conversations
     const unsubscribe = listenToConversations(currentUser.uid, (convos) => {
-      setConversations(convos);
+      // UPDATED: Validate and default missing displayName for safety
+      const validatedConvos = convos.map(convo => ({
+        ...convo,
+        otherUser: {
+          ...convo.otherUser,
+          displayName: convo.otherUser.displayName || 'Unknown User',
+        },
+      }));
+      setConversations(validatedConvos);
       setLoading(false);
     });
 
@@ -44,12 +52,20 @@ export default function ChatList({ refreshing = false, onRefresh }: ChatListProp
   }, [currentUser]);
 
   const loadConversations = async () => {
-    if (!currentUser) return;
+    if (!currentUser) return;  // Early return if null (type guard for TypeScript)
     
     try {
       setLoading(true);
       const convos = await getUserConversations(currentUser.uid);
-      setConversations(convos);
+      // UPDATED: Validate and default missing displayName for safety
+      const validatedConvos = convos.map(convo => ({
+        ...convo,
+        otherUser: {
+          ...convo.otherUser,
+          displayName: convo.otherUser.displayName || 'Unknown User',
+        },
+      }));
+      setConversations(validatedConvos);
     } catch (error) {
       console.error('Error loading conversations:', error);
     } finally {
@@ -68,7 +84,7 @@ export default function ChatList({ refreshing = false, onRefresh }: ChatListProp
       params: {
         conversationId: conversation.id,
         otherUserId: conversation.otherUser.id,
-        otherUserName: conversation.otherUser.displayName
+        otherUserName: conversation.otherUser.displayName || 'Unknown User'  // UPDATED: Default for safety
       }
     });
   };
@@ -142,7 +158,7 @@ export default function ChatList({ refreshing = false, onRefresh }: ChatListProp
               conversation.otherUser.isOnline && styles.onlineAvatar
             ]}>
               <Text style={styles.avatarText}>
-                {((conversation.otherUser.displayName || '').charAt(0).toUpperCase() || '?')}
+                {((conversation.otherUser.displayName || '').charAt(0).toUpperCase() || '?')}  {/* UPDATED: Safe .charAt() handling */}
               </Text>
             </View>
             {conversation.otherUser.isOnline && <View style={styles.onlineIndicator} />}
@@ -151,7 +167,7 @@ export default function ChatList({ refreshing = false, onRefresh }: ChatListProp
           <View style={styles.conversationContent}>
             <View style={styles.conversationHeader}>
               <Text style={styles.userName}>
-                {conversation.otherUser.displayName}
+                {conversation.otherUser.displayName || 'Unknown User'}  {/* UPDATED: Default for display */}
               </Text>
               <Text style={styles.timestamp}>
                 {formatTime(conversation.lastMessageTime)}

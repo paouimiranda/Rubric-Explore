@@ -308,7 +308,12 @@ export default function Friendlist() {
     try {
       setLoading(true);
       const userFriends = await getUserFriends(currentUser.uid);
-      setFriends(userFriends);
+      // UPDATED: Validate and default missing displayName for safety
+      const validatedFriends = userFriends.map(friend => ({
+        ...friend,
+        displayName: friend.displayName || 'Unknown User',
+      }));
+      setFriends(validatedFriends);
     } catch (error) {
       console.error('Error loading friends:', error);
       showAlert(
@@ -956,7 +961,7 @@ const SearchResultCard = ({ user, onSendRequest, onViewProfile }: {
           style={styles.searchResultAvatar}
         >
           <Text style={styles.searchResultAvatarText}>
-            {((user.displayName || '').charAt(0).toUpperCase() || '?')}
+            {user.displayName ? user.displayName.charAt(0).toUpperCase() : '?'}  {/* FIXED: Safety check */}
           </Text>
         </LinearGradient>
         <View style={styles.searchResultInfo}>
@@ -1013,7 +1018,7 @@ const FriendRequestCard = ({ request, onAccept, onReject, onViewProfile }: {
             style={styles.requestAvatar}
           >
             <Text style={styles.requestAvatarText}>
-              {((request.senderInfo.displayName || '').charAt(0).toUpperCase() || '?')}
+              {request.senderInfo.displayName ? request.senderInfo.displayName.charAt(0).toUpperCase() : '?'}  {/* FIXED: Safety check */}
             </Text>
           </LinearGradient>
           <LinearGradient
