@@ -17,14 +17,15 @@ import {
   View,
 } from 'react-native';
 import LeaderboardTab from './leaderboard-tab';
+import ShopTab from './shop-tab';
 
 const { width, height } = Dimensions.get('window');
 
 // Tab options for navigation
 const TABS = [
   { id: 'journey', label: 'Journey', icon: 'rocket' as const },
-  // { id: 'shop', label: 'Shop', icon: 'cart' as const },
-  { id: 'leaderboard', label: 'Leaderboard', icon: 'trophy' as const },
+  { id: 'shop', label: 'Shop', icon: 'cart' as const },
+  { id: 'leaderboard', label: 'Scores', icon: 'trophy' as const },
 ];
 
 const ExploreScreen = ({ navigation }: any) => {
@@ -428,13 +429,9 @@ const ExploreScreen = ({ navigation }: any) => {
             </>
           ) : activeTab === 'leaderboard' ? (
             <LeaderboardTab />
-          ) : (
-            // Shop tab placeholder
-            <View style={styles.centerContent}>
-              <Ionicons name="cart" size={64} color="#555" />
-              <Text style={styles.loadingText}>Shop coming soon!</Text>
-            </View>
-          )}
+          ) : activeTab === 'shop' ? (
+            <ShopTab/>
+          ): null }
         </Animated.View>
       </Animated.View>
     </View>

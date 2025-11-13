@@ -10,7 +10,8 @@
     "web": "expo start --web",
     "lint": "expo lint",
     "postinstall": "patch-package",
-    "setup:journey": "tsx scripts/run-journey-setup.ts"
+    "setup:journey": "tsx scripts/run-journey-setup.ts",
+    "setup:expansion": "tsx scripts/run-journey-expansion.ts"
   },
   "dependencies": {
     "@expo-google-fonts/bebas-neue": "^0.4.0",

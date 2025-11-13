@@ -30,6 +30,7 @@ export default function PlannerScreen() {
   const [modalVisible, setModalVisible] = useState(false);
   const [analyticsVisible, setAnalyticsVisible] = useState(false);
   const [editingPlan, setEditingPlan] = useState<Plan | null>(null);
+  const [initialDate, setInitialDate] = useState<string | undefined>(undefined);
   
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const tabContentOpacity = useRef(new Animated.Value(1)).current;
@@ -98,12 +99,19 @@ export default function PlannerScreen() {
   };
 
   const openCreateModal = (date?: string) => {
+    // If a date is provided, store it separately
+    if (date) {
+      setInitialDate(date);
+    } else {
+      setInitialDate(undefined);
+    }
     setEditingPlan(null);
     setModalVisible(true);
   };
 
   const openEditModal = (plan: Plan) => {
     setEditingPlan(plan);
+    setInitialDate(undefined);
     setModalVisible(true);
   };
 
@@ -314,7 +322,11 @@ export default function PlannerScreen() {
       <PlanModal
         visible={modalVisible}
         editingPlan={editingPlan}
-        onClose={() => setModalVisible(false)}
+        initialDate={initialDate}
+        onClose={() => {
+          setModalVisible(false);
+          setInitialDate(undefined);
+        }}
         onSave={handleSavePlan}
       />
 

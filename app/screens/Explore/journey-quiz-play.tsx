@@ -6,17 +6,17 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useRef, useState } from 'react';
 import {
-    Animated,
-    Dimensions,
-    Image,
-    Modal,
-    SafeAreaView,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View
+  Animated,
+  Dimensions,
+  Image,
+  Modal,
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
 } from 'react-native';
 
 interface QuizAnswer {
@@ -510,7 +510,7 @@ const JourneyQuizPlay = () => {
                       />
                     )}
                   </View>
-                  <Text style={styles.optionText} numberOfLines={3}>{option}</Text>
+                  <Text style={styles.optionText} adjustsFontSizeToFit numberOfLines={3}>{option}</Text>
                 </View>
               </LinearGradient>
             </TouchableOpacity>

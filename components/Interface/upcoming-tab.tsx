@@ -4,15 +4,15 @@ import { LinearGradient } from 'expo-linear-gradient';
 import moment from 'moment';
 import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
-    ActivityIndicator,
-    Dimensions,
-    NativeScrollEvent,
-    NativeSyntheticEvent,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Dimensions,
+  NativeScrollEvent,
+  NativeSyntheticEvent,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import { Calendar } from 'react-native-calendars';
 
@@ -37,10 +37,17 @@ export default function UpcomingTab({
 }: UpcomingTabProps) {
   const [selectedDate, setSelectedDate] = useState<string>(moment().format('YYYY-MM-DD'));
   const [showFullCalendar, setShowFullCalendar] = useState(false);
+  
+  // Infinite scroll state - start with 2 weeks in horizontal scroll
+  const [visibleWeeks, setVisibleWeeks] = useState(2);
+  // Start with 30 days in vertical scroll
+  const [visibleDays, setVisibleDays] = useState(30);
+  
   const scrollViewRef = useRef<ScrollView>(null);
   const verticalScrollRef = useRef<ScrollView>(null);
   const dateSectionRefs = useRef<Map<string, number>>(new Map());
   const isScrollingFromHorizontal = useRef(false);
+  const isLoadingMore = useRef(false);
 
   const today = moment().format('YYYY-MM-DD');
   
@@ -51,15 +58,15 @@ export default function UpcomingTab({
   const HORIZONTAL_PADDING = 20;
   const ITEM_GAP = 6;
   const AVAILABLE_WIDTH = SCREEN_WIDTH - (HORIZONTAL_PADDING * 2);
-  const DATE_ITEM_WIDTH = (AVAILABLE_WIDTH - (ITEM_GAP * 6)) / 7; // 7 days with 6 gaps
+  const DATE_ITEM_WIDTH = (AVAILABLE_WIDTH - (ITEM_GAP * 6)) / 7;
   const WEEK_WIDTH = AVAILABLE_WIDTH;
   
   // Calculate week starting from Sunday
   const getWeekStart = (date: moment.Moment) => {
-    return date.clone().startOf('week'); // Sunday
+    return date.clone().startOf('week');
   };
 
-  // Generate weeks (4-5 weeks worth of days, grouped by week)
+  // Generate weeks dynamically based on visibleWeeks
   const weekGroups = useMemo(() => {
     const weeks: Array<Array<{
       dateString: string;
@@ -71,8 +78,8 @@ export default function UpcomingTab({
     
     let currentWeekStart = getWeekStart(moment());
     
-    // Generate 5 weeks
-    for (let weekIndex = 0; weekIndex < 5; weekIndex++) {
+    // Generate only the visible weeks
+    for (let weekIndex = 0; weekIndex < visibleWeeks; weekIndex++) {
       const week = [];
       for (let dayIndex = 0; dayIndex < 7; dayIndex++) {
         const date = currentWeekStart.clone().add(dayIndex, 'days');
@@ -90,7 +97,7 @@ export default function UpcomingTab({
     }
     
     return weeks;
-  }, [today]);
+  }, [today, visibleWeeks]);
 
   // Group plans by date
   const plansByDate = useMemo(() => {
@@ -117,7 +124,7 @@ export default function UpcomingTab({
     return map;
   }, [plans, today]);
 
-  // Create chronological list of dates with plans for vertical scroll
+  // Create chronological list of dates - only generate visible days
   const chronologicalDates = useMemo(() => {
     const dates: Array<{
       dateString: string;
@@ -127,17 +134,19 @@ export default function UpcomingTab({
       isTomorrow: boolean;
     }> = [];
 
-    // Get all dates with plans, sorted
+    // Get all dates with plans
     const sortedDates = Array.from(plansByDate.keys()).sort();
     
-    // Also include the next 30 days even if they don't have plans
+    // Generate future dates up to visibleDays
     const futureDates = [];
-    for (let i = 0; i < 30; i++) {
+    for (let i = 0; i < visibleDays; i++) {
       futureDates.push(moment().add(i, 'days').format('YYYY-MM-DD'));
     }
     
     // Combine and deduplicate
-    const allDates = Array.from(new Set([...futureDates, ...sortedDates])).sort();
+    const allDates = Array.from(new Set([...futureDates, ...sortedDates]))
+      .sort()
+      .slice(0, visibleDays); // Limit to visible days
     
     allDates.forEach(dateString => {
       const date = moment(dateString);
@@ -155,30 +164,47 @@ export default function UpcomingTab({
     });
     
     return dates;
-  }, [plansByDate, today]);
+  }, [plansByDate, today, visibleDays]);
 
-  // Helper function to scroll to date in horizontal scroll
-  const scrollToDateInWeekView = useCallback((targetDate: string) => {
-    setSelectedDate(targetDate);
-    // Find which week contains this date
-    const weekIndex = weekGroups.findIndex(week => 
-      week.some(day => day.dateString === targetDate)
-    );
-    if (weekIndex !== -1 && scrollViewRef.current) {
-      scrollViewRef.current.scrollTo({
-        x: weekIndex * WEEK_WIDTH,
-        animated: true,
-      });
+  // Handle horizontal scroll - load more weeks when near the end
+  const handleHorizontalScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
+    
+    // Check if user is near the end (within last 2 weeks)
+    const scrollPercentage = contentOffset.x / (contentSize.width - layoutMeasurement.width);
+    
+    if (scrollPercentage > 0.7 && !isLoadingMore.current) {
+      isLoadingMore.current = true;
+      // Add 2 more weeks
+      setVisibleWeeks(prev => prev + 2);
+      setTimeout(() => {
+        isLoadingMore.current = false;
+      }, 300);
     }
-  }, [weekGroups, WEEK_WIDTH]);
+  }, []);
 
-  // Handle vertical scroll to update selected date
+  // Handle vertical scroll - load more days and update selected date
   const handleVerticalScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
+    
+    // Load more days when near the bottom
+    const scrollPercentage = contentOffset.y / (contentSize.height - layoutMeasurement.height);
+    
+    if (scrollPercentage > 0.7 && !isLoadingMore.current) {
+      isLoadingMore.current = true;
+      // Add 30 more days
+      setVisibleDays(prev => prev + 30);
+      setTimeout(() => {
+        isLoadingMore.current = false;
+      }, 300);
+    }
+
+    // Update selected date based on scroll position
     if (isScrollingFromHorizontal.current) {
       return;
     }
 
-    const scrollY = event.nativeEvent.contentOffset.y;
+    const scrollY = contentOffset.y;
     
     // Find which date section is currently most visible
     let closestDate = chronologicalDates[0]?.dateString;
@@ -196,7 +222,45 @@ export default function UpcomingTab({
       setSelectedDate(closestDate);
       scrollToDateInWeekView(closestDate);
     }
-  }, [chronologicalDates, selectedDate, scrollToDateInWeekView]);
+  }, [chronologicalDates, selectedDate]);
+
+  // Helper function to scroll to date in horizontal scroll
+  const scrollToDateInWeekView = useCallback((targetDate: string) => {
+    setSelectedDate(targetDate);
+    
+    // Check if the date is in the currently loaded weeks
+    const weekIndex = weekGroups.findIndex(week => 
+      week.some(day => day.dateString === targetDate)
+    );
+    
+    if (weekIndex !== -1 && scrollViewRef.current) {
+      scrollViewRef.current.scrollTo({
+        x: weekIndex * WEEK_WIDTH,
+        animated: true,
+      });
+    } else {
+      // Date is not loaded yet, calculate and load more weeks
+      const targetMoment = moment(targetDate);
+      const startMoment = moment();
+      const weeksNeeded = Math.ceil(targetMoment.diff(startMoment, 'weeks', true)) + 2;
+      
+      if (weeksNeeded > visibleWeeks) {
+        setVisibleWeeks(weeksNeeded);
+        // Wait for state to update, then scroll
+        setTimeout(() => {
+          const newWeekIndex = weekGroups.findIndex(week => 
+            week.some(day => day.dateString === targetDate)
+          );
+          if (newWeekIndex !== -1 && scrollViewRef.current) {
+            scrollViewRef.current.scrollTo({
+              x: newWeekIndex * WEEK_WIDTH,
+              animated: true,
+            });
+          }
+        }, 100);
+      }
+    }
+  }, [weekGroups, WEEK_WIDTH, visibleWeeks]);
 
   // Handle date selection from horizontal scroll
   const handleDateSelect = useCallback((dateString: string) => {
@@ -207,36 +271,46 @@ export default function UpcomingTab({
     if (yPosition !== undefined && verticalScrollRef.current) {
       isScrollingFromHorizontal.current = true;
       verticalScrollRef.current.scrollTo({
-        y: yPosition - 20, // Offset for better visibility
+        y: yPosition - 20,
         animated: true,
       });
       
-      // Reset flag after animation completes
       setTimeout(() => {
         isScrollingFromHorizontal.current = false;
       }, 500);
+    } else {
+      // Date section not loaded yet, load more days
+      const targetMoment = moment(dateString);
+      const daysNeeded = targetMoment.diff(moment(), 'days') + 5;
+      
+      if (daysNeeded > visibleDays) {
+        setVisibleDays(daysNeeded);
+      }
     }
-  }, []);
+  }, [visibleDays]);
 
   // Measure date section positions
   const onDateSectionLayout = useCallback((dateString: string, y: number) => {
     dateSectionRefs.current.set(dateString, y);
   }, []);
 
-  // Marked dates for calendar
+  // Marked dates for calendar - only mark dates within visible range
   const markedDates = useMemo(() => {
     const marked: any = {};
     
     plansByDate.forEach((datePlans, date) => {
-      const hasCompleted = datePlans.some(p => p.status === 'completed');
-      const hasPending = datePlans.some(p => p.status === 'pending');
-      
-      marked[date] = {
-        marked: true,
-        dotColor: hasPending ? '#4facfe' : '#4ade80',
-        selected: date === selectedDate,
-        selectedColor: '#4facfe',
-      };
+      // Only mark dates within the next 90 days for performance
+      if (moment(date).diff(moment(), 'days') <= 90) {
+        const hasCompleted = datePlans.some(p => p.status === 'completed');
+        const hasPending = datePlans.some(p => p.status === 'pending');
+        
+        marked[date] = {
+          marked: true,
+          dotColor: hasPending ? '#4facfe' : '#4ade80',
+          selected: date === selectedDate,
+          selectedColor: '#4facfe',
+        };
+      }
     });
     
     if (selectedDate && !marked[selectedDate]) {
@@ -407,6 +481,8 @@ export default function UpcomingTab({
             snapToInterval={WEEK_WIDTH}
             snapToAlignment="start"
             decelerationRate="fast"
+            onScroll={handleHorizontalScroll}
+            scrollEventThrottle={400}
           >
             {weekGroups.map((week, weekIndex) => (
               <View 
@@ -472,7 +548,7 @@ export default function UpcomingTab({
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
         onScroll={handleVerticalScroll}
-        scrollEventThrottle={16}
+        scrollEventThrottle={400}
       >
         {chronologicalDates.map((dateGroup) => (
           <View 
@@ -517,6 +593,13 @@ export default function UpcomingTab({
           </View>
         ))}
 
+        {/* Loading indicator at the bottom */}
+        {chronologicalDates.length > 0 && visibleDays < 365 && (
+          <View style={styles.loadingMoreContainer}>
+            <Text style={styles.loadingMoreText}>Scroll for more dates...</Text>
+          </View>
+        )}
+
         {/* Overall Empty State */}
         {chronologicalDates.every(d => d.plans.length === 0) && (
           <View style={styles.overallEmptyState}>
@@ -533,7 +616,7 @@ export default function UpcomingTab({
               Start planning your future by adding your first plan!
             </Text>
             <TouchableOpacity
-              onPress={() => onCreatePlan()}
+              onPress={() => onCreatePlan(selectedDate)}
               style={styles.emptyButton}
               activeOpacity={0.7}
             >
@@ -719,20 +802,6 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: 8,
   },
-  emptyDateState: {
-    backgroundColor: 'rgba(255, 255, 255, 0.03)',
-    borderRadius: 12,
-    padding: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.05)',
-  },
-  emptyDateText: {
-    color: '#888',
-    fontSize: 13,
-    fontWeight: '500',
-  },
   planCard: {
     backgroundColor: 'rgba(255, 255, 255, 0.08)',
     borderRadius: 16,
@@ -851,6 +920,15 @@ const styles = StyleSheet.create({
   },
   deleteButton: {
     padding: 8,
+  },
+  loadingMoreContainer: {
+    paddingVertical: 20,
+    alignItems: 'center',
+  },
+  loadingMoreText: {
+    color: '#666',
+    fontSize: 13,
+    fontWeight: '500',
   },
   overallEmptyState: {
     alignItems: 'center',

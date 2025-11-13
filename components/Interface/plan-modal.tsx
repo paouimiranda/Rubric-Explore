@@ -5,18 +5,18 @@ import { LinearGradient } from 'expo-linear-gradient';
 import moment from 'moment';
 import React, { useEffect, useState } from 'react';
 import {
-    Alert,
-    Animated,
-    Dimensions,
-    KeyboardAvoidingView,
-    Modal,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  Alert,
+  Animated,
+  Dimensions,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -24,6 +24,7 @@ const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 interface PlanModalProps {
   visible: boolean;
   editingPlan: Plan | null;
+  initialDate?: string;
   onClose: () => void;
   onSave: () => void;
 }
@@ -31,6 +32,7 @@ interface PlanModalProps {
 export default function PlanModal({
   visible,
   editingPlan,
+  initialDate,
   onClose,
   onSave,
 }: PlanModalProps) {
@@ -80,10 +82,14 @@ export default function PlanModal({
         setPlanPriority(editingPlan.priority);
       } else {
         resetForm();
+        // If initialDate is provided, set it as the default date
+        if (initialDate) {
+          setPlanDate(new Date(initialDate));
+        }
       }
       setErrors({ title: false, time: false });
     }
-  }, [visible, editingPlan]);
+  }, [visible, editingPlan, initialDate]);
 
   const handleClose = () => {
     Animated.parallel([
