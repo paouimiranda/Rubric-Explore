@@ -2,7 +2,7 @@
 import { getTheme } from '@/constants/friend-card-themes';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Animated, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import ThemeAnimations from './theme-animations';
 
@@ -15,7 +15,7 @@ interface FriendCardProps {
   onMenuPress?: () => void;
   isMuted?: boolean;
   isPinned?: boolean;
-  themeId?: string; // NEW: Theme identifier
+  themeId?: string; // Theme identifier from user's Firestore
 }
 
 export default function FriendCard({ 
@@ -27,49 +27,54 @@ export default function FriendCard({
   onMenuPress,
   isMuted = false,
   isPinned = false,
-  themeId = 'default', // NEW: Default theme
+  themeId = 'default',
 }: FriendCardProps) {
   const theme = getTheme(themeId);
   const glowAnim = useRef(new Animated.Value(0)).current;
   const pulseAnim = useRef(new Animated.Value(1)).current;
+  const [isMounted, setIsMounted] = useState(false);
 
   useEffect(() => {
-    if (theme.animated) {
-      if (theme.animationType === 'glow' || theme.borderGlow) {
-        Animated.loop(
-          Animated.sequence([
-            Animated.timing(glowAnim, {
-              toValue: 1,
-              duration: 1500,
-              useNativeDriver: true,
-            }),
-            Animated.timing(glowAnim, {
-              toValue: 0,
-              duration: 1500,
-              useNativeDriver: true,
-            }),
-          ])
-        ).start();
-      }
+  setIsMounted(true);
+}, []);
 
-      if (theme.animationType === 'pulse') {
-        Animated.loop(
-          Animated.sequence([
-            Animated.timing(pulseAnim, {
-              toValue: 1.05,
-              duration: 1000,
-              useNativeDriver: true,
-            }),
-            Animated.timing(pulseAnim, {
-              toValue: 1,
-              duration: 1000,
-              useNativeDriver: true,
-            }),
-          ])
-        ).start();
-      }
+useEffect(() => {
+  if (theme.animated && isMounted) {
+    if (theme.animationType === 'glow' || theme.borderGlow) {
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(glowAnim, {
+            toValue: 1,
+            duration: 1500,
+            useNativeDriver: true,
+          }),
+          Animated.timing(glowAnim, {
+            toValue: 0,
+            duration: 1500,
+            useNativeDriver: true,
+          }),
+        ])
+      ).start();
     }
-  }, [theme.animated, theme.animationType, theme.borderGlow, glowAnim, pulseAnim]);
+
+    if (theme.animationType === 'pulse') {
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(pulseAnim, {
+            toValue: 1.05,
+            duration: 1000,
+            useNativeDriver: true,
+          }),
+          Animated.timing(pulseAnim, {
+            toValue: 1,
+            duration: 1000,
+            useNativeDriver: true,
+          }),
+        ])
+      ).start();
+    }
+  }
+}, [theme.animated, theme.animationType, theme.borderGlow, isMounted, glowAnim, pulseAnim]);
 
   const getStatusColor = () => {
     switch (status) {
@@ -116,14 +121,14 @@ export default function FriendCard({
       ['#f59e0b', '#f97316'],
       ['#10b981', '#059669'],
       ['#06b6d4', '#0891b2'],
-    ] as any;
+    ] as const;
     return gradients[firstChar % gradients.length];
   };
 
   const cardStyle = [
     styles.card,
     {
-      backgroundColor: theme.backgroundColor || 'rgba(31, 41, 55, 0.1)',
+      backgroundColor: theme.backgroundColor || 'rgba(31, 41, 55, 0.2)',
       borderWidth: theme.borderWidth || 1,
       borderColor: theme.borderColor || 'rgba(75, 85, 99, 0.3)',
     },
@@ -259,12 +264,12 @@ export default function FriendCard({
         </View>
       )}
 
-      {/* Theme badge (optional - shows theme rarity) */}
+      {/* Theme badge (optional - shows theme rarity)
       {themeId !== 'default' && (
         <View style={[styles.themeBadge, { backgroundColor: getRarityColor(theme.rarity) }]}>
           <Text style={styles.themeBadgeText}>{theme.rarity.toUpperCase()}</Text>
         </View>
-      )}
+      )} */}
     </View>
   );
 }

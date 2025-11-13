@@ -1,12 +1,16 @@
 // File: components/Shop/ShopTab.tsx
+import { CustomAlertModal } from '@/components/Interface/custom-alert-modal';
 import { FRIEND_CARD_THEMES, FriendCardTheme, ThemeRarity } from '@/constants/friend-card-themes';
+import { ShopService } from '@/services/shop-service';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
+    ActivityIndicator,
     Animated,
     Dimensions,
-    ScrollView,
+    FlatList,
+    Modal,
     StyleSheet,
     Text,
     TouchableOpacity,
@@ -14,380 +18,329 @@ import {
 } from 'react-native';
 
 const { width } = Dimensions.get('window');
+const CARD_WIDTH = (width - 56) / 2;
 
-// Shop category types (extensible for future items)
 type ShopCategory = 'themes' | 'avatars' | 'badges' | 'effects';
 
-interface ShopCategoryConfig {
-  id: ShopCategory;
-  label: string;
-  icon: keyof typeof Ionicons.glyphMap;
-  description: string;
-}
-
-const SHOP_CATEGORIES: ShopCategoryConfig[] = [
-  {
-    id: 'themes',
-    label: 'Card Themes',
-    icon: 'color-palette',
-    description: 'Customize your friend cards',
-  },
-  {
-    id: 'avatars',
-    label: 'Avatars',
-    icon: 'person-circle',
-    description: 'Coming soon!',
-  },
-  {
-    id: 'badges',
-    label: 'Badges',
-    icon: 'ribbon',
-    description: 'Coming soon!',
-  },
-  {
-    id: 'effects',
-    label: 'Effects',
-    icon: 'sparkles',
-    description: 'Coming soon!',
-  },
+const CATEGORIES = [
+  { id: 'themes' as const, label: 'Themes', icon: 'color-palette' as const },
+  { id: 'avatars' as const, label: 'Avatars', icon: 'person-circle' as const },
+  { id: 'badges' as const, label: 'Badges', icon: 'ribbon' as const },
+  { id: 'effects' as const, label: 'Effects', icon: 'sparkles' as const },
 ];
 
-// Rarity filter options
-const RARITY_FILTERS: (ThemeRarity | 'all')[] = ['all', 'common', 'rare', 'epic', 'legendary', 'mythic'];
+const RARITIES: (ThemeRarity | 'all')[] = ['all', 'common', 'rare', 'epic', 'legendary', 'mythic'];
+
+const RARITY_CONFIG = {
+  all: { color: '#667eea', label: 'All' },
+  common: { color: '#9ca3af', label: 'Common' },
+  rare: { color: '#3b82f6', label: 'Rare' },
+  epic: { color: '#a855f7', label: 'Epic' },
+  legendary: { color: '#fbbf24', label: 'Legendary' },
+  mythic: { color: '#f43f5e', label: 'Mythic' },
+};
 
 const ShopTab = () => {
-  const [activeCategory, setActiveCategory] = useState<ShopCategory>('themes');
-  const [selectedRarity, setSelectedRarity] = useState<ThemeRarity | 'all'>('all');
-  const [selectedTheme, setSelectedTheme] = useState<FriendCardTheme | null>(null);
-
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-  const slideAnim = useRef(new Animated.Value(50)).current;
+  const [category, setCategory] = useState<ShopCategory>('themes');
+  const [rarity, setRarity] = useState<ThemeRarity | 'all'>('all');
+  const [selected, setSelected] = useState<FriendCardTheme | null>(null);
+  const [shards, setShards] = useState(0);
+  const [owned, setOwned] = useState<string[]>([]);
+  const [active, setActive] = useState('default');
+  const [loading, setLoading] = useState(true);
+  const [alert, setAlert] = useState<{
+    visible: boolean;
+    type: 'info' | 'success' | 'error' | 'warning';
+    title: string;
+    message: string;
+    buttons?: Array<{
+      text: string;
+      onPress: () => void;
+      style?: 'default' | 'cancel' | 'primary';
+    }>;
+  }>({
+    visible: false,
+    type: 'info',
+    title: '',
+    message: '',
+  });
 
   useEffect(() => {
-    Animated.parallel([
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 400,
-        useNativeDriver: true,
-      }),
-      Animated.spring(slideAnim, {
-        toValue: 0,
-        tension: 50,
-        friction: 8,
-        useNativeDriver: true,
-      }),
-    ]).start();
+    loadData();
   }, []);
 
-  const handleCategoryChange = (category: ShopCategory) => {
-    if (category === activeCategory) return;
-    
-    // Reset animations
-    fadeAnim.setValue(0);
-    slideAnim.setValue(30);
-    
-    setActiveCategory(category);
-    setSelectedTheme(null);
-    
-    // Animate in
-    Animated.parallel([
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 300,
-        useNativeDriver: true,
-      }),
-      Animated.spring(slideAnim, {
-        toValue: 0,
-        tension: 60,
-        friction: 8,
-        useNativeDriver: true,
-      }),
-    ]).start();
+  const loadData = async () => {
+    try {
+      setLoading(true);
+      const [userShards, inventory] = await Promise.all([
+        ShopService.getUserShards(),
+        ShopService.getUserInventory(),
+      ]);
+      setShards(userShards);
+      setOwned(inventory.ownedThemes);
+      setActive(inventory.activeTheme);
+    } catch (error) {
+      setAlert({
+        visible: true,
+        type: 'error',
+        title: 'Error',
+        message: 'Failed to load shop data',
+        buttons: [{ text: 'OK', onPress: () => {}, style: 'primary' }],
+      });
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const getFilteredThemes = (): FriendCardTheme[] => {
-    const themes = Object.values(FRIEND_CARD_THEMES);
-    if (selectedRarity === 'all') return themes;
-    return themes.filter(theme => theme.rarity === selectedRarity);
-  };
+  const themes = Object.values(FRIEND_CARD_THEMES).filter(
+    t => rarity === 'all' || t.rarity === rarity
+  );
+
+  if (loading) {
+    return (
+      <View style={styles.loading}>
+        <ActivityIndicator size="large" color="#667eea" />
+        <Text style={styles.loadingText}>Loading...</Text>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.title}>Cosmic Shop</Text>
-        <Text style={styles.subtitle}>Customize your journey</Text>
+        <View>
+          <Text style={styles.title}>Cosmic Shop</Text>
+          <Text style={styles.subtitle}>Customize your journey</Text>
+        </View>
+        <View style={styles.shards}>
+          <Ionicons name="diamond" size={18} color="#fbbf24" />
+          <Text style={styles.shardsText}>{shards}</Text>
+        </View>
       </View>
 
-      {/* Category Pills */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.categoryScroll}
-        style={styles.categoryContainer}
-      >
-        {SHOP_CATEGORIES.map((category) => (
-          <TouchableOpacity
-            key={category.id}
-            onPress={() => handleCategoryChange(category.id)}
-            activeOpacity={0.7}
-          >
-            <View
-              style={[
-                styles.categoryPill,
-                activeCategory === category.id && styles.categoryPillActive,
-              ]}
-            >
-              {activeCategory === category.id && (
-                <LinearGradient
-                  colors={['#667eea', '#764ba2']}
-                  style={StyleSheet.absoluteFillObject}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
+      {/* Categories */}
+      <View style={styles.categoriesContainer}>
+        <FlatList
+          horizontal
+          data={CATEGORIES}
+          keyExtractor={c => c.id}
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.categoriesContent}
+          renderItem={({ item }) => (
+            <TouchableOpacity onPress={() => setCategory(item.id)}>
+              <View style={[styles.category, category === item.id && styles.categoryActive]}>
+                {category === item.id && (
+                  <LinearGradient
+                    colors={['#667eea', '#764ba2']}
+                    style={StyleSheet.absoluteFill}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                  />
+                )}
+                <Ionicons
+                  name={item.icon}
+                  size={16}
+                  color={category === item.id ? '#fff' : '#888'}
                 />
-              )}
-              <Ionicons
-                name={category.icon}
-                size={18}
-                color={activeCategory === category.id ? '#fff' : '#aaa'}
-              />
-              <Text
-                style={[
-                  styles.categoryLabel,
-                  activeCategory === category.id && styles.categoryLabelActive,
-                ]}
-              >
-                {category.label}
-              </Text>
-            </View>
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
+                <Text style={[styles.categoryText, category === item.id && styles.categoryTextActive]}>
+                  {item.label}
+                </Text>
+              </View>
+            </TouchableOpacity>
+          )}
+        />
+      </View>
 
-      {/* Content Area */}
-      <Animated.View
-        style={[
-          styles.contentContainer,
-          {
-            opacity: fadeAnim,
-            transform: [{ translateY: slideAnim }],
-          },
-        ]}
-      >
-        {activeCategory === 'themes' ? (
-          <>
-            {/* Rarity Filter */}
-            <ScrollView
+      {/* Content */}
+      {category === 'themes' ? (
+        <>
+          {/* Rarity Filters */}
+          <View style={styles.filtersContainer}>
+            <FlatList
               horizontal
+              data={RARITIES}
+              keyExtractor={r => r}
               showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.filterScroll}
-              style={styles.filterContainer}
-            >
-              {RARITY_FILTERS.map((rarity) => (
-                <TouchableOpacity
-                  key={rarity}
-                  onPress={() => setSelectedRarity(rarity)}
-                  activeOpacity={0.7}
-                >
+              contentContainerStyle={styles.filtersContent}
+              renderItem={({ item }) => (
+                <TouchableOpacity onPress={() => setRarity(item)}>
                   <View
                     style={[
-                      styles.filterChip,
-                      selectedRarity === rarity && styles.filterChipActive,
-                      selectedRarity === rarity && rarity !== 'all' && {
-                        backgroundColor: getRarityColor(rarity as ThemeRarity) + '30',
-                        borderColor: getRarityColor(rarity as ThemeRarity),
+                      styles.filter,
+                      rarity === item && {
+                        backgroundColor: RARITY_CONFIG[item].color + '20',
+                        borderColor: RARITY_CONFIG[item].color,
                       },
                     ]}
                   >
                     <Text
                       style={[
-                        styles.filterLabel,
-                        selectedRarity === rarity && styles.filterLabelActive,
-                        selectedRarity === rarity && rarity !== 'all' && {
-                          color: getRarityColor(rarity as ThemeRarity),
-                        },
+                        styles.filterText,
+                        rarity === item && { color: RARITY_CONFIG[item].color },
                       ]}
                     >
-                      {rarity === 'all' ? 'All' : rarity.charAt(0).toUpperCase() + rarity.slice(1)}
+                      {RARITY_CONFIG[item].label}
                     </Text>
                   </View>
                 </TouchableOpacity>
-              ))}
-            </ScrollView>
-
-            {/* Theme Grid */}
-            <ScrollView
-              style={styles.themeScrollView}
-              contentContainerStyle={styles.themeGrid}
-              showsVerticalScrollIndicator={false}
-            >
-              {getFilteredThemes().map((theme) => (
-                <ThemeCard
-                  key={theme.id}
-                  theme={theme}
-                  isSelected={selectedTheme?.id === theme.id}
-                  onPress={() => setSelectedTheme(theme)}
-                />
-              ))}
-              
-              {/* Spacer */}
-              <View style={{ height: 100 }} />
-            </ScrollView>
-          </>
-        ) : (
-          // Coming Soon for other categories
-          <View style={styles.comingSoonContainer}>
-            <Ionicons
-              name={SHOP_CATEGORIES.find(c => c.id === activeCategory)?.icon || 'cube'}
-              size={80}
-              color="#555"
+              )}
             />
-            <Text style={styles.comingSoonTitle}>Coming Soon!</Text>
-            <Text style={styles.comingSoonText}>
-              {SHOP_CATEGORIES.find(c => c.id === activeCategory)?.description}
-            </Text>
           </View>
-        )}
-      </Animated.View>
 
-      {/* Theme Preview Modal (Bottom Sheet) */}
-      {selectedTheme && (
-        <ThemePreviewModal
-          theme={selectedTheme}
-          onClose={() => setSelectedTheme(null)}
+          {/* Themes Grid */}
+          <FlatList
+            data={themes}
+            keyExtractor={t => t.id}
+            numColumns={2}
+            contentContainerStyle={styles.grid}
+            columnWrapperStyle={styles.row}
+            showsVerticalScrollIndicator={false}
+            renderItem={({ item }) => (
+              <ThemeCard
+                theme={item}
+                owned={owned.includes(item.id)}
+                active={active === item.id}
+                onPress={() => setSelected(item)}
+              />
+            )}
+          />
+        </>
+      ) : (
+        <View style={styles.comingSoon}>
+          <Ionicons name={CATEGORIES.find(c => c.id === category)?.icon || 'cube'} size={64} color="#555" />
+          <Text style={styles.comingSoonTitle}>Coming Soon</Text>
+          <Text style={styles.comingSoonText}>This feature is under development</Text>
+        </View>
+      )}
+
+      {/* Modal */}
+      {selected && (
+        <ThemeModal
+          theme={selected}
+          owned={owned.includes(selected.id)}
+          active={active === selected.id}
+          shards={shards}
+          onClose={() => setSelected(null)}
+          onSuccess={loadData}
         />
       )}
+
+      {/* Custom Alert Modal */}
+      <CustomAlertModal
+        visible={alert.visible}
+        type={alert.type}
+        title={alert.title}
+        message={alert.message}
+        buttons={alert.buttons}
+        onClose={() => setAlert({ ...alert, visible: false })}
+      />
     </View>
   );
 };
 
 interface ThemeCardProps {
   theme: FriendCardTheme;
-  isSelected: boolean;
+  owned: boolean;
+  active: boolean;
   onPress: () => void;
 }
 
-const ThemeCard: React.FC<ThemeCardProps> = ({ theme, isSelected, onPress }) => {
-  const scaleAnim = useRef(new Animated.Value(1)).current;
+const ThemeCard: React.FC<ThemeCardProps> = ({ theme, owned, active, onPress }) => (
+  <TouchableOpacity onPress={onPress} activeOpacity={0.8} style={styles.cardWrapper}>
+    <View style={styles.card}>
+      {theme.gradientColors ? (
+        <LinearGradient
+          colors={theme.gradientColors as any}
+          style={styles.cardPreview}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+        />
+      ) : (
+        <View style={[styles.cardPreview, { backgroundColor: theme.backgroundColor }]} />
+      )}
 
-  const handlePressIn = () => {
-    Animated.spring(scaleAnim, {
-      toValue: 0.95,
-      tension: 300,
-      friction: 10,
-      useNativeDriver: true,
-    }).start();
-  };
-
-  const handlePressOut = () => {
-    Animated.spring(scaleAnim, {
-      toValue: 1,
-      tension: 300,
-      friction: 10,
-      useNativeDriver: true,
-    }).start();
-  };
-
-  return (
-    <Animated.View style={[styles.themeCardWrapper, { transform: [{ scale: scaleAnim }] }]}>
-      <TouchableOpacity
-        onPress={onPress}
-        onPressIn={handlePressIn}
-        onPressOut={handlePressOut}
-        activeOpacity={0.9}
-      >
-        {/* Theme Preview */}
-        <View style={styles.themeCard}>
-          {/* Background Gradient Preview */}
-          {theme.gradientColors ? (
-            <LinearGradient
-              colors={theme.gradientColors as any}
-              style={styles.themePreview}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-            />
-          ) : (
-            <View style={[styles.themePreview, { backgroundColor: theme.backgroundColor }]} />
-          )}
-
-          {/* Animated Badge */}
-          {theme.animated && (
-            <View style={styles.animatedBadge}>
-              <Ionicons name="flash" size={12} color="#fff" />
-            </View>
-          )}
-
-          {/* Rarity Badge */}
-          <LinearGradient
-            colors={getRarityGradient(theme.rarity)}
-            style={styles.rarityBadge}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-          >
-            <Text style={styles.rarityText}>
-              {theme.rarity.charAt(0).toUpperCase()}
-            </Text>
-          </LinearGradient>
+      {/* Badges */}
+      {active && (
+        <View style={styles.activeBadge}>
+          <Ionicons name="checkmark-circle" size={18} color="#10b981" />
         </View>
-
-        {/* Theme Info */}
-        <View style={styles.themeInfo}>
-          <Text style={styles.themeName} numberOfLines={1}>
-            {theme.name}
-          </Text>
-          <View style={styles.themePriceRow}>
-            <Ionicons name="diamond" size={14} color="#fbbf24" />
-            <Text style={styles.themePrice}>{theme.price}</Text>
-          </View>
+      )}
+      {owned && !active && (
+        <View style={[styles.badge, { backgroundColor: '#3b82f6' }]}>
+          <Ionicons name="checkmark" size={14} color="#fff" />
         </View>
-      </TouchableOpacity>
-    </Animated.View>
-  );
-};
+      )}
+      {theme.animated && !owned && (
+        <View style={[styles.badge, { backgroundColor: '#fbbf24' }]}>
+          <Ionicons name="flash" size={12} color="#fff" />
+        </View>
+      )}
 
-// Helper functions at module level
-const getRarityColor = (rarity: ThemeRarity): string => {
-  switch (rarity) {
-    case 'common': return '#9ca3af';
-    case 'rare': return '#3b82f6';
-    case 'epic': return '#a855f7';
-    case 'legendary': return '#fbbf24';
-    case 'mythic': return '#f43f5e';
-    default: return '#9ca3af';
-  }
-};
+      {/* Rarity */}
+      <View style={[styles.rarityBadge, { backgroundColor: RARITY_CONFIG[theme.rarity].color }]}>
+        <Text style={styles.rarityText}>{theme.rarity[0].toUpperCase()}</Text>
+      </View>
+    </View>
 
-const getRarityGradient = (rarity: ThemeRarity): [string, string] => {
-  switch (rarity) {
-    case 'common': return ['#9ca3af', '#6b7280'];
-    case 'rare': return ['#3b82f6', '#2563eb'];
-    case 'epic': return ['#a855f7', '#9333ea'];
-    case 'legendary': return ['#fbbf24', '#f59e0b'];
-    case 'mythic': return ['#f43f5e', '#e11d48'];
-    default: return ['#9ca3af', '#6b7280'];
-  }
-};
+    <View style={styles.cardInfo}>
+      <Text style={styles.cardName} numberOfLines={1}>
+        {theme.name}
+      </Text>
+      {!owned ? (
+        <View style={styles.price}>
+          <Ionicons name="diamond" size={12} color="#fbbf24" />
+          <Text style={styles.priceText}>{theme.price}</Text>
+        </View>
+      ) : (
+        <Text style={styles.ownedText}>{active ? 'Active' : 'Owned'}</Text>
+      )}
+    </View>
+  </TouchableOpacity>
+);
 
-interface ThemePreviewModalProps {
+interface ThemeModalProps {
   theme: FriendCardTheme;
+  owned: boolean;
+  active: boolean;
+  shards: number;
   onClose: () => void;
+  onSuccess: () => void;
 }
 
-const ThemePreviewModal: React.FC<ThemePreviewModalProps> = ({ theme, onClose }) => {
-  const slideAnim = useRef(new Animated.Value(300)).current;
-  const backdropAnim = useRef(new Animated.Value(0)).current;
+const ThemeModal: React.FC<ThemeModalProps> = ({ theme, owned, active, shards, onClose, onSuccess }) => {
+  const [loading, setLoading] = useState(false);
+  const [fadeAnim] = useState(new Animated.Value(0));
+  const [slideAnim] = useState(new Animated.Value(300));
+  const [alert, setAlert] = useState<{
+    visible: boolean;
+    type: 'info' | 'success' | 'error' | 'warning';
+    title: string;
+    message: string;
+    buttons?: Array<{
+      text: string;
+      onPress: () => void;
+      style?: 'default' | 'cancel' | 'primary';
+    }>;
+  }>({
+    visible: false,
+    type: 'info',
+    title: '',
+    message: '',
+  });
+  const canAfford = shards >= theme.price;
 
   useEffect(() => {
     Animated.parallel([
-      Animated.spring(slideAnim, {
-        toValue: 0,
-        tension: 80,
-        friction: 10,
-        useNativeDriver: true,
-      }),
-      Animated.timing(backdropAnim, {
+      Animated.timing(fadeAnim, {
         toValue: 1,
         duration: 300,
+        useNativeDriver: true,
+      }),
+      Animated.spring(slideAnim, {
+        toValue: 0,
+        tension: 65,
+        friction: 11,
         useNativeDriver: true,
       }),
     ]).start();
@@ -395,257 +348,379 @@ const ThemePreviewModal: React.FC<ThemePreviewModalProps> = ({ theme, onClose })
 
   const handleClose = () => {
     Animated.parallel([
-      Animated.timing(slideAnim, {
-        toValue: 300,
-        duration: 250,
+      Animated.timing(fadeAnim, {
+        toValue: 0,
+        duration: 200,
         useNativeDriver: true,
       }),
-      Animated.timing(backdropAnim, {
-        toValue: 0,
-        duration: 250,
+      Animated.timing(slideAnim, {
+        toValue: 300,
+        duration: 200,
         useNativeDriver: true,
       }),
     ]).start(() => onClose());
   };
 
+  const handlePurchase = async () => {
+    if (theme.price === 0 || owned) {
+      handleActivate();
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const result = await ShopService.purchaseTheme(theme.id, theme.price);
+      if (result.success) {
+        setAlert({
+          visible: true,
+          type: 'success',
+          title: 'Success! ✨',
+          message: result.message,
+          buttons: [
+            {
+              text: 'OK',
+              onPress: () => {
+                onSuccess();
+                handleClose();
+              },
+              style: 'primary',
+            },
+          ],
+        });
+      } else {
+        setAlert({
+          visible: true,
+          type: 'error',
+          title: 'Failed',
+          message: result.message,
+          buttons: [{ text: 'OK', onPress: () => {}, style: 'primary' }],
+        });
+      }
+    } catch (error) {
+      setAlert({
+        visible: true,
+        type: 'error',
+        title: 'Error',
+        message: 'Something went wrong',
+        buttons: [{ text: 'OK', onPress: () => {}, style: 'primary' }],
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleActivate = async () => {
+    try {
+      setLoading(true);
+      const result = await ShopService.setActiveTheme(theme.id);
+      if (result.success) {
+        setAlert({
+          visible: true,
+          type: 'success',
+          title: 'Activated! ✨',
+          message: result.message,
+          buttons: [
+            {
+              text: 'OK',
+              onPress: () => {
+                onSuccess();
+                handleClose();
+              },
+              style: 'primary',
+            },
+          ],
+        });
+      } else {
+        setAlert({
+          visible: true,
+          type: 'error',
+          title: 'Error',
+          message: result.message,
+          buttons: [{ text: 'OK', onPress: () => {}, style: 'primary' }],
+        });
+      }
+    } catch (error) {
+      setAlert({
+        visible: true,
+        type: 'error',
+        title: 'Error',
+        message: 'Something went wrong',
+        buttons: [{ text: 'OK', onPress: () => {}, style: 'primary' }],
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const buttonText = active ? 'Active' : owned ? 'Use Theme' : theme.price === 0 ? 'Get Free' : 'Purchase';
+  const disabled = active || (!owned && !canAfford);
+
   return (
-    <View style={styles.modalContainer}>
-      {/* Backdrop */}
-      <Animated.View
-        style={[
-          styles.modalBackdrop,
-          { opacity: backdropAnim },
-        ]}
-      >
-        <TouchableOpacity
-          style={StyleSheet.absoluteFillObject}
-          onPress={handleClose}
-          activeOpacity={1}
-        />
-      </Animated.View>
+    <>
+      <Modal visible animationType="none" transparent onRequestClose={handleClose}>
+        <Animated.View style={[styles.modalOverlay, { opacity: fadeAnim }]}>
+          <TouchableOpacity style={StyleSheet.absoluteFill} onPress={handleClose} activeOpacity={1} />
+          
+          <Animated.View style={[styles.modal, { transform: [{ translateY: slideAnim }] }]}>
+            <View style={styles.modalHandle} />
+            
+            <TouchableOpacity style={styles.closeBtn} onPress={handleClose}>
+              <Ionicons name="close" size={24} color="#fff" />
+            </TouchableOpacity>
 
-      {/* Modal Content */}
-      <Animated.View
-        style={[
-          styles.modalContent,
-          {
-            transform: [{ translateY: slideAnim }],
-          },
-        ]}
-      >
-        <View style={styles.modalHandle} />
-
-        {/* Close Button */}
-        <TouchableOpacity style={styles.closeButton} onPress={handleClose}>
-          <Ionicons name="close" size={24} color="#fff" />
-        </TouchableOpacity>
-
-        <ScrollView showsVerticalScrollIndicator={false}>
-          {/* Large Preview */}
-          <View style={styles.modalPreviewContainer}>
-            {theme.gradientColors ? (
-              <LinearGradient
-                colors={theme.gradientColors as any}
-                style={styles.modalPreview}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-              />
-            ) : (
-              <View style={[styles.modalPreview, { backgroundColor: theme.backgroundColor }]} />
-            )}
-          </View>
-
-          {/* Theme Details */}
-          <View style={styles.modalDetails}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>{theme.name}</Text>
-              <View
-                style={[
-                  styles.modalRarityBadge,
-                  { backgroundColor: getRarityColor(theme.rarity) },
-                ]}
-              >
-                <Text style={styles.modalRarityText}>
-                  {theme.rarity.toUpperCase()}
-                </Text>
-              </View>
-            </View>
-
-            <Text style={styles.modalDescription}>{theme.description}</Text>
-
-            {/* Features */}
-            <View style={styles.featuresContainer}>
-              {theme.animated && (
-                <View style={styles.featureChip}>
-                  <Ionicons name="flash" size={14} color="#fbbf24" />
-                  <Text style={styles.featureText}>Animated</Text>
-                </View>
+            {/* Preview */}
+            <View style={styles.modalPreview}>
+              {theme.gradientColors ? (
+                <LinearGradient
+                  colors={theme.gradientColors as any}
+                  style={styles.modalPreviewInner}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                />
+              ) : (
+                <View style={[styles.modalPreviewInner, { backgroundColor: theme.backgroundColor }]} />
               )}
-              {theme.borderGlow && (
-                <View style={styles.featureChip}>
-                  <Ionicons name="sparkles" size={14} color="#a855f7" />
-                  <Text style={styles.featureText}>Glow Effect</Text>
-                </View>
-              )}
-              {theme.particles && (
-                <View style={styles.featureChip}>
-                  <Ionicons name="water" size={14} color="#3b82f6" />
-                  <Text style={styles.featureText}>Particles</Text>
+              {active && (
+                <View style={styles.modalActiveBadge}>
+                  <Ionicons name="checkmark-circle" size={20} color="#10b981" />
+                  <Text style={styles.modalActiveBadgeText}>Active</Text>
                 </View>
               )}
             </View>
 
-            {/* Price & Purchase */}
-            <View style={styles.purchaseContainer}>
-              <View style={styles.priceContainer}>
-                <Ionicons name="diamond" size={24} color="#fbbf24" />
-                <Text style={styles.modalPrice}>{theme.price}</Text>
-                <Text style={styles.modalPriceLabel}>Shards</Text>
+            {/* Details */}
+            <View style={styles.modalContent}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>{theme.name}</Text>
+                <View style={[styles.modalRarity, { backgroundColor: RARITY_CONFIG[theme.rarity].color }]}>
+                  <Text style={styles.modalRarityText}>{theme.rarity.toUpperCase()}</Text>
+                </View>
               </View>
 
+              <Text style={styles.modalDesc}>{theme.description}</Text>
+
+              {/* Features */}
+              <View style={styles.features}>
+                {theme.animated && (
+                  <View style={styles.feature}>
+                    <Ionicons name="flash" size={14} color="#fbbf24" />
+                    <Text style={styles.featureText}>Animated</Text>
+                  </View>
+                )}
+                {theme.borderGlow && (
+                  <View style={styles.feature}>
+                    <Ionicons name="sparkles" size={14} color="#a855f7" />
+                    <Text style={styles.featureText}>Glow</Text>
+                  </View>
+                )}
+                {theme.particles && (
+                  <View style={styles.feature}>
+                    <Ionicons name="water" size={14} color="#3b82f6" />
+                    <Text style={styles.featureText}>Particles</Text>
+                  </View>
+                )}
+              </View>
+
+              {/* Price */}
+              {!owned && (
+                <View style={styles.modalPrice}>
+                  <Ionicons name="diamond" size={22} color="#fbbf24" />
+                  <Text style={styles.modalPriceValue}>{theme.price}</Text>
+                  <Text style={styles.modalPriceLabel}>Shards</Text>
+                </View>
+              )}
+
+              {/* Warning */}
+              {!owned && !canAfford && theme.price > 0 && (
+                <View style={styles.warning}>
+                  <Ionicons name="warning" size={16} color="#f59e0b" />
+                  <Text style={styles.warningText}>Need {theme.price - shards} more shards</Text>
+                </View>
+              )}
+
+              {/* Button */}
               <TouchableOpacity
-                style={styles.purchaseButton}
-                onPress={() => {
-                  // TODO: Implement purchase logic
-                  console.log('Purchase theme:', theme.id);
-                }}
+                style={[styles.button, disabled && styles.buttonDisabled]}
+                onPress={owned ? handleActivate : handlePurchase}
+                disabled={loading || disabled}
               >
                 <LinearGradient
-                  colors={['#667eea', '#764ba2']}
-                  style={styles.purchaseButtonGradient}
+                  colors={disabled ? ['#555', '#444'] : ['#667eea', '#764ba2']}
+                  style={styles.buttonGradient}
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 1 }}
                 >
-                  <Text style={styles.purchaseButtonText}>
-                    {theme.price === 0 ? 'Use Theme' : 'Purchase'}
-                  </Text>
+                  {loading ? (
+                    <ActivityIndicator color="#fff" />
+                  ) : (
+                    <Text style={styles.buttonText}>{buttonText}</Text>
+                  )}
                 </LinearGradient>
               </TouchableOpacity>
             </View>
-          </View>
-        </ScrollView>
-      </Animated.View>
-    </View>
+          </Animated.View>
+        </Animated.View>
+      </Modal>
+
+      {/* Custom Alert Modal */}
+      <CustomAlertModal
+        visible={alert.visible}
+        type={alert.type}
+        title={alert.title}
+        message={alert.message}
+        buttons={alert.buttons}
+        onClose={() => setAlert({ ...alert, visible: false })}
+      />
+    </>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: 'transparent',
+  },
+  loading: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    fontFamily: 'Montserrat',
+    fontSize: 14,
+    color: '#888',
+    marginTop: 12,
   },
   header: {
-    paddingHorizontal: 24,
-    marginBottom: 20,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingTop: 8,
+    paddingBottom: 16,
   },
   title: {
     fontFamily: 'Montserrat',
-    fontSize: 32,
+    fontSize: 28,
     fontWeight: '700',
     color: '#fff',
-    marginBottom: 8,
   },
   subtitle: {
     fontFamily: 'Montserrat',
-    fontSize: 15,
-    color: '#aaa',
+    fontSize: 14,
+    color: '#888',
+    marginTop: 2,
   },
-  categoryContainer: {
-    marginBottom: 16,
-  },
-  categoryScroll: {
-    paddingHorizontal: 24,
-    gap: 8,
-  },
-  categoryPill: {
+  shards: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
-    gap: 8,
-    overflow: 'hidden',
-  },
-  categoryPillActive: {
-    borderColor: 'rgba(102, 126, 234, 0.5)',
-  },
-  categoryLabel: {
-    fontFamily: 'Montserrat',
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#aaa',
-  },
-  categoryLabelActive: {
-    color: '#fff',
-    fontWeight: '700',
-  },
-  contentContainer: {
-    flex: 1,
-  },
-  filterContainer: {
-    marginBottom: 16,
-  },
-  filterScroll: {
-    paddingHorizontal: 24,
-    gap: 8,
-  },
-  filterChip: {
+    gap: 6,
     paddingHorizontal: 14,
     paddingVertical: 8,
+    backgroundColor: 'rgba(251, 191, 36, 0.15)',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(251, 191, 36, 0.3)',
+  },
+  shardsText: {
+    fontFamily: 'Montserrat',
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#fbbf24',
+  },
+  categoriesContainer: {
+    marginBottom: 12,
+  },
+  categoriesContent: {
+    paddingHorizontal: 20,
+    gap: 8,
+  },
+  category: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
     borderRadius: 16,
     backgroundColor: 'rgba(255, 255, 255, 0.05)',
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.1)',
+    overflow: 'hidden',
   },
-  filterChipActive: {
-    backgroundColor: 'rgba(102, 126, 234, 0.2)',
-    borderColor: '#667eea',
+  categoryActive: {
+    borderColor: 'rgba(102, 126, 234, 0.5)',
   },
-  filterLabel: {
+  categoryText: {
+    fontFamily: 'Montserrat',
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#888',
+  },
+  categoryTextActive: {
+    color: '#fff',
+    fontWeight: '700',
+  },
+  filtersContainer: {
+    marginBottom: 8,
+  },
+  filtersContent: {
+    paddingHorizontal: 20,
+    gap: 8,
+  },
+  filter: {
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    borderRadius: 14,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  filterText: {
     fontFamily: 'Montserrat',
     fontSize: 12,
     fontWeight: '600',
     color: '#888',
   },
-  filterLabelActive: {
-    color: '#667eea',
-    fontWeight: '700',
+  grid: {
+    paddingHorizontal: 20,
+    paddingTop: 8,
+    paddingBottom: 100,
   },
-  themeScrollView: {
-    flex: 1,
-  },
-  themeGrid: {
-    paddingHorizontal: 24,
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+  row: {
     justifyContent: 'space-between',
-  },
-  themeCardWrapper: {
-    width: (width - 64) / 2,
     marginBottom: 16,
   },
-  themeCard: {
+  cardWrapper: {
+    width: CARD_WIDTH,
+  },
+  card: {
     width: '100%',
     aspectRatio: 1,
-    borderRadius: 16,
+    borderRadius: 14,
     overflow: 'hidden',
     borderWidth: 2,
     borderColor: 'rgba(255, 255, 255, 0.1)',
-    position: 'relative',
   },
-  themePreview: {
+  cardPreview: {
     flex: 1,
   },
-  animatedBadge: {
+  activeBadge: {
     position: 'absolute',
     top: 8,
     right: 8,
-    backgroundColor: 'rgba(251, 191, 36, 0.9)',
+    backgroundColor: 'rgba(16, 185, 129, 0.2)',
     borderRadius: 10,
-    width: 24,
-    height: 24,
+    padding: 5,
+    borderWidth: 1,
+    borderColor: '#10b981',
+  },
+  badge: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    borderRadius: 10,
+    width: 22,
+    height: 22,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -653,205 +728,243 @@ const styles = StyleSheet.create({
     position: 'absolute',
     bottom: 8,
     left: 8,
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
     alignItems: 'center',
     justifyContent: 'center',
   },
   rarityText: {
     fontFamily: 'Montserrat',
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '700',
     color: '#fff',
   },
-  themeInfo: {
+  cardInfo: {
     marginTop: 8,
   },
-  themeName: {
+  cardName: {
     fontFamily: 'Montserrat',
     fontSize: 13,
     fontWeight: '600',
     color: '#fff',
-    marginBottom: 4,
+    marginBottom: 3,
   },
-  themePriceRow: {
+  price: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
   },
-  themePrice: {
+  priceText: {
     fontFamily: 'Montserrat',
     fontSize: 12,
     fontWeight: '700',
     color: '#fbbf24',
   },
-  comingSoonContainer: {
+  ownedText: {
+    fontFamily: 'Montserrat',
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#3b82f6',
+  },
+  comingSoon: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingBottom: 100,
+    paddingBottom: 80,
   },
   comingSoonTitle: {
     fontFamily: 'Montserrat',
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: '700',
     color: '#fff',
     marginTop: 16,
-    marginBottom: 8,
   },
   comingSoonText: {
     fontFamily: 'Montserrat',
     fontSize: 14,
     color: '#888',
-    textAlign: 'center',
+    marginTop: 4,
   },
-  modalContainer: {
-    ...StyleSheet.absoluteFillObject,
+  modalOverlay: {
+    flex: 1,
     justifyContent: 'flex-end',
+    backgroundColor: 'rgba(0, 0, 0, 0.85)',
   },
-  modalBackdrop: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
-  },
-  modalContent: {
+  modal: {
     backgroundColor: '#1a2f4f',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
     maxHeight: '80%',
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.1)',
   },
   modalHandle: {
-    width: 40,
+    width: 36,
     height: 4,
     backgroundColor: 'rgba(255, 255, 255, 0.3)',
     borderRadius: 2,
     alignSelf: 'center',
-    marginTop: 12,
-    marginBottom: 20,
+    marginTop: 10,
   },
-  closeButton: {
+  closeBtn: {
     position: 'absolute',
-    top: 20,
-    right: 20,
+    top: 16,
+    right: 16,
     zIndex: 10,
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  modalPreviewContainer: {
-    paddingHorizontal: 24,
-    marginBottom: 20,
-  },
   modalPreview: {
+    paddingHorizontal: 20,
+    paddingTop: 20,
+  },
+  modalPreviewInner: {
     width: '100%',
-    height: 200,
-    borderRadius: 20,
+    height: 180,
+    borderRadius: 16,
     borderWidth: 2,
     borderColor: 'rgba(255, 255, 255, 0.2)',
   },
-  modalDetails: {
-    paddingHorizontal: 24,
-    paddingBottom: 24,
+  modalActiveBadge: {
+    position: 'absolute',
+    top: 10,
+    left: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: 'rgba(16, 185, 129, 0.2)',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#10b981',
+  },
+  modalActiveBadgeText: {
+    fontFamily: 'Montserrat',
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#10b981',
+  },
+  modalContent: {
+    padding: 20,
   },
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: 10,
   },
   modalTitle: {
     fontFamily: 'Montserrat',
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: '700',
     color: '#fff',
     flex: 1,
   },
-  modalRarityBadge: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 12,
+  modalRarity: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 10,
   },
   modalRarityText: {
     fontFamily: 'Montserrat',
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '700',
     color: '#fff',
-    letterSpacing: 0.5,
   },
-  modalDescription: {
+  modalDesc: {
     fontFamily: 'Montserrat',
     fontSize: 14,
     color: '#aaa',
-    marginBottom: 20,
     lineHeight: 20,
+    marginBottom: 16,
   },
-  featuresContainer: {
+  features: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 8,
-    marginBottom: 24,
+    marginBottom: 20,
   },
-  featureChip: {
+  feature: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 12,
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 10,
     backgroundColor: 'rgba(255, 255, 255, 0.08)',
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.1)',
   },
   featureText: {
     fontFamily: 'Montserrat',
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '600',
     color: '#fff',
   },
-  purchaseContainer: {
-    gap: 16,
-  },
-  priceContainer: {
+  modalPrice: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    paddingVertical: 16,
+    paddingVertical: 14,
     backgroundColor: 'rgba(251, 191, 36, 0.1)',
-    borderRadius: 16,
+    borderRadius: 14,
     borderWidth: 1,
     borderColor: 'rgba(251, 191, 36, 0.3)',
+    marginBottom: 12,
   },
-  modalPrice: {
+  modalPriceValue: {
     fontFamily: 'Montserrat',
-    fontSize: 28,
+    fontSize: 26,
     fontWeight: '700',
     color: '#fbbf24',
   },
   modalPriceLabel: {
     fontFamily: 'Montserrat',
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '600',
     color: '#fbbf24',
     opacity: 0.8,
   },
-  purchaseButton: {
-    borderRadius: 16,
+  warning: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    backgroundColor: 'rgba(245, 158, 11, 0.1)',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(245, 158, 11, 0.3)',
+    marginBottom: 12,
+  },
+  warningText: {
+    fontFamily: 'Montserrat',
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#f59e0b',
+  },
+  button: {
+    borderRadius: 14,
     overflow: 'hidden',
   },
-  purchaseButtonGradient: {
-    paddingVertical: 16,
+  buttonDisabled: {
+    opacity: 0.5,
+  },
+  buttonGradient: {
+    paddingVertical: 14,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  purchaseButtonText: {
+  buttonText: {
     fontFamily: 'Montserrat',
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '700',
     color: '#fff',
   },

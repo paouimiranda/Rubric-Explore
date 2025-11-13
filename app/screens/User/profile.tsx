@@ -25,6 +25,7 @@ import {
   TouchableOpacity,
   View
 } from 'react-native';
+import FriendCardThemeSelector from './friend-card-theme-selector';
 
 
 interface UserData {
@@ -35,6 +36,7 @@ interface UserData {
   bio: string;
   avatarIndex: number;
   createdAt: any;
+  inventory: any;
 }
 
 type TabType = 'overview' | 'notebooks' | 'quizzes';
@@ -57,6 +59,9 @@ export default function ProfileScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [previewMode, setPreviewMode] = useState(false);
+
+  const [themeModalVisible, setThemeModalVisible] = useState(false);
+  const [currentThemeId, setCurrentThemeId] = useState<string>('default');
 
   useEffect(() => {
     if (viewingUserId) {
@@ -95,6 +100,10 @@ export default function ProfileScreen() {
       
       const userData = userSnap.data() as UserData;
       setUserData(userData);
+
+      //NEW !! For loading themes
+      const selectedTheme = userData.inventory?.selectedFriendCardTheme || 'default';
+      setCurrentThemeId(selectedTheme);
       
       // Fetch stats (own profile gets full stats, others get public stats only)
       if (isOwnProfile && !previewMode) {
@@ -528,6 +537,21 @@ export default function ProfileScreen() {
                     </View>
                   </LinearGradient>
                 </TouchableOpacity>
+
+
+                 {/* NEW: Theme Selector Button */}
+                  <TouchableOpacity
+                    style={styles.themeButton}
+                    onPress={() => setThemeModalVisible(true)}
+                    activeOpacity={0.8}
+                  >
+                    <LinearGradient
+                      colors={['#EE007F', '#FF999A']}
+                      style={styles.themeButtonGradient}
+                    >
+                      <Ionicons name="color-palette" size={18} color="#fff" />
+                    </LinearGradient>
+                  </TouchableOpacity>
                 
                 <TouchableOpacity
                   style={[styles.previewButton, previewMode && styles.previewButtonActive]}
@@ -641,6 +665,16 @@ export default function ProfileScreen() {
           }}
           onSave={() => {
             loadProfileData();
+          }}
+        />
+        {/* Theme Selector Modal */}
+        <FriendCardThemeSelector
+          visible={themeModalVisible}
+          onClose={() => setThemeModalVisible(false)}
+          userId={userData.uid}
+          currentThemeId={currentThemeId}
+          onThemeSelected={(themeId) => {
+            setCurrentThemeId(themeId);
           }}
         />
         <BottomNavigation/>
@@ -1094,4 +1128,21 @@ const styles = StyleSheet.create({
     height: 100,
     marginBottom: 3,
   },
+  themeButton: {
+  width: 48,
+  height: 48,
+  borderRadius: 12,
+  overflow: 'hidden',
+  shadowColor: '#EE007F',
+  shadowOffset: { width: 0, height: 2 },
+  shadowOpacity: 0.3,
+  shadowRadius: 4,
+  elevation: 3,
+},
+themeButtonGradient: {
+  width: '100%',
+  height: '100%',
+  alignItems: 'center',
+  justifyContent: 'center',
+},
 });

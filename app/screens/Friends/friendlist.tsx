@@ -1,4 +1,4 @@
-// Enhanced friendlist.tsx with Neo-Glassmorphic Design
+// Enhanced friendlist.tsx with Theme Support - FIXED VERSION
 
 import { useNotifications } from '@/app/contexts/NotificationContext';
 import ChatList from '@/components/Interface/chat-list';
@@ -15,14 +15,17 @@ import {
   getUserPreferences,
   listenToFriendRequests,
   rejectFriendRequest,
-  removeFriend, // ADDED: For unfriending
+  removeFriend,
   SearchUser,
   searchUsers,
   sendFriendRequest,
   FriendRequest as ServiceFriendRequest,
-  toggleMuteFriend, togglePinFriend,
+  toggleMuteFriend,
+  togglePinFriend,
   User,
 } from '@/services/friends-service';
+// ADDED: Import theme service
+import { clearUserThemeCache, getUserThemesBatch } from '@/services/theme-service';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
@@ -30,7 +33,7 @@ import LottieView from 'lottie-react-native';
 import React, { useEffect, useRef, useState } from 'react';
 import {
   Animated,
-  Modal, // ADDED: For the menu
+  Modal,
   RefreshControl,
   SafeAreaView,
   ScrollView,
@@ -47,10 +50,10 @@ type Status = 'online' | 'busy' | 'offline';
 
 interface Friend extends User {
   status?: Status;
+  themeId?: string;
 }
 
 interface FriendRequest extends ServiceFriendRequest {}
-
 interface SearchResult extends SearchUser {}
 
 export default function Friendlist() {
@@ -69,11 +72,10 @@ export default function Friendlist() {
   const [unreadChatCount, setUnreadChatCount] = useState(0);
   const { muteFriend, unmuteFriend, isFriendMuted } = useNotifications();
   
-  // ADDED: State for the menu
   const [menuVisible, setMenuVisible] = useState(false);
   const [selectedFriend, setSelectedFriend] = useState<Friend | null>(null);
-  const [mutedFriends, setMutedFriends] = useState<Set<string>>(new Set());  // UIDs of muted friends
-  const [pinnedFriends, setPinnedFriends] = useState<Set<string>>(new Set());  // UIDs of pinned friends
+  const [mutedFriends, setMutedFriends] = useState<Set<string>>(new Set());
+  const [pinnedFriends, setPinnedFriends] = useState<Set<string>>(new Set());
 
   const [alertConfig, setAlertConfig] = useState<{
     visible: boolean;
@@ -102,14 +104,14 @@ export default function Friendlist() {
       useNativeDriver: true,
     }).start();
   }, []);
+
   useEffect(() => {
     const loadPreferences = async () => {
       if (!currentUser) return;
       try {
         const prefs = await getUserPreferences(currentUser.uid);
-        // UPDATED: Load muted friends into context (instead of local state)
         prefs.mutedFriends.forEach(friendId => muteFriend(friendId));
-        setPinnedFriends(new Set(prefs.pinnedFriends));  // Keep pinned local or move to context if needed
+        setPinnedFriends(new Set(prefs.pinnedFriends));
       } catch (error) {
         console.error('Error loading preferences:', error);
       }
@@ -162,7 +164,14 @@ export default function Friendlist() {
     }
   }, [search, activeTab]);
 
-  // ADDED: Menu handlers
+  // FIX: Add effect to reload themes when switching to friends tab
+  useEffect(() => {
+    if (activeTab === 'friends' && friends.length > 0) {
+      // Reload themes for current friends
+      reloadThemesForFriends();
+    }
+  }, [activeTab]);
+
   const openMenu = (friend: Friend) => {
     setSelectedFriend(friend);
     setMenuVisible(true);
@@ -173,91 +182,109 @@ export default function Friendlist() {
     setSelectedFriend(null);
   };
 
- const handleUnfriend = async (friend: Friend) => {
-  if (!currentUser) return;
-  showAlert(
-    'warning',
-    'Unfriend',
-    `Are you sure you want to unfriend ${friend.displayName}?`,
-    [
-      { text: 'Cancel', style: 'cancel', onPress: closeMenu },
-      {
-        text: 'Unfriend',
-        style: 'primary',
-        onPress: async () => {
-          closeMenu();
-          // Store original state for reversion on error
-          const originalFriends = [...friends];
-          const originalMuted = new Set(mutedFriends);
-          const originalPinned = new Set(pinnedFriends);
-          
-          try {
-            // Optimistically update local state
-            setFriends(prev => prev.filter(f => f.uid !== friend.uid));
-            setMutedFriends(prev => {
-              const newSet = new Set(prev);
-              newSet.delete(friend.uid);
-              return newSet;
-            });
-            setPinnedFriends(prev => {
-              const newSet = new Set(prev);
-              newSet.delete(friend.uid);
-              return newSet;
-            });
+  // FIX: New function to reload themes without full friend reload
+  const reloadThemesForFriends = async () => {
+    if (friends.length === 0) return;
+    
+    try {
+      const friendIds = friends.map(f => f.uid);
+      const themeMap = await getUserThemesBatch(friendIds);
+      
+      setFriends(prevFriends => 
+        prevFriends.map(friend => ({
+          ...friend,
+          themeId: themeMap.get(friend.uid) || 'default'
+        }))
+      );
+      
+      console.log('✅ Themes reloaded successfully:', Object.fromEntries(themeMap));
+    } catch (error) {
+      console.error('❌ Error reloading themes:', error);
+    }
+  };
+
+  const handleUnfriend = async (friend: Friend) => {
+    if (!currentUser) return;
+    showAlert(
+      'warning',
+      'Unfriend',
+      `Are you sure you want to unfriend ${friend.displayName}?`,
+      [
+        { text: 'Cancel', style: 'cancel', onPress: closeMenu },
+        {
+          text: 'Unfriend',
+          style: 'primary',
+          onPress: async () => {
+            closeMenu();
+            const originalFriends = [...friends];
+            const originalMuted = new Set(mutedFriends);
+            const originalPinned = new Set(pinnedFriends);
             
-            // Persist cleanup to Firestore (remove from mute/pin arrays)
-            await Promise.all([
-              toggleMuteFriend(currentUser.uid, friend.uid, true), // Force remove from muted
-              togglePinFriend(currentUser.uid, friend.uid, true),  // Force remove from pinned
-              removeFriend(currentUser.uid, friend.uid),
-            ]);
-            
-            showAlert(
-              'success',
-              'Unfriended',
-              `${friend.displayName} has been removed from your friends.`,
-              [{ text: 'OK', style: 'primary', onPress: () => closeAlert() }]
-            );
-          } catch (error) {
-            // Revert all local state on error
-            setFriends(originalFriends);
-            setMutedFriends(originalMuted);
-            setPinnedFriends(originalPinned);
-            
-            showAlert(
-              'error',
-              'Error',
-              'Failed to unfriend. Please try again.',
-              [{ text: 'OK', style: 'primary', onPress: () => closeAlert() }]
-            );
-            addBacklogEvent("unfriend_error", { friendUsername: friend.username, error: String(error) });
-          }
+            try {
+              setFriends(prev => prev.filter(f => f.uid !== friend.uid));
+              setMutedFriends(prev => {
+                const newSet = new Set(prev);
+                newSet.delete(friend.uid);
+                return newSet;
+              });
+              setPinnedFriends(prev => {
+                const newSet = new Set(prev);
+                newSet.delete(friend.uid);
+                return newSet;
+              });
+              
+              await Promise.all([
+                toggleMuteFriend(currentUser.uid, friend.uid, true),
+                togglePinFriend(currentUser.uid, friend.uid, true),
+                removeFriend(currentUser.uid, friend.uid),
+              ]);
+              
+              // Clear theme cache for unfriended user
+              clearUserThemeCache(friend.uid);
+              
+              showAlert(
+                'success',
+                'Unfriended',
+                `${friend.displayName} has been removed from your friends.`,
+                [{ text: 'OK', style: 'primary', onPress: () => closeAlert() }]
+              );
+            } catch (error) {
+              setFriends(originalFriends);
+              setMutedFriends(originalMuted);
+              setPinnedFriends(originalPinned);
+              
+              showAlert(
+                'error',
+                'Error',
+                'Failed to unfriend. Please try again.',
+                [{ text: 'OK', style: 'primary', onPress: () => closeAlert() }]
+              );
+              addBacklogEvent("unfriend_error", { friendUsername: friend.username, error: String(error) });
+            }
+          },
         },
-      },
-    ]
-  );
-};
+      ]
+    );
+  };
 
   const handleMute = async (friend: Friend) => {
     if (!currentUser) return;
-    const isCurrentlyMuted = isFriendMuted(friend.uid);  // UPDATED: Use context check
+    const isCurrentlyMuted = isFriendMuted(friend.uid);
     try {
       if (isCurrentlyMuted) {
-        unmuteFriend(friend.uid);  // UPDATED: Use context function
+        unmuteFriend(friend.uid);
         showAlert('success', 'Unmuted', `${friend.displayName} notifications are now enabled.`, [{ text: 'OK', onPress: closeAlert }]);
       } else {
-        muteFriend(friend.uid);  // UPDATED: Use context function
+        muteFriend(friend.uid);
         showAlert('success', 'Muted', `${friend.displayName} notifications are now muted.`, [{ text: 'OK', onPress: closeAlert }]);
       }
       
-      // Persist to Firestore (unchanged)
       await toggleMuteFriend(currentUser.uid, friend.uid, isCurrentlyMuted);
     } catch (error) {
-      // UPDATED: Revert using context
       if (isCurrentlyMuted) {
-        muteFriend(friend.uid);  // Re-mute on error
+        muteFriend(friend.uid);
       } else {
-        unmuteFriend(friend.uid);  // Re-unmute on error
+        unmuteFriend(friend.uid);
       }
       showAlert('error', 'Error', 'Failed to update mute status. Please try again.', [{ text: 'OK', onPress: closeAlert }]);
       console.error('Error in handleMute:', error);
@@ -266,30 +293,27 @@ export default function Friendlist() {
   };
 
   const handlePin = async (friend: Friend) => {
-  if (!currentUser) return;
-  const isCurrentlyPinned = pinnedFriends.has(friend.uid);
-  try {
-    // Update local state immediately
-    const newPinned = new Set(pinnedFriends);
-    if (isCurrentlyPinned) {
-      newPinned.delete(friend.uid);
-      showAlert('success', 'Unpinned', `${friend.displayName} is no longer pinned.`, [{ text: 'OK', onPress: closeAlert }]);
-    } else {
-      newPinned.add(friend.uid);
-      showAlert('success', 'Pinned', `${friend.displayName} is now pinned to the top.`, [{ text: 'OK', onPress: closeAlert }]);
-    }
-    setPinnedFriends(newPinned);
+    if (!currentUser) return;
+    const isCurrentlyPinned = pinnedFriends.has(friend.uid);
+    try {
+      const newPinned = new Set(pinnedFriends);
+      if (isCurrentlyPinned) {
+        newPinned.delete(friend.uid);
+        showAlert('success', 'Unpinned', `${friend.displayName} is no longer pinned.`, [{ text: 'OK', onPress: closeAlert }]);
+      } else {
+        newPinned.add(friend.uid);
+        showAlert('success', 'Pinned', `${friend.displayName} is now pinned to the top.`, [{ text: 'OK', onPress: closeAlert }]);
+      }
+      setPinnedFriends(newPinned);
 
-    // Persist to Firebase
-    await togglePinFriend(currentUser.uid, friend.uid, isCurrentlyPinned);
-  } catch (error) {
-    // Revert local state on error
-    setPinnedFriends(new Set(pinnedFriends));  // Reset to original
-    showAlert('error', 'Error', 'Failed to update pin status. Please try again.', [{ text: 'OK', onPress: closeAlert }]);
-    console.error('Error in handlePin:', error);
-  }
-  closeMenu();
-};
+      await togglePinFriend(currentUser.uid, friend.uid, isCurrentlyPinned);
+    } catch (error) {
+      setPinnedFriends(new Set(pinnedFriends));
+      showAlert('error', 'Error', 'Failed to update pin status. Please try again.', [{ text: 'OK', onPress: closeAlert }]);
+      console.error('Error in handlePin:', error);
+    }
+    closeMenu();
+  };
 
   const loadUnreadCount = async () => {
     if (!currentUser) return;
@@ -302,15 +326,38 @@ export default function Friendlist() {
     }
   };
 
+  // FIX: Enhanced loadFriends with better error handling and logging
   const loadFriends = async () => {
     if (!currentUser) return;
     
     try {
       setLoading(true);
+      console.log('🔄 Loading friends...');
+      
       const userFriends = await getUserFriends(currentUser.uid);
-      setFriends(userFriends);
+      console.log(`✅ Loaded ${userFriends.length} friends`);
+      
+      // Batch fetch themes for all friends
+      const friendIds = userFriends.map(f => f.uid);
+      console.log('🎨 Fetching themes for:', friendIds);
+      
+      const themeMap = await getUserThemesBatch(friendIds);
+      console.log('✅ Themes fetched:', Object.fromEntries(themeMap));
+      
+      // Add theme IDs to friend objects
+      const friendsWithThemes = userFriends.map(friend => {
+        const themeId = themeMap.get(friend.uid) || 'default';
+        console.log(`👤 ${friend.displayName}: theme = ${themeId}`);
+        return {
+          ...friend,
+          themeId
+        };
+      });
+      
+      setFriends(friendsWithThemes);
+      console.log('✅ Friends with themes set in state');
     } catch (error) {
-      console.error('Error loading friends:', error);
+      console.error('❌ Error loading friends:', error);
       showAlert(
         'error',
         'Error',
@@ -334,66 +381,64 @@ export default function Friendlist() {
   };
 
   const handleSearch = async (searchTerm: string) => {
-  if (!currentUser || !searchTerm.trim()) {
-    setSearchResults([]);
-    return;
-  }
-  
-  try {
-    setSearchLoading(true);
-    const results = await searchUsers(searchTerm, currentUser.uid);
-    // NEW: Filter out users who are already friends (prevents re-add attempts while friendship persists)
-    const filteredResults = results.filter(user => !friends.some(friend => friend.uid === user.uid));
-    setSearchResults(filteredResults);
-    addBacklogEvent(BACKLOG_EVENTS.USER_SEARCHED_USERS, { searchTerm });
-  } catch (error) {
-    console.error('Error searching users:', error);
-    showAlert(
-      'error',
-      'Search Error',
-      'Failed to search users. Please try again.',
-      [{ text: 'OK', style: 'primary', onPress: () => closeAlert() }]
-    );
-    addBacklogEvent("user_search_error", { searchTerm, error: String(error) });
-  } finally {
-    setSearchLoading(false);
-  }
-};
+    if (!currentUser || !searchTerm.trim()) {
+      setSearchResults([]);
+      return;
+    }
+    
+    try {
+      setSearchLoading(true);
+      const results = await searchUsers(searchTerm, currentUser.uid);
+      const filteredResults = results.filter(user => !friends.some(friend => friend.uid === user.uid));
+      setSearchResults(filteredResults);
+      addBacklogEvent(BACKLOG_EVENTS.USER_SEARCHED_USERS, { searchTerm });
+    } catch (error) {
+      console.error('Error searching users:', error);
+      showAlert(
+        'error',
+        'Search Error',
+        'Failed to search users. Please try again.',
+        [{ text: 'OK', style: 'primary', onPress: () => closeAlert() }]
+      );
+      addBacklogEvent("user_search_error", { searchTerm, error: String(error) });
+    } finally {
+      setSearchLoading(false);
+    }
+  };
 
   const handleSendFriendRequest = async (userId: string, username: string) => {
-  if (!currentUser) return;
-  
-  // NEW: Local check - don't send if already a friend (handles local state mismatches)
-  if (friends.some(friend => friend.uid === userId)) {
-    showAlert(
-      'warning',
-      'Already Friends',
-      `${username} is already your friend.`,
-      [{ text: 'OK', onPress: () => closeAlert() }]
-    );
-    return;
-  }
-  
-  try {
-    await sendFriendRequest(currentUser.uid, userId);
-    showAlert(
-      'success',
-      'Request Sent',
-      `Friend request sent to ${username}`,
-      [{ text: 'OK', style: 'primary', onPress: () => closeAlert() }]
-    );
-    setSearchResults(prev => prev.filter(user => user.uid !== userId));
-    addBacklogEvent(BACKLOG_EVENTS.USER_SENT_FRIEND_REQUEST, { recipientUsername: username });
-  } catch (error) {
-    showAlert(
-      'error',
-      'Error',
-      'Failed to send friend request. Please try again.',
-      [{ text: 'OK', style: 'primary', onPress: () => closeAlert() }]
-    );
-    addBacklogEvent("friend_request_send_error", { recipientUsername: username, error: String(error) });
-  }
-};
+    if (!currentUser) return;
+    
+    if (friends.some(friend => friend.uid === userId)) {
+      showAlert(
+        'warning',
+        'Already Friends',
+        `${username} is already your friend.`,
+        [{ text: 'OK', onPress: () => closeAlert() }]
+      );
+      return;
+    }
+    
+    try {
+      await sendFriendRequest(currentUser.uid, userId);
+      showAlert(
+        'success',
+        'Request Sent',
+        `Friend request sent to ${username}`,
+        [{ text: 'OK', style: 'primary', onPress: () => closeAlert() }]
+      );
+      setSearchResults(prev => prev.filter(user => user.uid !== userId));
+      addBacklogEvent(BACKLOG_EVENTS.USER_SENT_FRIEND_REQUEST, { recipientUsername: username });
+    } catch (error) {
+      showAlert(
+        'error',
+        'Error',
+        'Failed to send friend request. Please try again.',
+        [{ text: 'OK', style: 'primary', onPress: () => closeAlert() }]
+      );
+      addBacklogEvent("friend_request_send_error", { recipientUsername: username, error: String(error) });
+    }
+  };
 
   const handleAcceptRequest = async (request: FriendRequest) => {
     try {
@@ -490,7 +535,6 @@ export default function Friendlist() {
 
   const getFilteredFriends = () => {
     if (!search.trim()) {
-      // ADDED: Sort pinned friends to the top
       return [...friends].sort((a, b) => {
         const aPinned = pinnedFriends.has(a.uid);
         const bPinned = pinnedFriends.has(b.uid);
@@ -590,19 +634,24 @@ export default function Friendlist() {
                   <Text style={styles.loadingText}>Loading friends...</Text>
                 </View>
               ) : getFilteredFriends().length > 0 ? (
-                getFilteredFriends().map((friend) => (
-                  <FriendCard 
-                    key={friend.uid} 
-                    name={friend.displayName} 
-                    username={friend.username}
-                    status={friend.isOnline ? 'online' : 'offline'}
-                    onChatPress={() => startChatWithFriend(friend)}
-                    onProfilePress={() => navigateToProfile(friend.uid)}
-                    onMenuPress={() => openMenu(friend)}  // ADDED: Prop for opening menu
-                    isMuted={isFriendMuted(friend.uid)} // ADDED: Prop for mute status
-                    isPinned={pinnedFriends.has(friend.uid)}  // ADDED: Prop for pin status
-                  />
-                ))
+                getFilteredFriends().map((friend) => {
+                  // FIX: Log each friend's theme as it renders
+                  console.log(`🎨 Rendering friend ${friend.displayName} with theme: ${friend.themeId || 'undefined'}`);
+                  return (
+                    <FriendCard 
+                      key={friend.uid} 
+                      name={friend.displayName} 
+                      username={friend.username}
+                      status={friend.isOnline ? 'online' : 'offline'}
+                      onChatPress={() => startChatWithFriend(friend)}
+                      onProfilePress={() => navigateToProfile(friend.uid)}
+                      onMenuPress={() => openMenu(friend)}
+                      isMuted={isFriendMuted(friend.uid)}
+                      isPinned={pinnedFriends.has(friend.uid)}
+                      themeId={friend.themeId || 'default'} // FIX: Explicit fallback
+                    />
+                  );
+                })
               ) : (
                 <View style={styles.emptyContainer}>
                   <LinearGradient
@@ -900,7 +949,7 @@ export default function Friendlist() {
           onClose={closeAlert}
         />
         
-        {/* ADDED: Menu Modal */}
+        {/* Menu Modal */}
         <Modal
           visible={menuVisible}
           transparent
@@ -914,8 +963,8 @@ export default function Friendlist() {
                 <Text style={styles.menuOptionText}>Unfriend</Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.menuOption} onPress={() => selectedFriend && handleMute(selectedFriend)}>
-                <Ionicons name={mutedFriends.has(selectedFriend?.uid || '') ? "volume-high" : "volume-mute"} size={20} color="#f59e0b" />
-                <Text style={styles.menuOptionText}>{mutedFriends.has(selectedFriend?.uid || '') ? 'Unmute' : 'Mute'}</Text>
+                <Ionicons name={isFriendMuted(selectedFriend?.uid || '') ? "volume-high" : "volume-mute"} size={20} color="#f59e0b" />
+                <Text style={styles.menuOptionText}>{isFriendMuted(selectedFriend?.uid || '') ? 'Unmute' : 'Mute'}</Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.menuOption} onPress={() => selectedFriend && handlePin(selectedFriend)}>
                 <Ionicons name={pinnedFriends.has(selectedFriend?.uid || '') ? "pin-outline" : "pin"} size={20} color="#10b981" />
