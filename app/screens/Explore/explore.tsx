@@ -30,6 +30,25 @@ const TABS = [
 const ExploreScreen = ({ navigation }: any) => {
   const [activeTab, setActiveTab] = useState('journey');
   const fadeAnim = useRef(new Animated.Value(0)).current;
+  
+  // Tab content animations
+  const tabContentOpacity = useRef(new Animated.Value(1)).current;
+  const tabContentTranslateX = useRef(new Animated.Value(0)).current;
+  
+  // Tab pill slider animation
+  const initialTabIndex = TABS.findIndex(t => t.id === 'journey');
+  const pillSlideAnim = useRef(new Animated.Value(initialTabIndex)).current;
+  
+  // Tab button animations - create refs for each tab
+  const tabAnimations = useRef(
+    TABS.reduce((acc, tab) => {
+      acc[tab.id] = {
+        scale: new Animated.Value(tab.id === 'journey' ? 1 : 0.95),
+        opacity: new Animated.Value(tab.id === 'journey' ? 1 : 0.7),
+      };
+      return acc;
+    }, {} as Record<string, { scale: Animated.Value; opacity: Animated.Value }>)
+  ).current;
 
   const router = useRouter();
   
@@ -100,8 +119,85 @@ const ExploreScreen = ({ navigation }: any) => {
   }, []);
 
   const handleTabPress = (tabId: string) => {
-    setActiveTab(tabId);
+    if (tabId === activeTab) return;
 
+    const currentIndex = TABS.findIndex(t => t.id === activeTab);
+    const newIndex = TABS.findIndex(t => t.id === tabId);
+    const direction = newIndex > currentIndex ? 1 : -1;
+
+    // Animate the sliding pill background
+    Animated.spring(pillSlideAnim, {
+      toValue: newIndex,
+      tension: 100,
+      friction: 10,
+      useNativeDriver: true,
+    }).start();
+
+    // Animate tab buttons
+    // Shrink and fade out the old active tab
+    Animated.parallel([
+      Animated.spring(tabAnimations[activeTab].scale, {
+        toValue: 0.95,
+        tension: 80,
+        friction: 8,
+        useNativeDriver: true,
+      }),
+      Animated.timing(tabAnimations[activeTab].opacity, {
+        toValue: 0.7,
+        duration: 200,
+        useNativeDriver: true,
+      }),
+    ]).start();
+
+    // Grow and fade in the new active tab
+    Animated.parallel([
+      Animated.spring(tabAnimations[tabId].scale, {
+        toValue: 1,
+        tension: 80,
+        friction: 8,
+        useNativeDriver: true,
+      }),
+      Animated.timing(tabAnimations[tabId].opacity, {
+        toValue: 1,
+        duration: 200,
+        useNativeDriver: true,
+      }),
+    ]).start();
+
+    // Animate out current content
+    Animated.parallel([
+      Animated.timing(tabContentOpacity, {
+        toValue: 0,
+        duration: 200,
+        useNativeDriver: true,
+      }),
+      Animated.timing(tabContentTranslateX, {
+        toValue: -50 * direction,
+        duration: 200,
+        useNativeDriver: true,
+      }),
+    ]).start(() => {
+      // Switch tab
+      setActiveTab(tabId);
+      
+      // Reset position for animation in
+      tabContentTranslateX.setValue(50 * direction);
+      
+      // Animate in new content
+      Animated.parallel([
+        Animated.timing(tabContentOpacity, {
+          toValue: 1,
+          duration: 300,
+          useNativeDriver: true,
+        }),
+        Animated.spring(tabContentTranslateX, {
+          toValue: 0,
+          tension: 65,
+          friction: 10,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    });
   };
 
   const handleLevelPress = (level: Level) => {
@@ -160,158 +256,188 @@ const ExploreScreen = ({ navigation }: any) => {
   }
 
   return (
-     <View style={styles.container}>
-    {/* Animated Background */}
-    <LinearGradient
-      colors={['#0A1C3C', '#1a2f4f', '#324762']}
-      style={styles.backgroundGradient}
-      start={{ x: 0, y: 0 }}
-      end={{ x: 1, y: 1 }}
-    />
-
-    {/* Starfield */}
-    {stars.map((star, index) => (
-      <Animated.View
-        key={index}
-        style={[
-          styles.star,
-          {
-            left: star.left,
-            top: star.top,
-            opacity: star.opacity,
-          },
-        ]}
+    <View style={styles.container}>
+      {/* Animated Background */}
+      <LinearGradient
+        colors={['#0A1C3C', '#1a2f4f', '#324762']}
+        style={styles.backgroundGradient}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
       />
-    ))}
 
-    <Animated.View style={[styles.content, { opacity: fadeAnim }]}>
-      {/* Tab Switcher */}
-      <View style={styles.tabContainer}>
-        <View style={styles.tabPillContainer}>
-          {TABS.map((tab) => (
-            <TouchableOpacity
-              key={tab.id}
-              onPress={() => handleTabPress(tab.id)}
-              activeOpacity={0.8}
-              style={styles.tabButton}
+      {/* Starfield */}
+      {stars.map((star, index) => (
+        <Animated.View
+          key={index}
+          style={[
+            styles.star,
+            {
+              left: star.left,
+              top: star.top,
+              opacity: star.opacity,
+            },
+          ]}
+        />
+      ))}
+
+      <Animated.View style={[styles.content, { opacity: fadeAnim }]}>
+        {/* Tab Switcher */}
+        <View style={styles.tabContainer}>
+          <View style={styles.tabPillContainer}>
+            {/* Animated sliding background pill */}
+            <Animated.View
+              style={[
+                styles.slidingPill,
+                {
+                  transform: [
+                    {
+                      translateX: pillSlideAnim.interpolate({
+                        inputRange: [0, TABS.length - 1],
+                        outputRange: [0, (width - 56) / TABS.length * (TABS.length - 1)],
+                      }),
+                    },
+                  ],
+                },
+              ]}
             >
-              {activeTab === tab.id ? (
-                <LinearGradient
-                  colors={['#667eea', '#764ba2']}
-                  style={styles.tabPillActive}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                >
-                  <Ionicons name={tab.icon} size={18} color="#fff" />
-                  <Text style={styles.tabTextActive}>{tab.label}</Text>
-                </LinearGradient>
-              ) : (
-                <View style={styles.tabPillInactive}>
-                  <Ionicons name={tab.icon} size={18} color="#aaa" />
-                  <Text style={styles.tabTextInactive}>{tab.label}</Text>
+              <LinearGradient
+                colors={['#667eea', '#764ba2']}
+                style={styles.slidingPillGradient}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+              />
+            </Animated.View>
+
+            {/* Tab buttons */}
+            {TABS.map((tab) => (
+              <TouchableOpacity
+                key={tab.id}
+                onPress={() => handleTabPress(tab.id)}
+                activeOpacity={0.8}
+                style={styles.tabButton}
+              >
+                <View style={styles.tabButtonContent}>
+                  <Ionicons 
+                    name={tab.icon} 
+                    size={18} 
+                    color={activeTab === tab.id ? '#fff' : '#aaa'} 
+                  />
+                  <Text style={activeTab === tab.id ? styles.tabTextActive : styles.tabTextInactive}>
+                    {tab.label}
+                  </Text>
                 </View>
-              )}
-            </TouchableOpacity>
-          ))}
-        </View>
-      </View>
-
-      {/* CONDITIONAL CONTENT BASED ON ACTIVE TAB */}
-      {activeTab === 'journey' ? (
-        <>
-          {/* Header */}
-          <View style={styles.header}>
-            <Text style={styles.title}>Your Journey</Text>
-            <Text style={styles.subtitle}>
-              {userProgress?.currentLevel === 1 
-                ? 'Begin your cosmic adventure' 
-                : `Continue your cosmic adventure`}
-            </Text>
+              </TouchableOpacity>
+            ))}
           </View>
+        </View>
 
-          {/* Stats Bar */}
-          <View style={styles.statsContainer}>
-            {/* Shards */}
-            <View style={styles.compactStatCard}>
-              <LinearGradient
-                colors={['#fbbf24', '#f59e0b']}
-                style={styles.compactStatIcon}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-              >
-                <Ionicons name="diamond" size={16} color="#fff" />
-              </LinearGradient>
-              <Text style={styles.compactStatValue}>{userStats?.shards || 0}</Text>
-            </View>
-
-            {/* Energy */}
-            <View style={styles.compactStatCard}>
-              <LinearGradient
-                colors={['#10b981', '#059669']}
-                style={styles.compactStatIcon}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-              >
-                <Ionicons name="flash" size={16} color="#fff" />
-              </LinearGradient>
-              <Text style={styles.compactStatValue}>
-                {userStats?.energy.current || 0}/{userStats?.energy.max || 5}
-              </Text>
-            </View>
-
-            {/* XP Bar */}
-            <View style={styles.expBarContainer}>
-              <View style={styles.expBarHeader}>
-                <Text style={styles.expLevel}>Lv. {xpData.currentLevel}</Text>
-                <Text style={styles.expText}>
-                  {xpData.currentXP}/{xpData.xpToNextLevel}
+        {/* Animated Tab Content Container */}
+        <Animated.View
+          style={[
+            styles.tabContentContainer,
+            {
+              opacity: tabContentOpacity,
+              transform: [{ translateX: tabContentTranslateX }],
+            },
+          ]}
+        >
+          {/* CONDITIONAL CONTENT BASED ON ACTIVE TAB */}
+          {activeTab === 'journey' ? (
+            <>
+              {/* Header */}
+              <View style={styles.header}>
+                <Text style={styles.title}>Your Journey</Text>
+                <Text style={styles.subtitle}>
+                  {userProgress?.currentLevel === 1 
+                    ? 'Begin your cosmic adventure' 
+                    : `Continue your cosmic adventure`}
                 </Text>
               </View>
-              <View style={styles.expBarBackground}>
-                <LinearGradient
-                  colors={['#667eea', '#764ba2']}
-                  style={[
-                    styles.expBarFill,
-                    { width: `${xpData.xpProgress}%` },
-                  ]}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 0 }}
-                />
-              </View>
-            </View>
-          </View>
 
-          {/* Level Path */}
-          <ScrollView
-            style={styles.scrollView}
-            contentContainerStyle={styles.scrollContent}
-            showsVerticalScrollIndicator={false}
-          >
-            {levels.map((level, index) => (
-              <LevelNode
-                key={level.id}
-                level={level}
-                index={index}
-                isLast={index === levels.length - 1}
-                onPress={() => handleLevelPress(level)}
-              />
-            ))}
-            
-            {/* Spacer at bottom */}
-            <View style={{ height: 100 }} />
-          </ScrollView>
-        </>
-      ) : activeTab === 'leaderboard' ? (
-        <LeaderboardTab />
-      ) : (
-        // Shop tab placeholder
-        <View style={styles.centerContent}>
-          <Ionicons name="cart" size={64} color="#555" />
-          <Text style={styles.loadingText}>Shop coming soon!</Text>
-        </View>
-      )}
-    </Animated.View>
-  </View>
+              {/* Stats Bar */}
+              <View style={styles.statsContainer}>
+                {/* Shards */}
+                <View style={styles.compactStatCard}>
+                  <LinearGradient
+                    colors={['#fbbf24', '#f59e0b']}
+                    style={styles.compactStatIcon}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                  >
+                    <Ionicons name="diamond" size={16} color="#fff" />
+                  </LinearGradient>
+                  <Text style={styles.compactStatValue}>{userStats?.shards || 0}</Text>
+                </View>
+
+                {/* Energy */}
+                <View style={styles.compactStatCard}>
+                  <LinearGradient
+                    colors={['#10b981', '#059669']}
+                    style={styles.compactStatIcon}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                  >
+                    <Ionicons name="flash" size={16} color="#fff" />
+                  </LinearGradient>
+                  <Text style={styles.compactStatValue}>
+                    {userStats?.energy.current || 0}/{userStats?.energy.max || 5}
+                  </Text>
+                </View>
+
+                {/* XP Bar */}
+                <View style={styles.expBarContainer}>
+                  <View style={styles.expBarHeader}>
+                    <Text style={styles.expLevel}>Lv. {xpData.currentLevel}</Text>
+                    <Text style={styles.expText}>
+                      {xpData.currentXP}/{xpData.xpToNextLevel}
+                    </Text>
+                  </View>
+                  <View style={styles.expBarBackground}>
+                    <LinearGradient
+                      colors={['#667eea', '#764ba2']}
+                      style={[
+                        styles.expBarFill,
+                        { width: `${xpData.xpProgress}%` },
+                      ]}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 0 }}
+                    />
+                  </View>
+                </View>
+              </View>
+
+              {/* Level Path */}
+              <ScrollView
+                style={styles.scrollView}
+                contentContainerStyle={styles.scrollContent}
+                showsVerticalScrollIndicator={false}
+              >
+                {levels.map((level, index) => (
+                  <LevelNode
+                    key={level.id}
+                    level={level}
+                    index={index}
+                    isLast={index === levels.length - 1}
+                    onPress={() => handleLevelPress(level)}
+                  />
+                ))}
+                
+                {/* Spacer at bottom */}
+                <View style={{ height: 100 }} />
+              </ScrollView>
+            </>
+          ) : activeTab === 'leaderboard' ? (
+            <LeaderboardTab />
+          ) : (
+            // Shop tab placeholder
+            <View style={styles.centerContent}>
+              <Ionicons name="cart" size={64} color="#555" />
+              <Text style={styles.loadingText}>Shop coming soon!</Text>
+            </View>
+          )}
+        </Animated.View>
+      </Animated.View>
+    </View>
   );
 };
 
@@ -427,7 +553,7 @@ const LevelNode: React.FC<LevelNodeProps> = ({ level, index, isLast, onPress }) 
             />
           )}
 
-            {/* Card */}
+          {/* Card */}
           <LinearGradient
             colors={
               level.unlocked
@@ -502,6 +628,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#0A1C3C',
   },
   centerContent: {
+    flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -522,6 +649,9 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     paddingTop: 20,
+  },
+  tabContentContainer: {
+    flex: 1,
   },
   loadingText: {
     fontFamily: 'Montserrat',
@@ -562,20 +692,25 @@ const styles = StyleSheet.create({
     padding: 4,
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.1)',
+    position: 'relative',
+  },
+  slidingPill: {
+    position: 'absolute',
+    top: 4,
+    left: 4,
+    bottom: 4,
+    width: `${100 / TABS.length}%`,
+    zIndex: 0,
+  },
+  slidingPillGradient: {
+    flex: 1,
+    borderRadius: 26,
   },
   tabButton: {
     flex: 1,
+    zIndex: 1,
   },
-  tabPillActive: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    borderRadius: 26,
-    gap: 6,
-  },
-  tabPillInactive: {
+  tabButtonContent: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',

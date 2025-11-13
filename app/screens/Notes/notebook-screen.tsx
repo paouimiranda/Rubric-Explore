@@ -1,4 +1,4 @@
-// app/screens/Notes/notebook-screen.tsx - WITH LOTTIE ANIMATIONS
+// app/screens/Notes/notebook-screen.tsx - Enhanced with Dynamic Colors
 import { useAuth } from '@/app/contexts/AuthContext';
 import { CustomAlertModal } from '@/components/Interface/custom-alert-modal';
 import { db } from "@/firebase";
@@ -26,6 +26,7 @@ import {
 } from "react-native";
 
 // Import service functions
+import { getColorScheme } from '@/constants/colorUtils';
 import { useBacklogLogger } from "@/hooks/useBackLogLogger";
 import { BACKLOG_EVENTS } from "@/services/backlogEvents";
 import { createNote, deleteNote, getNotesInNotebook, syncNotePropertiesWithNotebook, updateNotebook } from '../../../services/notes-service';
@@ -84,7 +85,7 @@ export default function NotebookScreen() {
   const uid = user?.uid;
   const lottieRef = useRef<LottieView>(null);
   const { addBacklogEvent } = useBacklogLogger();
-  // Add early return for unauthenticated users
+  
   if (!uid) {
     return (
       <LinearGradient colors={["#324762", "#0A1C3C"]} style={styles.loadingContainer}>
@@ -101,12 +102,10 @@ export default function NotebookScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   
-  // Settings modal state
   const [settingsModalVisible, setSettingsModalVisible] = useState(false);
   const [isPublicToggle, setIsPublicToggle] = useState(false);
   const [savingSettings, setSavingSettings] = useState(false);
 
-  // Custom alert state
   const [alertState, setAlertState] = useState<AlertState>({
     visible: false,
     type: 'info',
@@ -115,7 +114,9 @@ export default function NotebookScreen() {
     buttons: [],
   });
 
-  // Default cover images mapping
+  // Get dynamic color scheme based on notebook color
+  const colorScheme = getColorScheme(notebook?.color || '#3b82f6');
+
   const defaultCoverImages = {
     'notebook1': require('@/assets/covers/notebook1.jpg'),
     'notebook2': require('@/assets/covers/notebook2.jpg'),
@@ -243,7 +244,6 @@ export default function NotebookScreen() {
     }
   };
 
-  // ✅ ADDED: Log opening notebook
   useEffect(() => {
     if (notebookId) {
       addBacklogEvent(BACKLOG_EVENTS.USER_OPENED_NOTEBOOK, { notebookId });
@@ -272,7 +272,6 @@ export default function NotebookScreen() {
     if (!notebookId || !notebook) return;
     
     try {
-      // Prepare inherited properties from notebook
       const inheritedProperties: NotebookProperty[] = (notebook.properties || []).map(prop => ({
         key: prop.key,
         value: prop.value,
@@ -381,7 +380,6 @@ export default function NotebookScreen() {
         uid
       );
       
-      // Update local state
       if (notebook) {
         setNotebook({ ...notebook, isPublic: isPublicToggle });
       }
@@ -491,7 +489,7 @@ export default function NotebookScreen() {
     
     return (
       <TouchableOpacity
-        style={styles.noteCard}
+        style={[styles.noteCard, { borderColor: colorScheme.border }]}
         onPress={() =>
           router.push({
             pathname: "./note-editor",
@@ -502,8 +500,11 @@ export default function NotebookScreen() {
         activeOpacity={0.7}
       >
         <View style={styles.noteLeftSection}>
-          <View style={styles.noteIconContainer}>
-            <Ionicons name="document-text" size={20} color="#3b82f6" />
+          <View style={[styles.noteIconContainer, { 
+            backgroundColor: colorScheme.overlay,
+            borderColor: colorScheme.border 
+          }]}>
+            <Ionicons name="document-text" size={20} color={colorScheme.primary} />
           </View>
         </View>
         
@@ -519,13 +520,16 @@ export default function NotebookScreen() {
             )}
           </View>
           {primaryProperty && (
-            <View style={styles.propertyBadge}>
+            <View style={[styles.propertyBadge, {
+              backgroundColor: colorScheme.overlay,
+              borderColor: colorScheme.border
+            }]}>
               <Ionicons 
                 name={primaryProperty.source === 'inherited' ? 'link-outline' : 'pricetag'} 
                 size={10} 
-                color={primaryProperty.source === 'inherited' ? '#a78bfa' : '#60a5fa'} 
+                color={colorScheme.accent} 
               />
-              <Text style={styles.propertyBadgeText}>
+              <Text style={[styles.propertyBadgeText, { color: colorScheme.light }]}>
                 {primaryProperty.key}: {primaryProperty.value}
               </Text>
             </View>
@@ -544,8 +548,11 @@ export default function NotebookScreen() {
         </View>
 
         <View style={styles.noteActions}>
-          <View style={styles.chevronCircle}>
-            <Ionicons name="chevron-forward" size={18} color="#3b82f6" />
+          <View style={[styles.chevronCircle, {
+            backgroundColor: colorScheme.overlay,
+            borderColor: colorScheme.border
+          }]}>
+            <Ionicons name="chevron-forward" size={18} color={colorScheme.primary} />
           </View>
         </View>
       </TouchableOpacity>
@@ -554,44 +561,57 @@ export default function NotebookScreen() {
 
   const renderNotebookHeader = () => (
     <View>
-      {/* Cover Image */}
+      {/* Cover Image with Dynamic Overlay */}
       <View style={styles.coverImageContainer}>
         {notebook?.coverImage ? (
-          <Image 
-            source={getCoverImageSource(notebook.coverImage) || require('@/assets/covers/notebook1.jpg')} 
-            style={styles.coverImage}
-            resizeMode="cover"
-          />
+          <>
+            <Image 
+              source={getCoverImageSource(notebook.coverImage) || require('@/assets/covers/notebook1.jpg')} 
+              style={styles.coverImage}
+              resizeMode="cover"
+            />
+            <LinearGradient
+              colors={['transparent', `#0A1C3C`]}
+              style={styles.coverGradient}
+            />
+          </>
         ) : (
           <LinearGradient 
-            colors={["#3b82f6", "#1e40af"]} 
+            colors={[colorScheme.primary, colorScheme.dark]} 
             style={styles.coverPlaceholder}
           >
-            <Ionicons name="book-outline" size={64} color="rgba(255,255,255,0.3)" />
+            <Ionicons name="book-outline" size={64} color="rgba(255,255,255,0.4)" />
           </LinearGradient>
         )}
         
-        {/* Gradient Overlay at bottom of image */}
+        {/* Color accent bar at top */}
         <LinearGradient
-          colors={['transparent', 'rgba(10, 28, 60, 0.95)']}
-          style={styles.coverGradient}
+          colors={[colorScheme.primary, colorScheme.light]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 0 }}
+          style={styles.topColorAccent}
         />
       </View>
 
-      {/* Notebook Info Card */}
+      {/* Enhanced Info Card with Dynamic Colors */}
       <View style={styles.infoCardContainer}>
         <LinearGradient
           colors={['rgba(31, 41, 55, 0.95)', 'rgba(17, 24, 39, 0.95)']}
-          style={styles.infoCard}
+          style={[styles.infoCard, { borderColor: colorScheme.border }]}
         >
-          {/* Header with Settings Button */}
+          {/* Header with Dynamic Accent */}
           <View style={styles.infoCardHeader}>
-            <View style={styles.accentLine} />
+            <LinearGradient
+              colors={[colorScheme.primary, colorScheme.light]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={styles.accentLine}
+            />
             <TouchableOpacity 
               style={styles.settingsButton}
               onPress={openSettingsModal}
             >
-              <Ionicons name="ellipsis-horizontal" size={20} color="#9ca3af" />
+              <Ionicons name="ellipsis-horizontal" size={20} color={colorScheme.light} />
             </TouchableOpacity>
           </View>
           
@@ -606,48 +626,56 @@ export default function NotebookScreen() {
           </View>
           
           {notebook?.description ? (
-            <View style={styles.descriptionContainer}>
+            <View style={[styles.descriptionContainer, {
+              backgroundColor: colorScheme.overlay,
+              borderLeftColor: colorScheme.primary
+            }]}>
               <View style={styles.descriptionIconRow}>
-                <Ionicons name="reader-outline" size={16} color="#9ca3af" />
-                <Text style={styles.descriptionLabel}>About</Text>
+                <Ionicons name="reader-outline" size={16} color={colorScheme.light} />
+                <Text style={[styles.descriptionLabel, { color: colorScheme.light }]}>About</Text>
               </View>
               <Text style={styles.notebookDescription}>{notebook.description}</Text>
             </View>
           ) : null}
           
-          {/* Tags */}
+          {/* Tags with Dynamic Colors */}
           {notebook?.tags && notebook.tags.length > 0 && (
             <View style={styles.tagsSection}>
               <View style={styles.tagsSectionHeader}>
-                <Ionicons name="pricetags-outline" size={14} color="#9ca3af" />
-                <Text style={styles.sectionLabel}>Tags</Text>
+                <Ionicons name="pricetags-outline" size={14} color={colorScheme.light} />
+                <Text style={[styles.sectionLabel, { color: colorScheme.light }]}>Tags</Text>
               </View>
               <View style={styles.tagsContainer}>
                 {notebook.tags.map((tag, index) => (
-                  <View key={index} style={styles.tag}>
-                    <Text style={styles.tagText}>#{tag}</Text>
+                  <View key={index} style={[styles.tag, {
+                    backgroundColor: colorScheme.overlay,
+                    borderColor: colorScheme.border
+                  }]}>
+                    <Text style={[styles.tagText, { color: colorScheme.light }]}>#{tag}</Text>
                   </View>
                 ))}
               </View>
             </View>
           )}
 
-          {/* Properties */}
+          {/* Properties with Dynamic Colors */}
           {notebook?.properties && notebook.properties.length > 0 && (
             <View style={styles.propertiesSection}>
               <View style={styles.propertiesSectionHeader}>
-                <Ionicons name="list-outline" size={14} color="#9ca3af" />
-                <Text style={styles.sectionLabel}>Default Properties</Text>
+                <Ionicons name="list-outline" size={14} color={colorScheme.light} />
+                <Text style={[styles.sectionLabel, { color: colorScheme.light }]}>Default Properties</Text>
                 <Text style={styles.inheritanceHint}>(inherited by new notes)</Text>
               </View>
-              <View style={styles.propertiesContainer}>
+              <View style={[styles.propertiesContainer, {
+                backgroundColor: `${colorScheme.darker}80`
+              }]}>
                 {notebook.properties.map((property, index) => (
                   <View key={index} style={styles.propertyRow}>
                     {property.icon && (
                       <Ionicons 
                         name={property.icon as any} 
                         size={16} 
-                        color={property.iconColor || '#6b7280'} 
+                        color={property.iconColor || colorScheme.accent} 
                         style={{ marginRight: 8 }}
                       />
                     )}
@@ -660,18 +688,18 @@ export default function NotebookScreen() {
             </View>
           )}
 
-          {/* Stats Row */}
-          <View style={styles.statsRow}>
+          {/* Stats Row with Dynamic Colors */}
+          <View style={[styles.statsRow, { borderTopColor: colorScheme.border }]}>
             <View style={styles.statItem}>
-              <Ionicons name="document-text-outline" size={18} color="#3b82f6" />
+              <Ionicons name="document-text-outline" size={18} color={colorScheme.primary} />
               <Text style={styles.statValue}>{notes.length}</Text>
               <Text style={styles.statLabel}>
                 {notes.length === 1 ? 'note' : 'notes'}
               </Text>
             </View>
-            <View style={styles.statDivider} />
+            <View style={[styles.statDivider, { backgroundColor: colorScheme.border }]} />
             <View style={styles.statItem}>
-              <Ionicons name="calendar-outline" size={18} color="#3b82f6" />
+              <Ionicons name="calendar-outline" size={18} color={colorScheme.primary} />
               <Text style={styles.statValue}>
                 {notebook?.createdAt.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
               </Text>
@@ -681,13 +709,18 @@ export default function NotebookScreen() {
         </LinearGradient>
       </View>
 
-      {/* Notes Section Header */}
+      {/* Notes Section Header with Dynamic Colors */}
       <View style={styles.notesHeader}>
         <View style={styles.notesHeaderContent}>
-          <Ionicons name="folder-open-outline" size={20} color="#3b82f6" />
+          <Ionicons name="folder-open-outline" size={20} color={colorScheme.primary} />
           <Text style={styles.notesHeaderTitle}>All Notes</Text>
         </View>
-        <View style={styles.notesHeaderDivider} />
+        <LinearGradient
+          colors={[colorScheme.primary, colorScheme.light]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 0 }}
+          style={styles.notesHeaderDivider}
+        />
       </View>
     </View>
   );
@@ -733,10 +766,13 @@ export default function NotebookScreen() {
   return (
     <LinearGradient colors={["#0A1C3C", "#0A1C3C"]} style={styles.container}>
       <SafeAreaView style={styles.container}>
-        {/* Floating Header with Back Button */}
+        {/* Floating Header with Dynamic Color */}
         <View style={styles.floatingHeader}>
           <TouchableOpacity 
-            style={styles.floatingBackBtn}
+            style={[styles.floatingBackBtn, {
+              backgroundColor: `${colorScheme.primary}CC`,
+              borderColor: colorScheme.light
+            }]}
             onPress={() => router.back()}
           >
             <Ionicons name="arrow-back" size={24} color="#fff" />
@@ -754,14 +790,17 @@ export default function NotebookScreen() {
             <RefreshControl
               refreshing={refreshing}
               onRefresh={onRefresh}
-              tintColor="#3b82f6"
-              colors={["#3b82f6"]}
+              tintColor={colorScheme.primary}
+              colors={[colorScheme.primary]}
             />
           }
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
-              <View style={styles.emptyCircle}>
-                <Ionicons name="document-text-outline" size={48} color="#4b5563" />
+              <View style={[styles.emptyCircle, {
+                backgroundColor: colorScheme.overlay,
+                borderColor: colorScheme.border
+              }]}>
+                <Ionicons name="document-text-outline" size={48} color={colorScheme.primary} />
               </View>
               <Text style={styles.emptyText}>No notes yet</Text>
               <Text style={styles.emptySubtext}>
@@ -771,21 +810,21 @@ export default function NotebookScreen() {
           }
         />
 
-        {/* Floating Action Button */}
+        {/* Floating Action Button with Dynamic Colors */}
         <TouchableOpacity 
           style={styles.fab} 
           onPress={handleCreateNote}
           activeOpacity={0.8}
         >
           <LinearGradient
-            colors={['#3b82f6', '#2563eb']}
+            colors={[colorScheme.primary, colorScheme.dark]}
             style={styles.fabGradient}
           >
             <Ionicons name="add" size={28} color="#ffffff" />
           </LinearGradient>
         </TouchableOpacity>
 
-        {/* Settings Modal */}
+        {/* Settings Modal with Dynamic Colors */}
         <Modal
           animationType="fade"
           transparent
@@ -793,7 +832,9 @@ export default function NotebookScreen() {
           onRequestClose={() => setSettingsModalVisible(false)}
         >
           <View style={styles.modalOverlay}>
-            <View style={styles.settingsModalContent}>
+            <View style={[styles.settingsModalContent, {
+              borderColor: colorScheme.border
+            }]}>
               <View style={styles.modalHeader}>
                 <Text style={styles.modalTitle}>Notebook Settings</Text>
                 <TouchableOpacity 
@@ -807,11 +848,14 @@ export default function NotebookScreen() {
               <View style={styles.settingsSection}>
                 <View style={styles.settingItem}>
                   <View style={styles.settingInfo}>
-                    <View style={styles.settingIconContainer}>
+                    <View style={[styles.settingIconContainer, {
+                      backgroundColor: colorScheme.overlay,
+                      borderColor: colorScheme.border
+                    }]}>
                       <Ionicons 
                         name={isPublicToggle ? "globe" : "lock-closed"} 
                         size={20} 
-                        color={isPublicToggle ? "#52C72B" : "#9ca3af"} 
+                        color={isPublicToggle ? "#52C72B" : colorScheme.light} 
                       />
                     </View>
                     <View style={styles.settingTextContainer}>
@@ -826,7 +870,7 @@ export default function NotebookScreen() {
                   <Switch
                     value={isPublicToggle}
                     onValueChange={setIsPublicToggle}
-                    trackColor={{ false: "#374151", true: "#52C72B" }}
+                    trackColor={{ false: "#374151", true: colorScheme.primary }}
                     thumbColor={isPublicToggle ? "#ffffff" : "#9ca3af"}
                     ios_backgroundColor="#374151"
                   />
@@ -844,11 +888,16 @@ export default function NotebookScreen() {
                 {/* Sync Properties Button */}
                 {notebook.properties && notebook.properties.length > 0 && (
                   <TouchableOpacity
-                    style={styles.syncButton}
+                    style={[styles.syncButton, {
+                      backgroundColor: colorScheme.overlay,
+                      borderColor: colorScheme.border
+                    }]}
                     onPress={handleSyncProperties}
                   >
-                    <Ionicons name="sync-outline" size={20} color="#3b82f6" />
-                    <Text style={styles.syncButtonText}>Sync Properties to All Notes</Text>
+                    <Ionicons name="sync-outline" size={20} color={colorScheme.primary} />
+                    <Text style={[styles.syncButtonText, { color: colorScheme.light }]}>
+                      Sync Properties to All Notes
+                    </Text>
                   </TouchableOpacity>
                 )}
               </View>
@@ -863,7 +912,7 @@ export default function NotebookScreen() {
                 <TouchableOpacity
                   style={[
                     styles.modalButton, 
-                    styles.saveButton,
+                    { backgroundColor: colorScheme.primary },
                     savingSettings && styles.disabledButton
                   ]}
                   onPress={handleSaveSettings}
@@ -961,11 +1010,15 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: 'rgba(0, 0, 0, 0.6)',
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 4,
+    top: 10,
   },
   listContent: {
     paddingBottom: 100,
@@ -990,7 +1043,14 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    height: 100,
+    height: 120,
+  },
+  topColorAccent: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 6,
   },
   infoCardContainer: {
     paddingHorizontal: 16,
@@ -1000,10 +1060,9 @@ const styles = StyleSheet.create({
   infoCard: {
     borderRadius: 24,
     padding: 24,
-    borderWidth: 1,
-    borderColor: 'rgba(59, 130, 246, 0.2)',
+    borderWidth: 2,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
+    shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.3,
     shadowRadius: 12,
     elevation: 8,
@@ -1016,9 +1075,8 @@ const styles = StyleSheet.create({
   },
   accentLine: {
     width: 60,
-    height: 4,
-    backgroundColor: '#3b82f6',
-    borderRadius: 2,
+    height: 5,
+    borderRadius: 3,
   },
   settingsButton: {
     width: 36,
@@ -1060,9 +1118,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   descriptionContainer: {
-    backgroundColor: 'rgba(59, 130, 246, 0.05)',
     borderLeftWidth: 3,
-    borderLeftColor: '#3b82f6',
     paddingVertical: 12,
     paddingHorizontal: 16,
     borderRadius: 8,
@@ -1074,7 +1130,6 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   descriptionLabel: {
-    color: '#9ca3af',
     fontSize: 12,
     fontWeight: '600',
     textTransform: 'uppercase',
@@ -1096,7 +1151,6 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   sectionLabel: {
-    color: '#9ca3af',
     fontSize: 12,
     fontWeight: '600',
     textTransform: 'uppercase',
@@ -1114,17 +1168,14 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
   },
   tag: {
-    backgroundColor: 'rgba(59, 130, 246, 0.15)',
-    borderWidth: 1,
-    borderColor: 'rgba(59, 130, 246, 0.3)',
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 16,
     marginRight: 8,
     marginBottom: 8,
+    borderWidth: 1,
   },
   tagText: {
-    color: '#60a5fa',
     fontSize: 13,
     fontWeight: '600',
   },
@@ -1137,7 +1188,6 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   propertiesContainer: {
-    backgroundColor: 'rgba(17, 24, 39, 0.5)',
     borderRadius: 12,
     padding: 12,
   },
@@ -1164,8 +1214,7 @@ const styles = StyleSheet.create({
   statsRow: {
     flexDirection: 'row',
     paddingTop: 20,
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(75, 85, 99, 0.3)',
+    borderTopWidth: 2,
   },
   statItem: {
     flex: 1,
@@ -1174,9 +1223,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   statDivider: {
-    width: 1,
+    width: 2,
     height: 30,
-    backgroundColor: 'rgba(75, 85, 99, 0.3)',
   },
   statValue: {
     color: '#ffffff',
@@ -1207,9 +1255,8 @@ const styles = StyleSheet.create({
     marginLeft: 10,
   },
   notesHeaderDivider: {
-    height: 2,
-    backgroundColor: 'rgba(59, 130, 246, 0.3)',
-    borderRadius: 1,
+    height: 3,
+    borderRadius: 2,
   },
   noteCard: {
     backgroundColor: 'rgba(31, 41, 55, 0.7)',
@@ -1219,8 +1266,7 @@ const styles = StyleSheet.create({
     padding: 16,
     flexDirection: 'row',
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(75, 85, 99, 0.3)',
+    borderWidth: 2,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
@@ -1234,9 +1280,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 12,
-    backgroundColor: 'rgba(59, 130, 246, 0.1)',
-    borderWidth: 1,
-    borderColor: 'rgba(59, 130, 246, 0.2)',
+    borderWidth: 2,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -1267,17 +1311,14 @@ const styles = StyleSheet.create({
   propertyBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(59, 130, 246, 0.1)',
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 8,
     alignSelf: 'flex-start',
     marginBottom: 8,
     borderWidth: 1,
-    borderColor: 'rgba(59, 130, 246, 0.2)',
   },
   propertyBadgeText: {
-    color: '#60a5fa',
     fontSize: 12,
     fontWeight: '500',
     marginLeft: 4,
@@ -1304,9 +1345,7 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: 'rgba(59, 130, 246, 0.1)',
-    borderWidth: 1,
-    borderColor: 'rgba(59, 130, 246, 0.2)',
+    borderWidth: 2,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -1318,7 +1357,7 @@ const styles = StyleSheet.create({
     height: 60,
     borderRadius: 30,
     elevation: 8,
-    shadowColor: '#3b82f6',
+    shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.4,
     shadowRadius: 12,
@@ -1341,10 +1380,10 @@ const styles = StyleSheet.create({
     width: 100,
     height: 100,
     borderRadius: 50,
-    backgroundColor: 'rgba(75, 85, 99, 0.2)',
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 20,
+    borderWidth: 2,
   },
   emptyText: {
     color: '#9ca3af',
@@ -1371,8 +1410,7 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     width: '100%',
     maxWidth: 500,
-    borderWidth: 1,
-    borderColor: 'rgba(59, 130, 246, 0.2)',
+    borderWidth: 2,
   },
   modalHeader: {
     flexDirection: 'row',
@@ -1419,10 +1457,10 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 12,
-    backgroundColor: 'rgba(59, 130, 246, 0.1)',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
+    borderWidth: 1,
   },
   settingTextContainer: {
     flex: 1,
@@ -1459,15 +1497,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(59, 130, 246, 0.1)',
     padding: 14,
     borderRadius: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(59, 130, 246, 0.3)',
+    borderWidth: 2,
     gap: 8,
   },
   syncButtonText: {
-    color: '#3b82f6',
     fontSize: 15,
     fontWeight: '600',
   },
@@ -1494,9 +1529,6 @@ const styles = StyleSheet.create({
     color: '#9ca3af',
     fontSize: 16,
     fontWeight: '600',
-  },
-  saveButton: {
-    backgroundColor: '#3b82f6',
   },
   saveButtonText: {
     color: '#ffffff',

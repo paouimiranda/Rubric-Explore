@@ -21,12 +21,12 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   Alert,
   Dimensions,
+  FlatList,
   KeyboardAvoidingView,
   Modal,
   NativeSyntheticEvent,
   Platform,
   SafeAreaView,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -394,27 +394,33 @@ export default function NoteEditor({
 
   // Show loading screen while note metadata is loading OR content is not ready
   if (loading || !collaborative.contentReady) {
-    return (
-      <LinearGradient colors={["#324762", "#0A1C3C"]} style={styles.loadingContainer}>
-        <SafeAreaView style={styles.loadingContent}>
-          <LottieView
-            source={require('@/assets/animations/quiz-loading.json')}
-            autoPlay
-            loop
-            style={styles.lottieAnimation}
-          />
-          <Text style={styles.loadingText}>
-            {loading ? 'Loading note...' : 'Loading content...'}
+  return (
+    <LinearGradient colors={["#324762", "#0A1C3C"]} style={styles.loadingContainer}>
+      <SafeAreaView style={styles.loadingContent}>
+        <LottieView
+          source={require('@/assets/animations/quiz-loading.json')}
+          autoPlay
+          loop
+          style={styles.lottieAnimation}
+        />
+        <Text style={styles.loadingText}>
+          {loading ? 'Loading note...' : 'Syncing content...'}
+        </Text>
+        {collaborative.chunkCount > 0 && (
+          <Text style={styles.loadingSubtext}>
+            Loading {collaborative.chunkCount} chunk{collaborative.chunkCount !== 1 ? 's' : ''}
           </Text>
-          {collaborative.chunkCount > 0 && (
-            <Text style={styles.loadingSubtext}>
-              Loading {collaborative.chunkCount} chunk{collaborative.chunkCount !== 1 ? 's' : ''}
-            </Text>
-          )}
-        </SafeAreaView>
-      </LinearGradient>
-    );
-  }
+        )}
+        {/* NEW: Show what's happening */}
+        {!loading && !collaborative.contentReady && (
+          <Text style={[styles.loadingSubtext, { marginTop: 8 }]}>
+            First-time initialization may take a moment...
+          </Text>
+        )}
+      </SafeAreaView>
+    </LinearGradient>
+  );
+}
 
   return (
     <LinearGradient colors={["#324762", "#324762"]} style={styles.container}>
@@ -467,11 +473,13 @@ export default function NoteEditor({
           style={styles.content} 
           behavior={Platform.OS === "ios" ? "padding" : "height"}
         >
-          <ScrollView 
-            style={styles.scrollView}
+          <FlatList
+            data={[{ key: 'editor-content' }]}
+            keyExtractor={(item) => item.key}
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
-          >
+            renderItem={() => (
+              <>
             {/* Title */}
             <TextInput
               ref={collaborative.titleInputRef}
@@ -561,7 +569,9 @@ export default function NoteEditor({
                 }}
               />
             </View>
-          </ScrollView>
+          </>
+            )}
+            />
 
           {!(effectiveIsSharedAccess && effectiveSharedPermission === "view") && (
             <RichTextToolbar

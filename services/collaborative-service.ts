@@ -170,8 +170,21 @@ class ChunkBasedCollaborativeService {
     // CRITICAL FIX: Verify chunks exist
     if (chunks.length === 0) {
       console.warn('⚠️ No chunks found for note:', noteId);
-      throw new Error('No chunks found - note may need migration');
+      
+
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      const retryChunks = await getNoteChunks(noteId);
+      
+      if (retryChunks.length === 0) {
+        throw new Error('No chunks found - note may need migration');
+      }
+      
+      // Use retry chunks if found
+      chunks.length = 0;
+      chunks.push(...retryChunks);
     }
+
+    
 
     // Load chunks sequentially to ensure proper initialization
     for (const chunk of chunks) {
