@@ -1,4 +1,5 @@
 // components/RichTextEditor/RichTextEditor.tsx (PRODUCTION)
+import { useTheme } from '@/hooks/useTheme';
 import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import { LogBox, StyleSheet, View } from 'react-native';
 import { RichEditor } from 'react-native-pell-rich-editor';
@@ -60,6 +61,18 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(({
   const isApplyingRemoteUpdate = useRef(false);
   
   const savedSelection = useRef<SerializedSelection | null>(null);
+
+  const { colors } = useTheme();
+
+  
+
+  // ADD THIS: Create styles inside component so they update with theme
+  const styles = StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: 'transparent',
+    }
+  });
 
   const extractPlainTextFromHtml = (html: string): string => {
     if (!html) return '';
@@ -485,6 +498,7 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(({
       isInitialMount.current = false;
     }
   }, [initialContent]);
+  
 
 
 
@@ -578,15 +592,17 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(({
         initialContentHTML={initialContent}
         onMessage={handleWebViewMessage}
         editorStyle={{
-          backgroundColor: 'transparent',
-          color: '#ffffff',
-          placeholderColor: '#9ca3af',
+          backgroundColor: colors.editorBackground,
+          color: colors.editorText,
+          placeholderColor: colors.editorPlaceholder,
           contentCSSText: `
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
             font-size: 16px;
             line-height: 1.6;
             padding: 12px;
             min-height: 200px;
+            color: ${colors.editorText};
+            background-color: ${colors.editorBackground};
           `
         }}
         useContainer={true}
@@ -596,11 +612,5 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(({
   );
 });
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: 'transparent',
-  }
-});
 
 export default RichTextEditor;

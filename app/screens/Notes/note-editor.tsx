@@ -4,9 +4,11 @@ import NoteSidebar from "@/components/Interface/note-sidebar";
 import RichTextEditor, { RichTextEditorRef } from '@/components/Interface/rich-text-editor';
 import RichTextToolbar from "@/components/Interface/rich-text-toolbar";
 import SharingModal from "@/components/Interface/sharing-modal";
+import { createThemedStyles } from "@/constants/themedStyles";
 import { db } from "@/firebase";
 import { useCollaborativeEditing } from '@/hooks/CollaborativeEditing';
 import { useBacklogLogger } from "@/hooks/useBackLogLogger";
+import { useTheme } from "@/hooks/useTheme";
 import { BACKLOG_EVENTS } from "@/services/backlogEvents";
 import { getNotesInNotebook, updateNote } from '@/services/notes-service';
 import { Ionicons } from "@expo/vector-icons";
@@ -53,6 +55,9 @@ export default function NoteEditor({
   const uid = user?.uid;
   const { addBacklogEvent } = useBacklogLogger();
   const hasLoggedOpen = useRef(false);
+
+  const { colors, themeMode, toggleTheme, isLoading } = useTheme();
+  const styles = createThemedStyles(colors, themeMode);
   
   if (!uid) {
     return (
@@ -91,6 +96,13 @@ export default function NoteEditor({
   const [sidebarVisible, setSidebarVisible] = useState(false);
   const [notebookNotes, setNotebookNotes] = useState<Note[]>([]);
   const [notebookTitle, setNotebookTitle] = useState('');
+
+  //themes
+   const gradientColors = themeMode === 'dark' 
+    ? ["#324762", "#324762"] 
+    : ["#ffffff", "#f8fafc"];
+
+  
     
   const richEditorRef = useRef<RichTextEditorRef>(null);
   
@@ -423,7 +435,7 @@ export default function NoteEditor({
 }
 
   return (
-    <LinearGradient colors={["#324762", "#324762"]} style={styles.container}>
+    <LinearGradient colors={gradientColors as any} style={styles.container}>
       <SafeAreaView style={styles.container}>
         {/* Minimalist Header */}
         <View style={styles.header}>
@@ -431,16 +443,27 @@ export default function NoteEditor({
             style={styles.iconButton} 
             onPress={() => setSidebarVisible(true)}
           >
-            <Ionicons name="menu" size={22} color="#fff" />
+            <Ionicons name="menu" size={22} color={colors.text} />
           </TouchableOpacity>
           
           <View style={styles.headerRight}>
+             <TouchableOpacity
+              style={styles.iconButton}
+              onPress={toggleTheme}
+            >
+              <Ionicons 
+                name={themeMode === 'dark' ? 'sunny' : 'moon'} 
+                size={22} 
+                color={colors.text} 
+              />
+            </TouchableOpacity>
+
             {!effectiveIsSharedAccess && (
               <TouchableOpacity
                 style={styles.iconButton}
                 onPress={() => setOcrModalVisible(true)}
               >
-                <Ionicons name="scan-outline" size={22} color="#fff" />
+                <Ionicons name="scan-outline" size={22} color={colors.text} />
               </TouchableOpacity>
             )}
             
@@ -456,7 +479,7 @@ export default function NoteEditor({
                   }
                 }}
               >
-                <Ionicons name="share-social-outline" size={22} color="#fff" />
+                <Ionicons name="share-social-outline" size={22} color={colors.text} />
               </TouchableOpacity>
             )}
             
@@ -464,7 +487,7 @@ export default function NoteEditor({
               style={styles.iconButton}
               onPress={() => setEllipsisMenuVisible(true)}
             >
-              <Ionicons name="ellipsis-horizontal" size={22} color="#fff" />
+              <Ionicons name="ellipsis-horizontal" size={22} color={colors.text} />
             </TouchableOpacity>
           </View>
         </View>
@@ -557,6 +580,7 @@ export default function NoteEditor({
             {/* Rich Text Editor */}
             <View style={styles.editorWrapper}>
               <RichTextEditor
+                key={`editor-${themeMode}`}
                 ref={richEditorRef}
                 initialContent={content}
                 onContentChange={handleContentChange}
@@ -575,6 +599,7 @@ export default function NoteEditor({
 
           {!(effectiveIsSharedAccess && effectiveSharedPermission === "view") && (
             <RichTextToolbar
+              key={`editor-${themeMode}`}
               getEditor={() => richEditorRef.current?.getEditor()}
               onMetadataPress={() => setMetadataModalVisible(true)}
               noteId={routeNoteId as string}
@@ -656,7 +681,7 @@ export default function NoteEditor({
                 <Ionicons 
                   name={saving ? "reload" : "save-outline"} 
                   size={20} 
-                  color={saving ? "#9ca3af" : "#fff"} 
+                  color={saving ? "#9ca3af" : colors.text} 
                 />
                 <Text style={styles.menuItemText}>
                   {saving ? 'Saving...' : 'Save'}
@@ -670,7 +695,7 @@ export default function NoteEditor({
                   setEllipsisMenuVisible(false);
                 }}
               >
-                <Ionicons name="information-circle-outline" size={20} color="#fff" />
+                <Ionicons name="information-circle-outline" size={20} color={colors.text} />
                 <Text style={styles.menuItemText}>Note Information</Text>
               </TouchableOpacity>
             </View>

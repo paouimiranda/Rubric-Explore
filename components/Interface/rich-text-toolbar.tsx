@@ -1,4 +1,6 @@
 // components/RichTextEditor/RichTextToolbar.tsx
+import { createToolbarThemedStyles } from '@/constants/themedStyles';
+import { useTheme } from '@/hooks/useTheme';
 import { pickImage, takePhoto, uploadNoteImage } from '@/services/image-service';
 import { Ionicons } from '@expo/vector-icons';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
@@ -71,6 +73,9 @@ const RichTextToolbar: React.FC<RichTextToolbarProps> = ({ getEditor, onMetadata
 
   const stateCheckRef = useRef<NodeJS.Timeout>();
   const isMountedRef = useRef(true);
+
+  const { colors, themeMode } = useTheme();
+  const styles = createToolbarThemedStyles(colors, themeMode);
 
   // Check formatting state by evaluating JavaScript and parsing result
   const checkFormattingState = useCallback(async () => {
@@ -375,14 +380,14 @@ const RichTextToolbar: React.FC<RichTextToolbarProps> = ({ getEditor, onMetadata
             style={styles.customButton}
             onPress={handleUndo}
           >
-            <Ionicons name="arrow-undo" size={20} color="#ffffff" />
+            <Ionicons name="arrow-undo" size={20} color={colors.text} />
           </TouchableOpacity>
 
           <TouchableOpacity 
             style={styles.customButton}
             onPress={handleRedo}
           >
-            <Ionicons name="arrow-redo" size={20} color="#ffffff" />
+            <Ionicons name="arrow-redo" size={20} color={colors.text} />
           </TouchableOpacity>
 
           {/* Text formatting with active states */}
@@ -439,14 +444,14 @@ const RichTextToolbar: React.FC<RichTextToolbarProps> = ({ getEditor, onMetadata
             style={styles.customButton}
             onPress={() => setColorPickerVisible(true)}
           >
-            <Ionicons name="color-palette" size={20} color="#ffffff" />
+            <Ionicons name="color-palette" size={20} color={colors.text} />
           </TouchableOpacity>
 
           <TouchableOpacity 
             style={styles.customButton}
             onPress={() => setHighlightPickerVisible(true)}
           >
-            <Ionicons name="color-fill" size={20} color="#ffffff" />
+            <Ionicons name="color-fill" size={20} color={colors.text} />
           </TouchableOpacity>
 
           {/* Headings */}
@@ -499,7 +504,7 @@ const RichTextToolbar: React.FC<RichTextToolbarProps> = ({ getEditor, onMetadata
               }
             }}
           >
-            <Ionicons name="document-text-outline" size={20} color="#ffffff" />
+            <Ionicons name="document-text-outline" size={20} color={colors.text} />
           </TouchableOpacity>
 
           {/* Lists */}
@@ -551,7 +556,7 @@ const RichTextToolbar: React.FC<RichTextToolbarProps> = ({ getEditor, onMetadata
             style={styles.customButton}
             onPress={() => setLinkModalVisible(true)}
           >
-            <Ionicons name="link" size={20} color="#ffffff" />
+            <Ionicons name="link" size={20} color={colors.text} />
           </TouchableOpacity>
 
           {/* Image upload button */}

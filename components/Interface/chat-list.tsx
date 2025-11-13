@@ -128,6 +128,7 @@ export default function ChatList({ refreshing = false, onRefresh }: ChatListProp
       refreshControl={
         <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
       }
+      showsVerticalScrollIndicator={false}
     >
       {conversations.map((conversation) => (
         <TouchableOpacity
@@ -186,6 +187,7 @@ export default function ChatList({ refreshing = false, onRefresh }: ChatListProp
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    marginBottom: 50,
   },
   loadingContainer: {
     flex: 1,

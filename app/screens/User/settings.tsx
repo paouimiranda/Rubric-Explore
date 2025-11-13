@@ -657,7 +657,7 @@ const styles = StyleSheet.create({
   },
   container: {
     padding: 16,
-    paddingBottom: 20, // Reduced since logout is now outside ScrollView
+    paddingBottom: 60, // Reduced since logout is now outside ScrollView
   },
   headerContainer: {
     alignItems: 'center',
