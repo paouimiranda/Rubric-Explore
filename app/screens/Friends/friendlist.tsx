@@ -956,7 +956,7 @@ const SearchResultCard = ({ user, onSendRequest, onViewProfile }: {
           style={styles.searchResultAvatar}
         >
           <Text style={styles.searchResultAvatarText}>
-            {user.displayName ? user.displayName.charAt(0).toUpperCase() : '?'}  {/* FIXED: Safety check */}
+            {((user.displayName || '').charAt(0).toUpperCase() || '?')}
           </Text>
         </LinearGradient>
         <View style={styles.searchResultInfo}>
@@ -1013,7 +1013,7 @@ const FriendRequestCard = ({ request, onAccept, onReject, onViewProfile }: {
             style={styles.requestAvatar}
           >
             <Text style={styles.requestAvatarText}>
-              {request.senderInfo.displayName ? request.senderInfo.displayName.charAt(0).toUpperCase() : '?'}  {/* FIXED: Safety check */}
+              {((request.senderInfo.displayName || '').charAt(0).toUpperCase() || '?')}
             </Text>
           </LinearGradient>
           <LinearGradient
