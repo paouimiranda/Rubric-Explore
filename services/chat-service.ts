@@ -1,24 +1,24 @@
 // services/chat-service.ts
 import {
-    addDoc,
-    collection,
-    deleteDoc,
-    doc,
-    DocumentData,
-    DocumentSnapshot,
-    getDoc,
-    getDocs,
-    limit,
-    onSnapshot,
-    orderBy,
-    query,
-    QuerySnapshot,
-    serverTimestamp,
-    Timestamp,
-    Unsubscribe,
-    updateDoc,
-    where,
-    writeBatch
+  addDoc,
+  collection,
+  deleteDoc,
+  doc,
+  DocumentData,
+  DocumentSnapshot,
+  getDoc,
+  getDocs,
+  limit,
+  onSnapshot,
+  orderBy,
+  query,
+  QuerySnapshot,
+  serverTimestamp,
+  Timestamp,
+  Unsubscribe,
+  updateDoc,
+  where,
+  writeBatch
 } from 'firebase/firestore';
 import { db } from '../firebase';
 
@@ -144,45 +144,36 @@ export const createOrGetConversation = async (
 };
 
 // Send a message
+// UPDATED: Send a message (now to subcollection and update userConversations)
 export const sendMessage = async (
   conversationId: string,
   senderId: string,
   text: string
 ): Promise<boolean> => {
   try {
-    // Get sender info
     const senderDoc: DocumentSnapshot<DocumentData> = await getDoc(doc(db, 'users', senderId));
     if (!senderDoc.exists()) {
       throw new Error('Sender not found');
     }
-    
     const senderData = senderDoc.data();
-    
-    // Create message
     const messageData = {
-      conversationId,
       senderId,
       senderName: senderData.displayName,
       text: text.trim(),
       timestamp: serverTimestamp(),
-      readBy: [senderId], // Sender has read it
+      readBy: [senderId],
       type: 'text' as const
     };
-    
     const batch = writeBatch(db);
-    
-    // Add message
-    const messageRef = doc(collection(db, 'messages'));
+    // Add message to subcollection
+    const messageRef = doc(collection(db, 'conversations', conversationId, 'messages'));  // UPDATED: Subcollection
     batch.set(messageRef, messageData);
-    
-    // Update conversation's last message and unread counts
+    // Update conversation's last message
     const conversationRef = doc(db, 'conversations', conversationId);
     const conversationDoc: DocumentSnapshot<DocumentData> = await getDoc(conversationRef);
-    
     if (conversationDoc.exists()) {
       const conversationData = conversationDoc.data();
       const otherParticipantId = conversationData.participants.find((id: string) => id !== senderId);
-      
       batch.update(conversationRef, {
         lastMessage: {
           text: text.trim(),
@@ -192,6 +183,23 @@ export const sendMessage = async (
         },
         lastMessageTime: serverTimestamp(),
         [`unreadCount.${otherParticipantId}`]: (conversationData.unreadCount?.[otherParticipantId] || 0) + 1
+      });
+      // UPDATED: Also update userConversations for both users
+      const userConvRefs = [
+        doc(db, 'userConversations', senderId, 'conversations', conversationId),
+        doc(db, 'userConversations', otherParticipantId, 'conversations', conversationId)
+      ];
+      userConvRefs.forEach(ref => {
+        batch.update(ref, {
+          lastMessage: {
+            text: text.trim(),
+            senderId,
+            senderName: senderData.displayName,
+            timestamp: serverTimestamp()
+          },
+          lastMessageTime: serverTimestamp(),
+          unreadCount: otherParticipantId === senderId ? 0 : (conversationData.unreadCount?.[otherParticipantId] || 0) + 1
+        });
       });
     }
     
@@ -203,6 +211,7 @@ export const sendMessage = async (
   }
 };
 
+
 // Get messages for a conversation
 export const getMessages = async (
   conversationId: string,
@@ -210,8 +219,7 @@ export const getMessages = async (
 ): Promise<Message[]> => {
   try {
     const messagesQuery = query(
-      collection(db, 'messages'),
-      where('conversationId', '==', conversationId),
+      collection(db, 'conversations', conversationId, 'messages'),  // UPDATED: Subcollection path
       orderBy('timestamp', 'desc'),
       limit(limitCount)
     );
@@ -223,11 +231,11 @@ export const getMessages = async (
       const data = doc.data();
       messages.push({
         id: doc.id,
+        conversationId,  // Add back for compatibility
         ...data
       } as Message);
     });
     
-    // Return in chronological order (oldest first)
     return messages.reverse();
   } catch (error) {
     console.error('Error getting messages:', error);
@@ -241,8 +249,7 @@ export const listenToMessages = (
   callback: (messages: Message[]) => void
 ): Unsubscribe => {
   const messagesQuery = query(
-    collection(db, 'messages'),
-    where('conversationId', '==', conversationId),
+    collection(db, 'conversations', conversationId, 'messages'),  // UPDATED: Subcollection path
     orderBy('timestamp', 'desc'),
     limit(100)
   );
@@ -254,46 +261,49 @@ export const listenToMessages = (
       const data = doc.data();
       messages.push({
         id: doc.id,
+        conversationId,  // Add back for compatibility
         ...data
       } as Message);
     });
     
-    // Return in chronological order (oldest first)
     callback(messages.reverse());
   });
 };
-
 // Get user's conversations
+// UPDATED: Get user's conversations (now from userConversations, filter out deleted)
 export const getUserConversations = async (userId: string): Promise<ConversationPreview[]> => {
   try {
-    const conversationsQuery = query(
-      collection(db, 'conversations'),
-      where('participants', 'array-contains', userId),
+    const userConversationsQuery = query(
+      collection(db, 'userConversations', userId, 'conversations'),
+      where('isDeleted', '==', false),
       orderBy('lastMessageTime', 'desc')
     );
-    
-    const snapshot: QuerySnapshot<DocumentData> = await getDocs(conversationsQuery);
+    const snapshot: QuerySnapshot<DocumentData> = await getDocs(userConversationsQuery);
     const conversations: ConversationPreview[] = [];
-    
-    snapshot.docs.forEach(doc => {
-      const data = doc.data();
-      const otherParticipantId = data.participants.find((id: string) => id !== userId);
-      const otherUserInfo = data.participantInfo[otherParticipantId];
-      
-      conversations.push({
-        id: doc.id,
-        otherUser: {
-          id: otherParticipantId,
-          displayName: otherUserInfo.displayName,
-          username: otherUserInfo.username,
-          isOnline: otherUserInfo.isOnline || false
-        },
-        lastMessage: data.lastMessage,
-        lastMessageTime: data.lastMessageTime,
-        unreadCount: data.unreadCount?.[userId] || 0
-      });
-    });
-    
+    for (const docSnap of snapshot.docs) {
+      const data = docSnap.data();
+      const conversationId = data.conversationId;
+      // Get other user info from the main conversation
+      const convDoc = await getDoc(doc(db, 'conversations', conversationId));
+      if (convDoc.exists()) {
+        const convData = convDoc.data() as Conversation;  // SAFE CAST
+        const otherParticipantId = convData.participants.find((id: string) => id !== userId);
+        if (!otherParticipantId) continue;  // SKIP IF INVALID
+        const otherUserInfo = convData.participantInfo[otherParticipantId];
+        conversations.push({
+          id: conversationId,
+          otherUser: {
+            id: otherParticipantId,
+            displayName: otherUserInfo.displayName,
+            username: otherUserInfo.username,
+            isOnline: otherUserInfo.isOnline || false
+          },
+          lastMessage: data.lastMessage,
+          lastMessageTime: data.lastMessageTime,
+          unreadCount: data.unreadCount || 0
+        });
+      }
+    }   
     return conversations;
   } catch (error) {
     console.error('Error getting conversations:', error);
@@ -301,44 +311,51 @@ export const getUserConversations = async (userId: string): Promise<Conversation
   }
 };
 
+
 // Listen to real-time conversations
+// UPDATED: Listen to real-time conversations (now from userConversations)
 export const listenToConversations = (
   userId: string,
   callback: (conversations: ConversationPreview[]) => void
 ): Unsubscribe => {
-  const conversationsQuery = query(
-    collection(db, 'conversations'),
-    where('participants', 'array-contains', userId),
+  const userConversationsQuery = query(
+    collection(db, 'userConversations', userId, 'conversations'),
+    where('isDeleted', '==', false),
     orderBy('lastMessageTime', 'desc')
   );
-  
-  return onSnapshot(conversationsQuery, (snapshot: QuerySnapshot<DocumentData>) => {
+  return onSnapshot(userConversationsQuery, async (snapshot: QuerySnapshot<DocumentData>) => {
     const conversations: ConversationPreview[] = [];
-    
-    snapshot.docs.forEach(doc => {
-      const data = doc.data();
-      const otherParticipantId = data.participants.find((id: string) => id !== userId);
-      const otherUserInfo = data.participantInfo[otherParticipantId];
-      
-      conversations.push({
-        id: doc.id,
-        otherUser: {
-          id: otherParticipantId,
-          displayName: otherUserInfo.displayName,
-          username: otherUserInfo.username,
-          isOnline: otherUserInfo.isOnline || false
-        },
-        lastMessage: data.lastMessage,
-        lastMessageTime: data.lastMessageTime,
-        unreadCount: data.unreadCount?.[userId] || 0
-      });
-    });
-    
+    for (const docSnap of snapshot.docs) {
+      const data = docSnap.data();
+      const conversationId = data.conversationId;
+      // Get other user info
+      const convDoc = await getDoc(doc(db, 'conversations', conversationId));
+      if (convDoc.exists()) {
+        const convData = convDoc.data() as Conversation;  // SAFE CAST
+        const otherParticipantId = convData.participants.find((id: string) => id !== userId);
+        if (!otherParticipantId) continue;  // SKIP IF INVALID
+        const otherUserInfo = convData.participantInfo[otherParticipantId];
+        conversations.push({
+          id: conversationId,
+          otherUser: {
+            id: otherParticipantId,
+            displayName: otherUserInfo.displayName,
+            username: otherUserInfo.username,
+            isOnline: otherUserInfo.isOnline || false
+          },
+          lastMessage: data.lastMessage,
+          lastMessageTime: data.lastMessageTime,
+          unreadCount: data.unreadCount || 0
+        });
+      }
+    }
     callback(conversations);
   });
 };
 
+
 // Mark messages as read
+// UPDATED: Mark messages as read (now affects userConversations)
 export const markMessagesAsRead = async (
   conversationId: string,
   userId: string
@@ -346,23 +363,27 @@ export const markMessagesAsRead = async (
   try {
     const batch = writeBatch(db);
     
-    // Reset unread count in conversation
+    // Update main conversation
     const conversationRef = doc(db, 'conversations', conversationId);
     batch.update(conversationRef, {
       [`unreadCount.${userId}`]: 0
     });
     
-    // Mark recent messages as read (optional - for read receipts)
+    // UPDATED: Update userConversations
+    const userConvRef = doc(db, 'userConversations', userId, 'conversations', conversationId);
+    batch.update(userConvRef, {
+      unreadCount: 0
+    });
+    
+    // Mark messages as read in subcollection
     const messagesQuery = query(
-      collection(db, 'messages'),
-      where('conversationId', '==', conversationId),
+      collection(db, 'conversations', conversationId, 'messages'),  // UPDATED: Subcollection
       where('senderId', '!=', userId),
       orderBy('timestamp', 'desc'),
       limit(20)
     );
     
     const snapshot: QuerySnapshot<DocumentData> = await getDocs(messagesQuery);
-    
     snapshot.docs.forEach(doc => {
       const data = doc.data();
       if (!data.readBy.includes(userId)) {
@@ -380,10 +401,11 @@ export const markMessagesAsRead = async (
   }
 };
 
-// Delete a message
-export const deleteMessage = async (messageId: string): Promise<boolean> => {
+
+// UPDATED: Delete a message (now from subcollection)
+export const deleteMessage = async (conversationId: string, messageId: string): Promise<boolean> => {
   try {
-    await deleteDoc(doc(db, 'messages', messageId));
+    await deleteDoc(doc(db, 'conversations', conversationId, 'messages', messageId));  // UPDATED: Subcollection
     return true;
   } catch (error) {
     console.error('Error deleting message:', error);
@@ -391,13 +413,14 @@ export const deleteMessage = async (messageId: string): Promise<boolean> => {
   }
 };
 
-// Edit a message
+// UPDATED: Edit a message (now from subcollection)
 export const editMessage = async (
+  conversationId: string,
   messageId: string,
   newText: string
 ): Promise<boolean> => {
   try {
-    await updateDoc(doc(db, 'messages', messageId), {
+    await updateDoc(doc(db, 'conversations', conversationId, 'messages', messageId), {  // UPDATED: Subcollection
       text: newText.trim(),
       edited: true,
       editedAt: serverTimestamp()
@@ -409,20 +432,20 @@ export const editMessage = async (
   }
 };
 
-// Get total unread messages count for user
+// UPDATED: Get total unread count (now from userConversations)
 export const getTotalUnreadCount = async (userId: string): Promise<number> => {
   try {
-    const conversationsQuery = query(
-      collection(db, 'conversations'),
-      where('participants', 'array-contains', userId)
+    const userConversationsQuery = query(
+      collection(db, 'userConversations', userId, 'conversations'),
+      where('isDeleted', '==', false)
     );
     
-    const snapshot: QuerySnapshot<DocumentData> = await getDocs(conversationsQuery);
+    const snapshot: QuerySnapshot<DocumentData> = await getDocs(userConversationsQuery);
     let totalUnread = 0;
     
     snapshot.docs.forEach(doc => {
       const data = doc.data();
-      totalUnread += data.unreadCount?.[userId] || 0;
+      totalUnread += data.unreadCount || 0;
     });
     
     return totalUnread;
@@ -430,4 +453,39 @@ export const getTotalUnreadCount = async (userId: string): Promise<number> => {
     console.error('Error getting total unread count:', error);
     return 0;
   }
+};
+// NEW: Delete a conversation (for current user only - mark as deleted)
+export const deleteConversation = async (conversationId: string, currentUserId: string): Promise<void> => {
+  try {
+    // Reference to the user's conversation metadata
+    const userConvRef = doc(db, 'userConversations', currentUserId, 'conversations', conversationId);
+    
+    // Check if it exists and belongs to the user
+    const userConvSnap = await getDoc(userConvRef);
+    if (!userConvSnap.exists()) {
+      throw new Error('Conversation not found for this user');
+    }
+    
+    // Mark as deleted (no actual data deletion)
+    await updateDoc(userConvRef, {
+      isDeleted: true,
+      updatedAt: serverTimestamp()
+    });
+    
+    console.log('Conversation deleted for user successfully');
+  } catch (error) {
+    console.error('Error deleting conversation:', error);
+    throw new Error('Failed to delete conversation');
+  }
+};
+
+// NEW: Helper to toggle mute/pin (for userConversations)
+export const toggleConversationMute = async (conversationId: string, userId: string, isMuted: boolean): Promise<void> => {
+  const userConvRef = doc(db, 'userConversations', userId, 'conversations', conversationId);
+  await updateDoc(userConvRef, { isMuted, updatedAt: serverTimestamp() });
+};
+
+export const toggleConversationPin = async (conversationId: string, userId: string, isPinned: boolean): Promise<void> => {
+  const userConvRef = doc(db, 'userConversations', userId, 'conversations', conversationId);
+  await updateDoc(userConvRef, { isPinned, updatedAt: serverTimestamp() });
 };

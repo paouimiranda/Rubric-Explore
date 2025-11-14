@@ -1,7 +1,9 @@
-// components/Chat/ChatList.tsx
+// components/Interface/chat-list.tsx
+import { CustomAlertModal } from '@/components/Interface/custom-alert-modal'; // NEW: For confirmation alert
 import { auth } from '@/firebase';
 import {
   ConversationPreview,
+  deleteConversation,
   getUserConversations,
   listenToConversations
 } from '@/services/chat-service';
@@ -16,7 +18,6 @@ import {
   TouchableOpacity,
   View
 } from 'react-native';
-
 interface ChatListProps {
   refreshing?: boolean;
   onRefresh?: () => void;
@@ -27,6 +28,94 @@ export default function ChatList({ refreshing = false, onRefresh }: ChatListProp
   const [loading, setLoading] = useState(true);
   const router = useRouter();
   const currentUser = auth.currentUser;
+  const [alertConfig, setAlertConfig] = useState<{  // NEW: State for alert
+    visible: boolean;
+    type: 'info' | 'success' | 'error' | 'warning';
+    title: string;
+    message: string;
+    buttons: Array<{
+      text: string;
+      onPress: () => void;
+      style?: 'default' | 'cancel' | 'primary';
+    }>;
+  }>({
+    visible: false,
+    type: 'info',
+    title: '',
+    message: '',
+    buttons: [],
+  });
+
+  // NEW: Helper to show alert
+  const showAlert = (
+    type: 'info' | 'success' | 'error' | 'warning',
+    title: string,
+    message: string,
+    buttons: Array<{
+      text: string;
+      onPress: () => void;
+      style?: 'default' | 'cancel' | 'primary';
+    }>
+  ) => {
+    setAlertConfig({
+      visible: true,
+      type,
+      title,
+      message,
+      buttons,
+    });
+  };
+
+  // NEW: Helper to close alert
+  const closeAlert = () => {
+    setAlertConfig(prev => ({ ...prev, visible: false }));
+  };
+
+  // NEW: Function to handle conversation deletion
+  const handleDeleteConversation = async (conversation: ConversationPreview) => {
+    if (!currentUser) return;
+    showAlert(
+      'warning',
+      'Delete Conversation',
+      `Are you sure you want to delete your conversation with ${conversation.otherUser.displayName}? This will hide it from your chat list.`,
+      [
+        { text: 'Cancel', style: 'cancel', onPress: closeAlert },
+        {
+          text: 'Delete',
+          style: 'primary',
+          onPress: async () => {
+            closeAlert();
+            try {
+              // Optimistically remove from local state
+              setConversations(prev => prev.filter(c => c.id !== conversation.id));
+              
+              // Delete from Firestore (mark as deleted)
+              await deleteConversation(conversation.id, currentUser.uid);
+              
+              showAlert(
+                'success',
+                'Deleted',
+                'Conversation deleted successfully.',
+                [{ text: 'OK', onPress: closeAlert }]
+              );
+            } catch (error) {
+              // Revert local state on error
+              await loadConversations();  // Reload to restore
+              showAlert(
+                'error',
+                'Error',
+                'Failed to delete conversation. Please try again.',
+                [{ text: 'OK', onPress: closeAlert }]
+              );
+              console.error('Error deleting conversation:', error);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+
 
   useEffect(() => {
     if (!currentUser) return;
@@ -135,7 +224,9 @@ export default function ChatList({ refreshing = false, onRefresh }: ChatListProp
           key={conversation.id}
           style={styles.conversationItem}
           onPress={() => openChat(conversation)}
+          onLongPress={() => handleDeleteConversation(conversation)}// NEW: Long-press to delete
           activeOpacity={0.7}
+          delayLongPress={500}  // NEW: Delay before long-press triggers
         >
           <View style={styles.avatarContainer}>
             <View style={[
@@ -180,6 +271,14 @@ export default function ChatList({ refreshing = false, onRefresh }: ChatListProp
           </View>
         </TouchableOpacity>
       ))}
+      <CustomAlertModal
+        visible={alertConfig.visible}
+        type={alertConfig.type}
+        title={alertConfig.title}
+        message={alertConfig.message}
+        buttons={alertConfig.buttons}
+        onClose={closeAlert}
+      />
     </ScrollView>
   );
 }
