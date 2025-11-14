@@ -1,4 +1,4 @@
-// hooks/useCollaborativeEditing.ts - Fixed initialization order
+// hooks/useCollaborativeEditing.ts - FIXED initialization
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { TextInput } from 'react-native';
 import { CHUNK_CONFIG } from '../app/types/notebook';
@@ -55,12 +55,11 @@ export function useCollaborativeEditing(
   const isApplyingYjsUpdate = useRef({ title: false, content: false });
   const sessionRef = useRef<CollaborativeSession | null>(null);
   
-  // CRITICAL FIX: Track if we've initialized to prevent duplicate initialization
   const hasInitialized = useRef(false);
   const initializationAttempts = useRef(0);
   const MAX_INIT_ATTEMPTS = 3;
+  const INIT_TIMEOUT = 5000; // 5 second timeout
 
-  // Calculate text changes for granular updates
   const calculateTextChanges = (oldText: string, newText: string): TextChange[] => {
     const changes: TextChange[] = [];
     
@@ -178,12 +177,7 @@ export function useCollaborativeEditing(
     setCanRedo(collaborativeService.canRedo(noteId));
   }, [noteId]);
 
-  /**
-   * CRITICAL FIX: Only initialize when we have both noteId AND user
-   * This prevents premature initialization with empty values
-   */
   useEffect(() => {
-    // Reset state when noteId changes
     if (!noteId || !user?.uid) {
       console.log('🚫 Missing noteId or user, resetting state');
       setIsConnected(false);
@@ -193,7 +187,6 @@ export function useCollaborativeEditing(
       return;
     }
 
-    // Skip if already initialized for this note
     if (hasInitialized.current) {
       console.log('✅ Already initialized, skipping');
       return;
@@ -201,6 +194,19 @@ export function useCollaborativeEditing(
 
     let mounted = true;
     let cleanupFn: (() => void) | null = null;
+    let timeoutId: NodeJS.Timeout | null = null;
+
+    // ✅ FIX: Add fallback timeout to prevent infinite loading
+    const fallbackTimeout = setTimeout(() => {
+      if (mounted && !contentReady) {
+        console.warn('⚠️ Initialization timeout - using fallback values');
+        setTitle(initialTitle);
+        setContent(initialContent);
+        previousValues.current = { title: initialTitle, content: initialContent };
+        setContentReady(true); // ✅ CRITICAL: Always set contentReady
+        setIsConnected(false);
+      }
+    }, INIT_TIMEOUT);
 
     const initSession = async () => {
       try {
@@ -220,15 +226,16 @@ export function useCollaborativeEditing(
           return;
         }
 
-        // CRITICAL FIX: Verify chunks loaded successfully
         const hasChunks = collaborativeSession.chunkSessions.size > 0;
-        console.log(`📦 Session created - Chunks: ${collaborativeSession.chunkSessions.size}, Has chunks: ${hasChunks}`);
+        console.log(`📦 Session created - Chunks: ${collaborativeSession.chunkSessions.size}`);
 
+        // ✅ FIX: Retry logic that DOESN'T leave UI hanging
         if (!hasChunks && initializationAttempts.current < MAX_INIT_ATTEMPTS) {
-          console.warn(`⚠️ No chunks loaded on attempt ${initializationAttempts.current}, retrying...`);
+          console.warn(`⚠️ No chunks on attempt ${initializationAttempts.current}, retrying...`);
           collaborativeSession.destroy();
           
-          setTimeout(() => {
+          // Schedule retry
+          timeoutId = setTimeout(() => {
             if (mounted && !hasInitialized.current) {
               initSession();
             }
@@ -236,13 +243,22 @@ export function useCollaborativeEditing(
           return;
         }
 
+        // ✅ FIX: If still no chunks after retries, use fallback
         if (!hasChunks) {
-          throw new Error('Failed to load chunks after multiple attempts');
+          console.error('❌ No chunks after max retries - using fallback');
+          setTitle(initialTitle);
+          setContent(initialContent);
+          previousValues.current = { title: initialTitle, content: initialContent };
+          setContentReady(true); // ✅ Set ready even on failure
+          setIsConnected(false);
+          clearTimeout(fallbackTimeout);
+          return;
         }
 
-        // Mark as initialized BEFORE setting state to prevent race conditions
-        hasInitialized.current = true;
+        // Clear fallback timeout since we succeeded
+        clearTimeout(fallbackTimeout);
 
+        hasInitialized.current = true;
         sessionRef.current = collaborativeSession;
         setSession(collaborativeSession);
         setIsConnected(true);
@@ -251,7 +267,7 @@ export function useCollaborativeEditing(
         const chunkObservers = new Map<string, () => void>();
         let titleObserver: (() => void) | null = null;
 
-        // Title observer with debouncing
+        // Title observer
         if (collaborativeSession.titleSession) {
           let titleUpdateTimeout: ReturnType<typeof setTimeout> | null = null;
           
@@ -275,26 +291,19 @@ export function useCollaborativeEditing(
 
           collaborativeSession.titleSession.contentText.observe(titleObserver);
           
-          // CRITICAL FIX: Get Y.js title first, use initial as fallback
           const yjsTitle = collaborativeSession.titleSession.contentText.toString();
-          console.log('🏷️ Title state - Y.js:', yjsTitle || '(empty)', '| Initial:', initialTitle || '(empty)');
+          console.log('🏷️ Title - Y.js:', yjsTitle || '(empty)', '| Initial:', initialTitle || '(empty)');
           
           if (yjsTitle.length > 0) {
-            // Y.js has content - always use it (from Firestore)
-            console.log('✅ Using title from Y.js');
             setTitle(yjsTitle);
             previousValues.current.title = yjsTitle;
           } else if (initialTitle && initialTitle.length > 0) {
-            // Y.js empty but we have initial - populate Y.js
-            console.log('📝 Populating Y.js with initial title');
             isApplyingYjsUpdate.current.title = true;
             collaborativeSession.titleSession.contentText.insert(0, initialTitle);
             isApplyingYjsUpdate.current.title = false;
             setTitle(initialTitle);
             previousValues.current.title = initialTitle;
           } else {
-            // Both empty
-            console.log('📝 No title available');
             setTitle('');
             previousValues.current.title = '';
           }
@@ -309,9 +318,7 @@ export function useCollaborativeEditing(
           const contentObserver = () => {
             if (!mounted || isApplyingYjsUpdate.current.content) return;
             
-            if (observerTimeout) {
-              clearTimeout(observerTimeout);
-            }
+            if (observerTimeout) clearTimeout(observerTimeout);
             
             updateCount++;
             
@@ -322,12 +329,10 @@ export function useCollaborativeEditing(
               const mergedContent = collaborativeService.getMergedContent(noteId);
               
               if (mergedContent !== lastAppliedContent && mergedContent !== previousValues.current.content) {
-                console.log('📦 Applying Y.js content update from chunks');
+                console.log('📦 Applying Y.js content update');
                 setContent(mergedContent);
                 previousValues.current.content = mergedContent;
                 lastAppliedContent = mergedContent;
-              } else {
-                console.log('⏭️ Skipping duplicate content update');
               }
               
               updateUndoRedoState();
@@ -338,18 +343,14 @@ export function useCollaborativeEditing(
           chunkObservers.set(chunkSession.chunkId, contentObserver);
         });
 
-        // CRITICAL FIX: Initialize content with better logic
+        // Initialize content
         const yjsContent = collaborativeService.getMergedContent(noteId);
-        console.log('📄 Content state - Y.js:', yjsContent.length, 'chars | Initial:', initialContent?.length || 0, 'chars');
+        console.log('📄 Content - Y.js:', yjsContent.length, 'chars | Initial:', initialContent?.length || 0, 'chars');
         
         if (yjsContent.length > 0) {
-          // Y.js has content - always prefer (from Firestore)
-          console.log('✅ Using content from Y.js chunks');
           setContent(yjsContent);
           previousValues.current.content = yjsContent;
         } else if (initialContent && initialContent.length > 0) {
-          // Y.js empty but we have initial - populate first chunk
-          console.log('📝 Populating Y.js with initial content');
           const firstChunk = Array.from(collaborativeSession.chunkSessions.values())[0];
           if (firstChunk) {
             isApplyingYjsUpdate.current.content = true;
@@ -358,22 +359,18 @@ export function useCollaborativeEditing(
             setContent(initialContent);
             previousValues.current.content = initialContent;
           } else {
-            console.error('❌ No first chunk available');
             setContent('');
             previousValues.current.content = '';
           }
         } else {
-          // Both empty - new note
-          console.log('📝 No content available (new note)');
           setContent('');
           previousValues.current.content = '';
         }
 
-        // Initialize undo/redo state
         updateUndoRedoState();
 
-        // Mark content as ready immediately (no artificial delay)
-        console.log('✅ Content initialization complete');
+        // ✅ CRITICAL: Always set contentReady to true
+        console.log('✅ Initialization complete - setting contentReady');
         setContentReady(true);
 
         const updateAwareness = () => {
@@ -386,7 +383,7 @@ export function useCollaborativeEditing(
         updateAwareness();
 
         cleanupFn = () => {
-          console.log('🧹 Cleaning up chunk-based session');
+          console.log('🧹 Cleaning up session');
           clearInterval(awarenessInterval);
           
           if (collaborativeSession.titleSession && titleObserver) {
@@ -407,30 +404,19 @@ export function useCollaborativeEditing(
 
       } catch (error) {
         console.error('❌ Error initializing session:', error);
-        setIsConnected(false);
-        setContentReady(false);
-        hasInitialized.current = false;
         
-        // Retry logic for recoverable errors
-        const isRecoverableError = error instanceof Error && 
-          (error.message.includes('network') || 
-           error.message.includes('timeout') ||
-           error.message.includes('chunks'));
-        
-        if (isRecoverableError && initializationAttempts.current < MAX_INIT_ATTEMPTS) {
-          console.log(`🔄 Retrying initialization (attempt ${initializationAttempts.current + 1}/${MAX_INIT_ATTEMPTS})`);
-          setTimeout(() => {
-            if (mounted && !hasInitialized.current) {
-              initSession();
-            }
-          }, 1000);
-        } else if (mounted) {
-          // Permanent error - use fallback values
-          console.log('⚠️ Using fallback values after initialization failure');
+        // ✅ FIX: Always set contentReady even on error
+        if (mounted) {
+          console.log('⚠️ Using fallback after error');
           setTitle(initialTitle);
           setContent(initialContent);
           previousValues.current = { title: initialTitle, content: initialContent };
+          setContentReady(true); // ✅ CRITICAL
+          setIsConnected(false);
         }
+        
+        hasInitialized.current = false;
+        clearTimeout(fallbackTimeout);
       }
     };
 
@@ -438,12 +424,13 @@ export function useCollaborativeEditing(
 
     return () => {
       mounted = false;
-      if (cleanupFn) {
-        cleanupFn();
-      }
+      if (timeoutId) clearTimeout(timeoutId);
+      if (fallbackTimeout) clearTimeout(fallbackTimeout);
+      if (cleanupFn) cleanupFn();
     };
-  }, [noteId, user?.uid, updateUndoRedoState]); // CRITICAL: Don't include initialTitle/initialContent in deps
+  }, [noteId, user?.uid, updateUndoRedoState]);
 
+  // Rest of the hooks remain the same...
   const handleTitleChange = useCallback((newTitle: string, selectionStart?: number, selectionEnd?: number) => {
     console.log('✏️ Handling title change');
     
@@ -472,9 +459,7 @@ export function useCollaborativeEditing(
     if (sessionRef.current && noteId && user) {
       const changes = calculateTextChanges(previousValues.current.content, newContent);
       
-      if (changes.length === 0) {
-        return;
-      }
+      if (changes.length === 0) return;
       
       console.log('📤 Applying content changes to Yjs chunks');
       
@@ -516,9 +501,7 @@ export function useCollaborativeEditing(
               }
             }
             
-            if (changeRemaining === 0 && insertText.length === 0) {
-              break;
-            }
+            if (changeRemaining === 0 && insertText.length === 0) break;
             
             globalPosition = 0;
           } else {
@@ -557,9 +540,7 @@ export function useCollaborativeEditing(
 
     if (field === 'content') {
       const chunkId = getChunkForPosition(position);
-      if (chunkId) {
-        setActiveChunkId(chunkId);
-      }
+      if (chunkId) setActiveChunkId(chunkId);
     }
 
     const text = field === 'title' ? title : content;
@@ -577,18 +558,14 @@ export function useCollaborativeEditing(
     if (!noteId) return;
     
     const success = collaborativeService.undo(noteId);
-    if (success) {
-      updateUndoRedoState();
-    }
+    if (success) updateUndoRedoState();
   }, [noteId, updateUndoRedoState]);
 
   const redo = useCallback(() => {
     if (!noteId) return;
     
     const success = collaborativeService.redo(noteId);
-    if (success) {
-      updateUndoRedoState();
-    }
+    if (success) updateUndoRedoState();
   }, [noteId, updateUndoRedoState]);
 
   return {
