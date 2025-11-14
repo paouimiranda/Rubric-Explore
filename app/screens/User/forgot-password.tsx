@@ -1,4 +1,5 @@
 //app/screens/User/forgot-password.tsx
+import { CustomAlertModal } from "@/components/Interface/custom-alert-modal";
 import { useBacklogLogger } from "@/hooks/useBackLogLogger";
 import { Montserrat_400Regular, Montserrat_600SemiBold, Montserrat_700Bold, useFonts } from '@expo-google-fonts/montserrat';
 import { Ionicons } from '@expo/vector-icons';
@@ -7,7 +8,6 @@ import { useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Animated,
   StyleSheet,
   Text,
@@ -15,7 +15,20 @@ import {
   TouchableOpacity,
   View
 } from "react-native";
+
 const BASE_URL = "https://api-m2tvqc6zqq-uc.a.run.app";
+
+interface AlertState {
+  visible: boolean;
+  type: 'info' | 'success' | 'error' | 'warning';
+  title: string;
+  message: string;
+  buttons?: Array<{
+    text: string;
+    onPress: () => void;
+    style?: 'default' | 'cancel' | 'primary';
+  }>;
+}
 
 export default function ForgotPasswordScreen() {
   const [fontsLoaded] = useFonts({
@@ -36,6 +49,38 @@ export default function ForgotPasswordScreen() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [resendTimer, setResendTimer] = useState(0);
+  
+  const [alertState, setAlertState] = useState<AlertState>({
+    visible: false,
+    type: 'info',
+    title: '',
+    message: '',
+  });
+
+  const showAlert = (
+    type: 'info' | 'success' | 'error' | 'warning',
+    title: string,
+    message: string,
+    buttons?: AlertState['buttons']
+  ) => {
+    setAlertState({
+      visible: true,
+      type,
+      title,
+      message,
+      buttons: buttons || [
+        {
+          text: 'OK',
+          onPress: () => setAlertState(prev => ({ ...prev, visible: false })),
+          style: 'primary',
+        },
+      ],
+    });
+  };
+
+  const closeAlert = () => {
+    setAlertState(prev => ({ ...prev, visible: false }));
+  };
 
   // Fade in animation when step changes
   useEffect(() => {
@@ -58,13 +103,13 @@ export default function ForgotPasswordScreen() {
 
   const handleSendOtp = async () => {
     if (!email.trim()) {
-      Alert.alert("Error", "Please enter your email");
+      showAlert("error", "Error", "Please enter your email");
       addBacklogEvent("password_reset_validation_error", { step: 1, error: "empty_email" });
       return;
     }
 
     if (!email.includes("@")) {
-      Alert.alert("Error", "Please enter a valid email address");
+      showAlert("error", "Error", "Please enter a valid email address");
       addBacklogEvent("password_reset_validation_error", { step: 1, error: "invalid_email" });
       return;
     }
@@ -87,12 +132,11 @@ export default function ForgotPasswordScreen() {
         throw new Error(data.error || 'Failed to send OTP');
       }
 
-      // Alert.alert("Success", "OTP has been sent to your email.");
       setStep(2);
-      setResendTimer(60); // Start 60-second timer after sending OTP
+      setResendTimer(60);
       addBacklogEvent("otp_sent", { step: 1, email: email.trim().toLowerCase() });
     } catch (error: any) {
-      Alert.alert("Error", error.message || "Failed to send OTP");
+      showAlert("error", "Error", error.message || "Failed to send OTP");
       addBacklogEvent("otp_send_error", { step: 1, email: email.trim().toLowerCase(), error: error.message });
     } finally {
       setIsLoading(false);
@@ -101,25 +145,25 @@ export default function ForgotPasswordScreen() {
 
   const handleVerifyOtp = async () => {
     if (!otp.trim() || !newPassword.trim() || !confirmPassword.trim()) {
-      Alert.alert("Error", "Please fill in all fields");
+      showAlert("error", "Error", "Please fill in all fields");
       addBacklogEvent("password_reset_validation_error", { step: 2, error: "empty_fields" });
       return;
     }
 
     if (otp.length !== 6) {
-      Alert.alert("Error", "OTP must be 6 digits");
+      showAlert("error", "Error", "OTP must be 6 digits");
       addBacklogEvent("password_reset_validation_error", { step: 2, error: "invalid_otp_length" });
       return;
     }
 
     if (newPassword !== confirmPassword) {
-      Alert.alert("Error", "Passwords do not match");
+      showAlert("error", "Error", "Passwords do not match");
       addBacklogEvent("password_reset_validation_error", { step: 2, error: "password_mismatch" });
       return;
     }
 
     if (newPassword.length < 6) {
-      Alert.alert("Error", "Password must be at least 6 characters");
+      showAlert("error", "Error", "Password must be at least 6 characters");
       addBacklogEvent("password_reset_validation_error", { step: 2, error: "weak_password" });
       return;
     }
@@ -144,21 +188,24 @@ export default function ForgotPasswordScreen() {
         throw new Error(data.error || 'Verification failed');
       }
 
-      Alert.alert(
-        "Success", 
+      showAlert(
+        "success",
+        "Success",
         "Your password has been updated!",
         [
           {
             text: "OK",
             onPress: () => {
+              closeAlert();
               router.replace("/");
-            }
-          }
+            },
+            style: 'primary',
+          },
         ]
       );
       addBacklogEvent("password_reset", { step: 2, email: email.trim().toLowerCase() });
     } catch (error: any) {
-      Alert.alert("Error", error.message || "Verification failed");
+      showAlert("error", "Error", error.message || "Verification failed");
     } finally {
       setIsLoading(false);
     }
@@ -166,21 +213,28 @@ export default function ForgotPasswordScreen() {
 
   const handleBack = () => {
     if (step === 2) {
-      Alert.alert(
+      showAlert(
+        "warning",
         "Go Back?",
         "Your progress will be lost. Do you want to go back?",
         [
-          { text: "Cancel", style: "cancel" },
+          {
+            text: "Cancel",
+            onPress: () => closeAlert(),
+            style: 'cancel',
+          },
           {
             text: "Yes",
             onPress: () => {
+              closeAlert();
               setStep(1);
               setOtp("");
               setNewPassword("");
               setConfirmPassword("");
-              setResendTimer(0); // Reset timer on back
-            }
-          }
+              setResendTimer(0);
+            },
+            style: 'primary',
+          },
         ]
       );
     } else {
@@ -377,6 +431,16 @@ export default function ForgotPasswordScreen() {
             </View>
           )}
         </Animated.View>
+
+        {/* Custom Alert Modal */}
+        <CustomAlertModal
+          visible={alertState.visible}
+          type={alertState.type}
+          title={alertState.title}
+          message={alertState.message}
+          buttons={alertState.buttons}
+          onClose={closeAlert}
+        />
       </View>
     </LinearGradient>
   );

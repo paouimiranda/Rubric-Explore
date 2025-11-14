@@ -1,14 +1,14 @@
 //app/screens/User/change-password.tsx
+import { CustomAlertModal } from '@/components/Interface/custom-alert-modal';
 import { useBacklogLogger } from "@/hooks/useBackLogLogger";
 import { Montserrat_400Regular, Montserrat_600SemiBold, Montserrat_700Bold, useFonts } from '@expo-google-fonts/montserrat';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from "expo-router";
-import { getAuth } from "firebase/auth"; // Added for auth
+import { getAuth } from "firebase/auth";
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Animated,
   StyleSheet,
   Text,
@@ -26,20 +26,55 @@ export default function ChangePasswordScreen() {
     Montserrat_700Bold,
   });
 
-  // Removed email state, as it's now auto-filled from auth
   const [otp, setOtp] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [step, setStep] = useState<1 | 2>(1); // Updated to match change-email steps
+  const [step, setStep] = useState<1 | 2>(1);
   const [isLoading, setIsLoading] = useState(false);
   const [fadeAnim] = useState(new Animated.Value(0));
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const [resendTimer, setResendTimer] = useState(0); // New state for resend timer
+  const [resendTimer, setResendTimer] = useState(0);
   const router = useRouter();
-  const auth = getAuth(); // Added for auth
-  const currentEmail = auth.currentUser?.email; // Auto-use current user's email
+  const auth = getAuth();
+  const currentEmail = auth.currentUser?.email;
   const { addBacklogEvent } = useBacklogLogger();
+
+  // Alert modal state
+  const [alertModal, setAlertModal] = useState({
+    visible: false,
+    type: 'info' as 'info' | 'success' | 'error' | 'warning',
+    title: '',
+    message: '',
+    buttons: [] as Array<{
+      text: string;
+      onPress: () => void;
+      style?: 'default' | 'cancel' | 'primary';
+    }>,
+  });
+
+  const showAlert = (
+    type: 'info' | 'success' | 'error' | 'warning',
+    title: string,
+    message: string,
+    buttons: Array<{
+      text: string;
+      onPress: () => void;
+      style?: 'default' | 'cancel' | 'primary';
+    }>
+  ) => {
+    setAlertModal({
+      visible: true,
+      type,
+      title,
+      message,
+      buttons,
+    });
+  };
+
+  const hideAlert = () => {
+    setAlertModal(prev => ({ ...prev, visible: false }));
+  };
 
   // Fade in animation when step changes
   useEffect(() => {
@@ -60,19 +95,36 @@ export default function ChangePasswordScreen() {
     }
   }, [resendTimer]);
 
-  // Check if user is authenticated (added for security)
+  // Check if user is authenticated
   useEffect(() => {
     if (!auth.currentUser) {
-      Alert.alert("Error", "You must be logged in to change your password.", [
-        { text: "OK", onPress: () => router.back() }
-      ]);
+      showAlert(
+        'error',
+        'Error',
+        'You must be logged in to change your password.',
+        [
+          {
+            text: 'OK',
+            onPress: () => {
+              hideAlert();
+              router.back();
+            },
+            style: 'primary'
+          }
+        ]
+      );
     }
   }, []);
 
-  // STEP 1: Send OTP to the current email (updated to match change-email)
+  // STEP 1: Send OTP to the current email
   const handleSendOtp = async () => {
     if (!currentEmail) {
-      Alert.alert("Error", "No authenticated user found.");
+      showAlert(
+        'error',
+        'Error',
+        'No authenticated user found.',
+        [{ text: 'OK', onPress: hideAlert, style: 'primary' }]
+      );
       addBacklogEvent("password_change_error", { errorType: "no_auth", step: 1 });
       return;
     }
@@ -85,7 +137,7 @@ export default function ChangePasswordScreen() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ 
-          email: currentEmail, // Use currentEmail instead of user input
+          email: currentEmail,
         }),
       });
 
@@ -95,41 +147,65 @@ export default function ChangePasswordScreen() {
         throw new Error(data.error || 'Failed to send OTP');
       }
 
-      // Alert.alert("OTP Sent", `An OTP has been sent to ${currentEmail}.`);
       setStep(2);
-      setResendTimer(60); // Start 60-second timer after sending OTP
+      setResendTimer(60);
       addBacklogEvent("otp_sent", { step: 1, email: currentEmail });
     } catch (error: any) {
       console.error("Send OTP error:", error);
-      Alert.alert("Error", error.message || "Failed to send OTP.");
+      showAlert(
+        'error',
+        'Error',
+        error.message || 'Failed to send OTP.',
+        [{ text: 'OK', onPress: hideAlert, style: 'primary' }]
+      );
       addBacklogEvent("otp_send_error", { step: 1, email: currentEmail, error: error.message });
     } finally {
       setIsLoading(false);
     }
   };
 
-  // STEP 2: Verify OTP and change password (updated)
+  // STEP 2: Verify OTP and change password
   const handleVerifyOtp = async () => {
     if (!otp.trim() || !newPassword.trim() || !confirmPassword.trim()) {
-      Alert.alert("Error", "Please fill in all fields");
+      showAlert(
+        'error',
+        'Error',
+        'Please fill in all fields',
+        [{ text: 'OK', onPress: hideAlert, style: 'primary' }]
+      );
       addBacklogEvent("password_change_validation_error", { step: 2, error: "empty_fields" });
       return;
     }
 
     if (otp.length !== 6) {
-      Alert.alert("Error", "OTP must be 6 digits");
+      showAlert(
+        'error',
+        'Error',
+        'OTP must be 6 digits',
+        [{ text: 'OK', onPress: hideAlert, style: 'primary' }]
+      );
       addBacklogEvent("password_change_validation_error", { step: 2, error: "invalid_otp_length" });
       return;
     }
 
     if (newPassword !== confirmPassword) {
-      Alert.alert("Error", "Passwords do not match");
+      showAlert(
+        'error',
+        'Error',
+        'Passwords do not match',
+        [{ text: 'OK', onPress: hideAlert, style: 'primary' }]
+      );
       addBacklogEvent("password_change_validation_error", { step: 2, error: "password_mismatch" });
       return;
     }
 
     if (newPassword.length < 6) {
-      Alert.alert("Error", "Password must be at least 6 characters");
+      showAlert(
+        'error',
+        'Error',
+        'Password must be at least 6 characters',
+        [{ text: 'OK', onPress: hideAlert, style: 'primary' }]
+      );
       addBacklogEvent("password_change_validation_error", { step: 2, error: "weak_password" });
       return;
     }
@@ -142,7 +218,7 @@ export default function ChangePasswordScreen() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          email: currentEmail, // Use currentEmail
+          email: currentEmail,
           otp: otp.trim(),
           newPassword,
         }),
@@ -155,24 +231,39 @@ export default function ChangePasswordScreen() {
       }
 
       if (data.success) {
-        Alert.alert(
-          "Success", 
-          "Your password has been updated!",
+        showAlert(
+          'success',
+          'Success',
+          'Your password has been updated!',
           [
             {
-              text: "OK",
-              onPress: () => router.replace("/screens/HomeScreen")
+              text: 'OK',
+              onPress: () => {
+                hideAlert();
+                router.replace("/screens/HomeScreen");
+              },
+              style: 'primary'
             }
           ]
         );
         addBacklogEvent("password_changed", { step: 2, email: currentEmail });
       } else {
-        Alert.alert("Error", "Invalid or expired OTP");
+        showAlert(
+          'error',
+          'Error',
+          'Invalid or expired OTP',
+          [{ text: 'OK', onPress: hideAlert, style: 'primary' }]
+        );
         addBacklogEvent("otp_verification_error", { step: 2, email: currentEmail, error: "invalid_otp" });
       }
     } catch (error: any) {
       console.error("Verify OTP error:", error);
-      Alert.alert("Error", error.message || "Verification failed");
+      showAlert(
+        'error',
+        'Error',
+        error.message || 'Verification failed',
+        [{ text: 'OK', onPress: hideAlert, style: 'primary' }]
+      );
       addBacklogEvent("password_change_error", { step: 2, email: currentEmail, error: error.message });
     } finally {
       setIsLoading(false);
@@ -181,22 +272,25 @@ export default function ChangePasswordScreen() {
 
   const handleBack = () => {
     if (step > 1) {
-      Alert.alert(
-        "Go Back?",
-        "Your progress will be lost. Do you want to go back?",
+      showAlert(
+        'warning',
+        'Go Back?',
+        'Your progress will be lost. Do you want to go back?',
         [
-          { text: "Cancel", style: "cancel" },
+          { text: 'Cancel', onPress: hideAlert, style: 'cancel' },
           {
-            text: "Yes",
+            text: 'Yes',
             onPress: () => {
+              hideAlert();
               if (step === 2) {
                 setStep(1);
                 setOtp("");
                 setNewPassword("");
                 setConfirmPassword("");
-                setResendTimer(0); // Reset timer on back
+                setResendTimer(0);
               }
-            }
+            },
+            style: 'primary'
           }
         ]
       );
@@ -405,6 +499,16 @@ export default function ChangePasswordScreen() {
             </View>
           )}
         </Animated.View>
+
+        {/* Custom Alert Modal */}
+        <CustomAlertModal
+          visible={alertModal.visible}
+          type={alertModal.type}
+          title={alertModal.title}
+          message={alertModal.message}
+          buttons={alertModal.buttons}
+          onClose={hideAlert}
+        />
       </View>
     </LinearGradient>
   );

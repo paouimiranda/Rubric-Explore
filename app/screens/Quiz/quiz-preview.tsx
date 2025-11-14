@@ -1,4 +1,5 @@
 // File: app/Quiz/quiz-preview.tsx
+import { CustomAlertModal } from '@/components/Interface/custom-alert-modal';
 import { useBacklogLogger } from '@/hooks/useBackLogLogger';
 import { getCurrentUserData } from '@/services/auth-service';
 import { BACKLOG_EVENTS } from '@/services/backlogEvents';
@@ -10,7 +11,6 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
-  Alert,
   FlatList,
   Image,
   SafeAreaView,
@@ -28,13 +28,48 @@ const QuizPreview = () => {
   const [quiz, setQuiz] = useState<Quiz | null>(null);
   const [loading, setLoading] = useState(true);
   const [expandedQuestion, setExpandedQuestion] = useState<number | null>(null);
-  const [joinModalVisible, setJoinModalVisible] = useState(false);
+  
+  // Alert modal state
+  const [alertModal, setAlertModal] = useState({
+    visible: false,
+    type: 'info' as 'info' | 'success' | 'error' | 'warning',
+    title: '',
+    message: '',
+    buttons: [] as Array<{
+      text: string;
+      onPress: () => void;
+      style?: 'default' | 'cancel' | 'primary';
+    }>,
+  });
 
   useEffect(() => {
     if (quizId && typeof quizId === 'string') {
       loadQuiz(quizId);
     }
   }, [quizId]);
+
+  const showAlert = (
+    type: 'info' | 'success' | 'error' | 'warning',
+    title: string,
+    message: string,
+    buttons: Array<{
+      text: string;
+      onPress: () => void;
+      style?: 'default' | 'cancel' | 'primary';
+    }>
+  ) => {
+    setAlertModal({
+      visible: true,
+      type,
+      title,
+      message,
+      buttons,
+    });
+  };
+
+  const hideAlert = () => {
+    setAlertModal(prev => ({ ...prev, visible: false }));
+  };
 
   const loadQuiz = async (id: string) => {
     try {
@@ -44,8 +79,21 @@ const QuizPreview = () => {
       if (quizData) {
         setQuiz(quizData);
       } else {
-        Alert.alert('Error', 'Quiz not found');
-        router.back();
+        showAlert(
+          'error',
+          'Error',
+          'Quiz not found',
+          [
+            {
+              text: 'OK',
+              onPress: () => {
+                hideAlert();
+                router.back();
+              },
+              style: 'primary',
+            },
+          ]
+        );
       }
       addBacklogEvent(BACKLOG_EVENTS.USER_VIEWED_QUIZ);
     } catch (error: any) {
@@ -53,19 +101,38 @@ const QuizPreview = () => {
       
       // Better error handling for permission issues
       if (error.message?.includes('permission')) {
-        Alert.alert(
-          'Access Denied', 
+        showAlert(
+          'error',
+          'Access Denied',
           'This quiz is private and you do not have permission to view it.',
-          [{ text: 'OK', onPress: () => router.back() }]
+          [
+            {
+              text: 'OK',
+              onPress: () => {
+                hideAlert();
+                router.back();
+              },
+              style: 'primary',
+            },
+          ]
         );
       } else {
-        Alert.alert(
-          'Error', 
+        showAlert(
+          'error',
+          'Error',
           'Failed to load quiz. Please try again.',
-          [{ text: 'OK', onPress: () => router.back() }]
+          [
+            {
+              text: 'OK',
+              onPress: () => {
+                hideAlert();
+                router.back();
+              },
+              style: 'primary',
+            },
+          ]
         );
       }
-      
     } finally {
       setLoading(false);
     }
@@ -73,13 +140,12 @@ const QuizPreview = () => {
 
   const handleStartQuiz = () => {
     if (!quiz?.id) return;
-    addBacklogEvent(BACKLOG_EVENTS.USER_STARTED_QUIZ,{quizId: quiz?.id,})
+    addBacklogEvent(BACKLOG_EVENTS.USER_STARTED_QUIZ, { quizId: quiz?.id });
     router.push({
       pathname: './quiz-play',
       params: { quizId: quiz.id },
     });
   };
-
 
   const handleHostMultiplayer = async () => {
     if (!quiz?.id) return;
@@ -88,25 +154,43 @@ const QuizPreview = () => {
       // Get current user before showing confirmation
       const user = await getCurrentUserData();
       if (!user) {
-        Alert.alert('Error', 'Please login to host a multiplayer session');
+        showAlert(
+          'warning',
+          'Login Required',
+          'Please login to host a multiplayer session',
+          [
+            {
+              text: 'OK',
+              onPress: hideAlert,
+              style: 'primary',
+            },
+          ]
+        );
         return;
       }
 
-      Alert.alert(
+      showAlert(
+        'info',
         'Host Multiplayer Quiz',
         'Would you like to create a multiplayer lobby for this quiz?',
         [
-          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Cancel',
+            onPress: hideAlert,
+            style: 'cancel',
+          },
           {
             text: 'Create Lobby',
             onPress: async () => {
+              hideAlert();
               try {
                 // createMultiplayerSession returns { sessionId, sessionCode }
-                const result: { sessionId: string; sessionCode: string } = await createMultiplayerSession(
-                  quiz,
-                  user.uid,
-                  user.displayName || 'Anonymous'
-                );
+                const result: { sessionId: string; sessionCode: string } =
+                  await createMultiplayerSession(
+                    quiz,
+                    user.uid,
+                    user.displayName || 'Anonymous'
+                  );
                 const { sessionId, sessionCode } = result;
 
                 console.log('Session created:', sessionId, sessionCode);
@@ -114,43 +198,74 @@ const QuizPreview = () => {
                 // Navigate to multiplayer lobby with both quizId and sessionId
                 router.push({
                   pathname: './multiplayer-lobby',
-                  params: { 
+                  params: {
                     quizId: quiz.id,
-                    sessionId: sessionId 
+                    sessionId: sessionId,
                   },
                 });
-                addBacklogEvent(BACKLOG_EVENTS.USER_CREATED_MULTIPLAYER_SESSION, {quizId: quiz.id,})
+                addBacklogEvent(BACKLOG_EVENTS.USER_CREATED_MULTIPLAYER_SESSION, {
+                  quizId: quiz.id,
+                });
               } catch (error) {
                 console.error('Error creating session:', error);
-                Alert.alert('Error', 'Failed to create multiplayer session. Please try again.');
+                showAlert(
+                  'error',
+                  'Error',
+                  'Failed to create multiplayer session. Please try again.',
+                  [
+                    {
+                      text: 'OK',
+                      onPress: hideAlert,
+                      style: 'primary',
+                    },
+                  ]
+                );
               }
             },
+            style: 'primary',
           },
         ]
       );
     } catch (error) {
       console.error('Error getting user data:', error);
-      Alert.alert('Error', 'Failed to authenticate user. Please login again.');
+      showAlert(
+        'error',
+        'Error',
+        'Failed to authenticate user. Please login again.',
+        [
+          {
+            text: 'OK',
+            onPress: hideAlert,
+            style: 'primary',
+          },
+        ]
+      );
     }
   };
 
-
-
   const getQuestionTypeIcon = (type: string) => {
     switch (type) {
-      case 'multiple_choice': return 'checkmark-circle-outline';
-      case 'fill_blank': return 'create-outline';
-      case 'matching': return 'git-compare-outline';
-      default: return 'help-circle-outline';
+      case 'multiple_choice':
+        return 'checkmark-circle-outline';
+      case 'fill_blank':
+        return 'create-outline';
+      case 'matching':
+        return 'git-compare-outline';
+      default:
+        return 'help-circle-outline';
     }
   };
 
   const getQuestionTypeLabel = (type: string) => {
     switch (type) {
-      case 'multiple_choice': return 'Multiple Choice';
-      case 'fill_blank': return 'Fill in the Blank';
-      case 'matching': return 'Matching';
-      default: return 'Question';
+      case 'multiple_choice':
+        return 'Multiple Choice';
+      case 'fill_blank':
+        return 'Fill in the Blank';
+      case 'matching':
+        return 'Matching';
+      default:
+        return 'Question';
     }
   };
 
@@ -158,20 +273,25 @@ const QuizPreview = () => {
     if (seconds < 60) return `${seconds}s`;
     const minutes = Math.floor(seconds / 60);
     const remainingSeconds = seconds % 60;
-    return remainingSeconds > 0 ? `${minutes}m ${remainingSeconds}s` : `${minutes}m`;
+    return remainingSeconds > 0
+      ? `${minutes}m ${remainingSeconds}s`
+      : `${minutes}m`;
   };
 
   const getTotalTime = () => {
     if (!quiz) return '0s';
-    const totalSeconds = quiz.questions.reduce((sum, q) => sum + (q.timeLimit || 30), 0);
+    const totalSeconds = quiz.questions.reduce(
+      (sum, q) => sum + (q.timeLimit || 30),
+      0
+    );
     return formatTime(totalSeconds);
   };
 
   const getQuestionPreview = (question: Question): string => {
     if (question.type === 'matching' && question.matchPairs.length > 0) {
       return question.matchPairs
-        .map(pair => pair.left)
-        .filter(left => left.trim())
+        .map((pair) => pair.left)
+        .filter((left) => left.trim())
         .slice(0, 3)
         .join(', ');
     }
@@ -188,7 +308,8 @@ const QuizPreview = () => {
                 <View
                   style={[
                     styles.answerIndicator,
-                    question.correctAnswers.includes(index) && styles.correctIndicator,
+                    question.correctAnswers.includes(index) &&
+                      styles.correctIndicator,
                   ]}
                 />
                 <Text style={styles.answerText}>
@@ -229,7 +350,13 @@ const QuizPreview = () => {
     }
   };
 
-  const renderQuestionItem = ({ item, index }: { item: Question; index: number }) => {
+  const renderQuestionItem = ({
+    item,
+    index,
+  }: {
+    item: Question;
+    index: number;
+  }) => {
     const isExpanded = expandedQuestion === index;
 
     return (
@@ -244,7 +371,10 @@ const QuizPreview = () => {
           </View>
 
           <View style={styles.questionInfo}>
-            <Text style={styles.questionTitle} numberOfLines={isExpanded ? undefined : 2}>
+            <Text
+              style={styles.questionTitle}
+              numberOfLines={isExpanded ? undefined : 2}
+            >
               {getQuestionPreview(item)}
             </Text>
 
@@ -278,7 +408,9 @@ const QuizPreview = () => {
 
         {isExpanded && (
           <View style={styles.questionDetails}>
-            {item.image && <Image source={{ uri: item.image }} style={styles.questionImage} />}
+            {item.image && (
+              <Image source={{ uri: item.image }} style={styles.questionImage} />
+            )}
             {renderAnswerPreview(item)}
           </View>
         )}
@@ -348,7 +480,10 @@ const QuizPreview = () => {
           <View style={styles.errorContainer}>
             <Ionicons name="alert-circle-outline" size={64} color="#ef4444" />
             <Text style={styles.errorText}>Quiz not found</Text>
-            <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+            <TouchableOpacity
+              style={styles.backButton}
+              onPress={() => router.back()}
+            >
               <Text style={styles.backButtonText}>Go Back</Text>
             </TouchableOpacity>
           </View>
@@ -357,27 +492,29 @@ const QuizPreview = () => {
     );
   }
 
-  const coverImageSource = quiz.coverImage ? getQuizImageSource(quiz.coverImage) : null;
+  const coverImageSource = quiz.coverImage
+    ? getQuizImageSource(quiz.coverImage)
+    : null;
 
   return (
     <LinearGradient colors={['#0f172a', '#1e293b']} style={styles.container}>
       <SafeAreaView style={styles.container}>
         {/* Fixed Back Button */}
-        <TouchableOpacity 
+        <TouchableOpacity
           style={styles.fixedBackButton}
           onPress={() => router.back()}
         >
           <Ionicons name="chevron-back" size={24} color="#ffffff" />
         </TouchableOpacity>
 
-        <ScrollView 
+        <ScrollView
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
         >
           {/* Cover Image Header - Now inside ScrollView */}
           {coverImageSource ? (
             <View style={styles.coverHeaderContainer}>
-              <Image 
+              <Image
                 source={coverImageSource}
                 style={styles.coverHeaderImage}
                 resizeMode="cover"
@@ -386,7 +523,7 @@ const QuizPreview = () => {
                 colors={['transparent', 'rgba(15, 23, 42, 0.8)', '#0f172a']}
                 style={styles.coverHeaderGradient}
               />
-              
+
               {/* Title Overlay */}
               <View style={styles.titleOverlay}>
                 <Text style={styles.quizTitleOverlay}>{quiz.title}</Text>
@@ -414,17 +551,29 @@ const QuizPreview = () => {
               <Text style={styles.startButtonText}>Start Quiz</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.hostButton} onPress={handleHostMultiplayer}>
+            <TouchableOpacity
+              style={styles.hostButton}
+              onPress={handleHostMultiplayer}
+            >
               <Ionicons name="rocket-outline" size={20} color="#fff" />
               <Text style={styles.startButtonText}>Host Session</Text>
             </TouchableOpacity>
           </View>
-        </ScrollView>   
+        </ScrollView>
       </SafeAreaView>
+
+      {/* Custom Alert Modal */}
+      <CustomAlertModal
+        visible={alertModal.visible}
+        type={alertModal.type}
+        title={alertModal.title}
+        message={alertModal.message}
+        buttons={alertModal.buttons}
+        onClose={hideAlert}
+      />
     </LinearGradient>
   );
 };
-
 
 export default QuizPreview;
 

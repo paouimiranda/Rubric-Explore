@@ -1,8 +1,8 @@
-// app/(notes)/PropertiesModal.tsx - WITH ICON SUPPORT
+// app/(notes)/PropertiesModal.tsx - WITH ICON SUPPORT AND CUSTOM ALERT
+import { CustomAlertModal } from '@/components/Interface/custom-alert-modal';
 import { Ionicons } from "@expo/vector-icons";
 import React, { useState } from "react";
 import {
-  Alert,
   Modal,
   ScrollView,
   StyleSheet,
@@ -51,12 +51,48 @@ export default function PropertiesModal({
   const [tempIcon, setTempIcon] = useState<string>("");
   const [tempIconColor, setTempIconColor] = useState<string>("#6b7280");
 
+  // Alert modal state
+  const [alertModal, setAlertModal] = useState({
+    visible: false,
+    type: 'info' as 'info' | 'success' | 'error' | 'warning',
+    title: '',
+    message: '',
+    buttons: [] as Array<{
+      text: string;
+      onPress: () => void;
+      style?: 'default' | 'cancel' | 'primary';
+    }>,
+  });
+
   // Debug log
   React.useEffect(() => {
     if (visible) {
       console.log('PropertiesModal opened with properties:', properties);
     }
   }, [visible, properties]);
+
+  const showAlert = (
+    type: 'info' | 'success' | 'error' | 'warning',
+    title: string,
+    message: string,
+    buttons: Array<{
+      text: string;
+      onPress: () => void;
+      style?: 'default' | 'cancel' | 'primary';
+    }>
+  ) => {
+    setAlertModal({
+      visible: true,
+      type,
+      title,
+      message,
+      buttons,
+    });
+  };
+
+  const hideAlert = () => {
+    setAlertModal(prev => ({ ...prev, visible: false }));
+  };
 
   const resetModal = () => {
     setNewPropertyKey("");
@@ -112,18 +148,24 @@ export default function PropertiesModal({
   };
 
   const removeProperty = (index: number) => {
-    Alert.alert(
-      "Remove Property",
-      "Are you sure you want to remove this property?",
+    showAlert(
+      'warning',
+      'Remove Property',
+      'Are you sure you want to remove this property?',
       [
-        { text: "Cancel", style: "cancel" },
         {
-          text: "Remove",
-          style: "destructive",
+          text: 'Cancel',
+          onPress: hideAlert,
+          style: 'cancel',
+        },
+        {
+          text: 'Remove',
           onPress: () => {
+            hideAlert();
             const updatedProperties = properties.filter((_, i) => i !== index);
             onUpdateProperties(updatedProperties);
           },
+          style: 'primary',
         },
       ]
     );
@@ -339,6 +381,16 @@ export default function PropertiesModal({
         onSelectIcon={handleIconSelect}
         currentIcon={tempIcon}
         currentColor={tempIconColor}
+      />
+
+      {/* Custom Alert Modal */}
+      <CustomAlertModal
+        visible={alertModal.visible}
+        type={alertModal.type}
+        title={alertModal.title}
+        message={alertModal.message}
+        buttons={alertModal.buttons}
+        onClose={hideAlert}
       />
     </>
   );

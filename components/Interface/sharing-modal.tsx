@@ -1,4 +1,5 @@
 //components/SharingModal.tsx
+import { CustomAlertModal } from '@/components/Interface/custom-alert-modal';
 import {
   ShareMethod,
   SharePermission,
@@ -11,7 +12,6 @@ import { LinearGradient } from 'expo-linear-gradient';
 import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   Clipboard,
   Modal,
   Platform,
@@ -30,6 +30,18 @@ interface SharingModalProps {
   noteId: string;
   noteTitle: string;
   userUid: string;
+}
+
+interface AlertState {
+  visible: boolean;
+  type: 'info' | 'success' | 'error' | 'warning';
+  title: string;
+  message: string;
+  buttons?: Array<{
+    text: string;
+    onPress: () => void;
+    style?: 'default' | 'cancel' | 'primary';
+  }>;
 }
 
 export default function SharingModal({ 
@@ -57,6 +69,38 @@ export default function SharingModal({
 
   const [notePrivacy, setNotePrivacy] = useState<'public' | 'private'>('private');
   const [togglingPrivacy, setTogglingPrivacy] = useState(false);
+
+  const [alertState, setAlertState] = useState<AlertState>({
+    visible: false,
+    type: 'info',
+    title: '',
+    message: '',
+  });
+
+  const showAlert = (
+    type: 'info' | 'success' | 'error' | 'warning',
+    title: string,
+    message: string,
+    buttons?: AlertState['buttons']
+  ) => {
+    setAlertState({
+      visible: true,
+      type,
+      title,
+      message,
+      buttons: buttons || [
+        {
+          text: 'OK',
+          onPress: () => closeAlert(),
+          style: 'primary',
+        },
+      ],
+    });
+  };
+
+  const closeAlert = () => {
+    setAlertState(prev => ({ ...prev, visible: false }));
+  };
 
   useEffect(() => {
     if (visible && noteId) {
@@ -89,7 +133,7 @@ export default function SharingModal({
       setShareTokens(tokens.filter(token => token.isActive));
     } catch (error) {
       console.error('Error loading share tokens:', error);
-      Alert.alert('Error', 'Failed to load sharing options');
+      showAlert('error', 'Error', 'Failed to load sharing options');
     } finally {
       setLoading(false);
     }
@@ -119,11 +163,11 @@ export default function SharingModal({
       setExpiresIn(null);
       setMaxUses(null);
       
-      Alert.alert('Success', 'Share link created successfully!');
+      showAlert('success', 'Success', 'Share link created successfully!');
       
     } catch (error) {
       console.error('Error creating share link:', error);
-      Alert.alert('Error', 'Failed to create share link');
+      showAlert('error', 'Error', 'Failed to create share link');
     } finally {
       setCreating(false);
     }
@@ -132,7 +176,7 @@ export default function SharingModal({
   const copyToClipboard = async (token: string) => {
     const url = sharingService.generateShareUrl(token);
     await Clipboard.setString(url);
-    Alert.alert('Copied!', 'Share link copied to clipboard');
+    showAlert('success', 'Copied!', 'Share link copied to clipboard');
   };
 
   const shareNative = async (token: string) => {
@@ -154,10 +198,10 @@ export default function SharingModal({
     try {
       await sharingService.revokeShareToken(tokenId, userUid);
       setShareTokens(prev => prev.filter(token => token.id !== tokenId));
-      Alert.alert('Success', 'Share link revoked');
+      showAlert('success', 'Success', 'Share link revoked');
     } catch (error) {
       console.error('Error revoking token:', error);
-      Alert.alert('Error', 'Failed to revoke share link');
+      showAlert('error', 'Error', 'Failed to revoke share link');
     }
   };
 
@@ -183,13 +227,14 @@ export default function SharingModal({
       
       setNotePrivacy(newPrivacy);
       
-      Alert.alert(
+      showAlert(
+        'success',
         'Success',
         `Note is now ${newPrivacy}. ${isPublic ? 'It will appear in your public profile.' : 'It will only be accessible via share links.'}`
       );
     } catch (error) {
       console.error('Error toggling privacy:', error);
-      Alert.alert('Error', 'Failed to update note privacy');
+      showAlert('error', 'Error', 'Failed to update note privacy');
     } finally {
       setTogglingPrivacy(false);
     }
@@ -566,6 +611,16 @@ export default function SharingModal({
             ) : null}
           </ScrollView>
         </LinearGradient>
+
+        {/* Custom Alert Modal */}
+        <CustomAlertModal
+          visible={alertState.visible}
+          type={alertState.type}
+          title={alertState.title}
+          message={alertState.message}
+          buttons={alertState.buttons}
+          onClose={closeAlert}
+        />
       </View>
     </Modal>
   );

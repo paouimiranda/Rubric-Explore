@@ -1,3 +1,4 @@
+import { CustomAlertModal } from '@/components/Interface/custom-alert-modal';
 import BottomNavigation from '@/components/Interface/nav-bar';
 import AnalyticsModal from '@/components/Interface/plan-analytics';
 import PlanModal from '@/components/Interface/plan-modal';
@@ -8,7 +9,6 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  Alert,
   Animated,
   Dimensions,
   StyleSheet,
@@ -32,10 +32,46 @@ export default function PlannerScreen() {
   const [editingPlan, setEditingPlan] = useState<Plan | null>(null);
   const [initialDate, setInitialDate] = useState<string | undefined>(undefined);
   
+  // Alert modal state
+  const [alertModal, setAlertModal] = useState({
+    visible: false,
+    type: 'info' as 'info' | 'success' | 'error' | 'warning',
+    title: '',
+    message: '',
+    buttons: [] as Array<{
+      text: string;
+      onPress: () => void;
+      style?: 'default' | 'cancel' | 'primary';
+    }>,
+  });
+  
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const tabContentOpacity = useRef(new Animated.Value(1)).current;
   const tabContentTranslate = useRef(new Animated.Value(0)).current;
   const indicatorPosition = useRef(new Animated.Value(0)).current;
+
+  const showAlert = (
+    type: 'info' | 'success' | 'error' | 'warning',
+    title: string,
+    message: string,
+    buttons: Array<{
+      text: string;
+      onPress: () => void;
+      style?: 'default' | 'cancel' | 'primary';
+    }>
+  ) => {
+    setAlertModal({
+      visible: true,
+      type,
+      title,
+      message,
+      buttons,
+    });
+  };
+
+  const hideAlert = () => {
+    setAlertModal(prev => ({ ...prev, visible: false }));
+  };
 
   useEffect(() => {
     Animated.timing(fadeAnim, {
@@ -92,7 +128,12 @@ export default function PlannerScreen() {
       setPlans(fetchedPlans);
     } catch (error) {
       console.error('Error loading plans:', error);
-      Alert.alert('Error', 'Failed to load plans');
+      showAlert(
+        'error',
+        'Error',
+        'Failed to load plans',
+        [{ text: 'OK', onPress: hideAlert, style: 'primary' }]
+      );
     } finally {
       setLoading(false);
     }
@@ -133,29 +174,41 @@ export default function PlannerScreen() {
     } catch (error) {
       console.error('Error toggling plan status:', error);
       await loadPlans();
-      Alert.alert('Error', 'Failed to update plan status');
+      showAlert(
+        'error',
+        'Error',
+        'Failed to update plan status',
+        [{ text: 'OK', onPress: hideAlert, style: 'primary' }]
+      );
     }
   };
 
   const deletePlan = async (planId: string) => {
-    Alert.alert(
+    showAlert(
+      'warning',
       'Delete Plan',
       'Are you sure you want to delete this plan?',
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: 'Cancel', onPress: hideAlert, style: 'cancel' },
         {
           text: 'Delete',
-          style: 'destructive',
           onPress: async () => {
+            hideAlert();
             try {
               setPlans(prevPlans => prevPlans.filter(p => p.id !== planId));
               await PlannerService.deletePlan(planId);
             } catch (error) {
               console.error('Error deleting plan:', error);
               await loadPlans();
-              Alert.alert('Error', 'Failed to delete plan');
+              showAlert(
+                'error',
+                'Error',
+                'Failed to delete plan',
+                [{ text: 'OK', onPress: hideAlert, style: 'primary' }]
+              );
             }
           },
+          style: 'primary',
         },
       ]
     );
@@ -334,6 +387,16 @@ export default function PlannerScreen() {
         visible={analyticsVisible}
         plans={plans}
         onClose={() => setAnalyticsVisible(false)}
+      />
+
+      {/* Custom Alert Modal */}
+      <CustomAlertModal
+        visible={alertModal.visible}
+        type={alertModal.type}
+        title={alertModal.title}
+        message={alertModal.message}
+        buttons={alertModal.buttons}
+        onClose={hideAlert}
       />
 
       <BottomNavigation />

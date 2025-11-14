@@ -1,6 +1,7 @@
-// File: app/Quiz/quiz-create.tsx - Updated with Firebase Storage Integration and Enhanced UI
+// File: app/Quiz/quiz-create.tsx - Updated with Firebase Integration and Image service AND CustomAlertModal
 import { convertAPIQuestionToInternalFormat, generateQuizFromAI } from '@/api/quizApi';
 import { TopicSelectionModal } from '@/components/Interface/ai-quiz-modal';
+import { CustomAlertModal } from '@/components/Interface/custom-alert-modal';
 import { auth } from '@/firebase';
 import { useBacklogLogger } from '@/hooks/useBackLogLogger';
 import { BACKLOG_EVENTS } from '@/services/backlogEvents';
@@ -22,7 +23,6 @@ import LottieView from 'lottie-react-native';
 import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   Image,
   Modal,
   SafeAreaView,
@@ -67,6 +67,19 @@ const QuizMaker = () => {
   const [showQuestionFocusModal, setShowQuestionFocusModal] = useState(false);
   const [focusedQuestionText, setFocusedQuestionText] = useState('');
 
+  // Alert modal state
+  const [alertModal, setAlertModal] = useState({
+    visible: false,
+    type: 'info' as 'info' | 'success' | 'error' | 'warning',
+    title: '',
+    message: '',
+    buttons: [] as Array<{
+      text: string;
+      onPress: () => void;
+      style?: 'default' | 'cancel' | 'primary';
+    }>,
+  });
+
   const questionTypes = [
     { key: 'multiple_choice', label: 'Multiple Choice', icon: 'checkmark-circle-outline' },
     { key: 'fill_blank', label: 'Fill in the Blank', icon: 'create-outline' },
@@ -74,6 +87,29 @@ const QuizMaker = () => {
   ];
 
   const timeLimitPresets = [10, 15, 20, 30, 45, 60, 90, 120];
+
+  const showAlert = (
+    type: 'info' | 'success' | 'error' | 'warning',
+    title: string,
+    message: string,
+    buttons: Array<{
+      text: string;
+      onPress: () => void;
+      style?: 'default' | 'cancel' | 'primary';
+    }>
+  ) => {
+    setAlertModal({
+      visible: true,
+      type,
+      title,
+      message,
+      buttons,
+    });
+  };
+
+  const hideAlert = () => {
+    setAlertModal(prev => ({ ...prev, visible: false }));
+  };
 
   useEffect(() => {
     const { questionIndex } = params;
@@ -127,7 +163,7 @@ const QuizMaker = () => {
     if (length <= 20) return baseSize;
     if (length <= 30) return baseSize - 1;
     if (length <= 40) return baseSize - 2;
-    return baseSize - 3; // minimum font size
+    return baseSize - 3;
   };
 
   const handleQuestionTypeChange = (type: Question['type']) => {
@@ -162,7 +198,7 @@ const QuizMaker = () => {
   };
 
   const handleOptionChange = (oIndex: number, text: string) => {
-    if (text.length > 50) return; // Enforce 50 character limit
+    if (text.length > 50) return;
     const updated = { ...questions[currentQuestionIndex] };
     updated.options[oIndex] = text;
     updateQuestion(currentQuestionIndex, updated);
@@ -236,7 +272,12 @@ const QuizMaker = () => {
       handleTimeLimitChange(time);
       setCustomTimeLimit('');
     } else {
-      Alert.alert('Invalid Time', 'Please enter a time between 1 and 300 seconds');
+      showAlert(
+        'error',
+        'Invalid Time',
+        'Please enter a time between 1 and 300 seconds',
+        [{ text: 'OK', onPress: hideAlert, style: 'primary' }]
+      );
     }
   };
 
@@ -251,12 +292,22 @@ const QuizMaker = () => {
     const trimmedTopic = newTopicInput.trim();
     
     if (!trimmedTopic) {
-      Alert.alert('Validation Error', 'Topic name cannot be empty.');
+      showAlert(
+        'error',
+        'Validation Error',
+        'Topic name cannot be empty.',
+        [{ text: 'OK', onPress: hideAlert, style: 'primary' }]
+      );
       return;
     }
 
     if (trimmedTopic.length > 50) {
-      Alert.alert('Validation Error', 'Topic name must be 50 characters or less.');
+      showAlert(
+        'error',
+        'Validation Error',
+        'Topic name must be 50 characters or less.',
+        [{ text: 'OK', onPress: hideAlert, style: 'primary' }]
+      );
       return;
     }
 
@@ -269,9 +320,19 @@ const QuizMaker = () => {
       
       setNewTopicInput('');
       setShowTopicSelectorModal(false);
-      Alert.alert('Success', `Topic "${trimmedTopic}" added and assigned!`);
+      showAlert(
+        'success',
+        'Success',
+        `Topic "${trimmedTopic}" added and assigned!`,
+        [{ text: 'OK', onPress: hideAlert, style: 'primary' }]
+      );
     } else {
-      Alert.alert('Duplicate Topic', 'This topic already exists.');
+      showAlert(
+        'warning',
+        'Duplicate Topic',
+        'This topic already exists.',
+        [{ text: 'OK', onPress: hideAlert, style: 'primary' }]
+      );
     }
   };
 
@@ -282,28 +343,42 @@ const QuizMaker = () => {
   };
 
   const handleSelectImage = () => {
-    Alert.alert(
+    const buttons = [
+      { text: 'Cancel', onPress: hideAlert, style: 'cancel' as const },
+      {
+        text: 'Camera',
+        onPress: () => {
+          hideAlert();
+          selectFromCamera();
+        },
+        style: 'default' as const
+      },
+      {
+        text: 'Photo Library',
+        onPress: () => {
+          hideAlert();
+          selectFromGallery();
+        },
+        style: 'default' as const
+      }
+    ];
+
+    if (questions[currentQuestionIndex].image && isFirebaseStorageUrl(questions[currentQuestionIndex].image)) {
+      buttons.push({
+        text: 'Remove Image',
+        onPress: () => {
+          hideAlert();
+          handleRemoveImage();
+        },
+        style: 'default' as const
+      });
+    }
+
+    showAlert(
+      'info',
       'Add Question Image',
       'Choose an image source',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Camera',
-          onPress: selectFromCamera
-        },
-        {
-          text: 'Photo Library',
-          onPress: selectFromGallery
-        },
-        ...(questions[currentQuestionIndex].image && isFirebaseStorageUrl(questions[currentQuestionIndex].image) 
-          ? [{
-              text: 'Remove Image',
-              onPress: handleRemoveImage,
-              style: 'destructive' as const
-            }]
-          : []
-        )
-      ]
+      buttons
     );
   };
 
@@ -315,7 +390,12 @@ const QuizMaker = () => {
       }
     } catch (error) {
       console.error('Camera error:', error);
-      Alert.alert('Error', 'Failed to take photo. Please try again.');
+      showAlert(
+        'error',
+        'Error',
+        'Failed to take photo. Please try again.',
+        [{ text: 'OK', onPress: hideAlert, style: 'primary' }]
+      );
     }
   };
 
@@ -327,7 +407,12 @@ const QuizMaker = () => {
       }
     } catch (error) {
       console.error('Gallery error:', error);
-      Alert.alert('Error', 'Failed to select image. Please try again.');
+      showAlert(
+        'error',
+        'Error',
+        'Failed to select image. Please try again.',
+        [{ text: 'OK', onPress: hideAlert, style: 'primary' }]
+      );
     }
   };
 
@@ -337,7 +422,12 @@ const QuizMaker = () => {
     const userId = auth.currentUser?.uid;
     
     if (!userId) {
-      Alert.alert('Error', 'You must be logged in to upload images.');
+      showAlert(
+        'error',
+        'Error',
+        'You must be logged in to upload images.',
+        [{ text: 'OK', onPress: hideAlert, style: 'primary' }]
+      );
       return;
     }
     
@@ -364,10 +454,20 @@ const QuizMaker = () => {
       updated.image = result.url;
       updateQuestion(currentQuestionIndex, updated);
       
-      Alert.alert('Success', 'Image uploaded successfully!');
+      showAlert(
+        'success',
+        'Success',
+        'Image uploaded successfully!',
+        [{ text: 'OK', onPress: hideAlert, style: 'primary' }]
+      );
     } catch (error) {
       console.error('Upload error:', error);
-      Alert.alert('Upload Failed', 'Failed to upload image. Please try again.');
+      showAlert(
+        'error',
+        'Upload Failed',
+        'Failed to upload image. Please try again.',
+        [{ text: 'OK', onPress: hideAlert, style: 'primary' }]
+      );
     } finally {
       setUploadingImage(false);
     }
@@ -389,7 +489,12 @@ const QuizMaker = () => {
     updated.image = '';
     updateQuestion(currentQuestionIndex, updated);
     
-    Alert.alert('Success', 'Image removed successfully!');
+    showAlert(
+      'success',
+      'Success',
+      'Image removed successfully!',
+      [{ text: 'OK', onPress: hideAlert, style: 'primary' }]
+    );
   };
 
   const handleSaveQuiz = async () => {
@@ -399,7 +504,12 @@ const QuizMaker = () => {
     }
 
     if (!quizTitle.trim()) {
-      Alert.alert('Validation Error', 'Please enter a quiz title.');
+      showAlert(
+        'error',
+        'Validation Error',
+        'Please enter a quiz title.',
+        [{ text: 'OK', onPress: hideAlert, style: 'primary' }]
+      );
       return;
     }
 
@@ -412,7 +522,12 @@ const QuizMaker = () => {
 
     const validation = QuizService.validateQuiz(quiz);
     if (!validation.isValid) {
-      Alert.alert('Validation Error', validation.errors.join('\n'));
+      showAlert(
+        'error',
+        'Validation Error',
+        validation.errors.join('\n'),
+        [{ text: 'OK', onPress: hideAlert, style: 'primary' }]
+      );
       return;
     }
 
@@ -432,7 +547,12 @@ const QuizMaker = () => {
         params: { quizId: quizId }
       });
     } catch (error: any) {
-      Alert.alert('Storage Error', error.message || 'Failed to save the quiz.');
+      showAlert(
+        'error',
+        'Storage Error',
+        error.message || 'Failed to save the quiz.',
+        [{ text: 'OK', onPress: hideAlert, style: 'primary' }]
+      );
       logError(error, 'handleSaveQuiz');
     } finally {
       setLoading(false);
@@ -441,19 +561,25 @@ const QuizMaker = () => {
 
   const handleDeleteQuestion = () => {
     if (questions.length <= 1) {
-      Alert.alert('Cannot Delete', 'You must have at least one question.');
+      showAlert(
+        'warning',
+        'Cannot Delete',
+        'You must have at least one question.',
+        [{ text: 'OK', onPress: hideAlert, style: 'primary' }]
+      );
       return;
     }
 
-    Alert.alert(
+    showAlert(
+      'warning',
       'Delete Question',
       'Are you sure you want to delete this question?',
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: 'Cancel', onPress: hideAlert, style: 'cancel' },
         {
           text: 'Delete',
-          style: 'destructive',
           onPress: async () => {
+            hideAlert();
             const question = questions[currentQuestionIndex];
             
             if (question.image && isFirebaseStorageUrl(question.image)) {
@@ -464,14 +590,15 @@ const QuizMaker = () => {
                 );
               }
             }
-            addBacklogEvent(BACKLOG_EVENTS.USER_DELETED_QUIZ, {  // Using USER_DELETED_QUIZ for question deletion
+            addBacklogEvent(BACKLOG_EVENTS.USER_DELETED_QUIZ, {
               questionId: questions[currentQuestionIndex].id,
               quizTitle,
               userId: auth.currentUser?.uid,
             });
             deleteQuestionFromStore(currentQuestionIndex);
           },
-        },
+          style: 'primary'
+        }
       ]
     );
   };
@@ -481,16 +608,18 @@ const QuizMaker = () => {
   };
 
   const handleTopicSelected = async (topic: string, questionType: string, questionCount: number, content?: string) => {
-    Alert.alert(
-      "Generate Quiz",
+    showAlert(
+      'info',
+      'Generate Quiz',
       content 
         ? `Generate ${questionCount} ${questionType.replace('_', ' ')} question${questionCount > 1 ? 's' : ''} from note: "${topic}"?` 
         : `Generate ${questionCount} ${questionType.replace('_', ' ')} question${questionCount > 1 ? 's' : ''} about "${topic}"?`,
       [
-        { text: "Cancel", style: "cancel" },
+        { text: 'Cancel', onPress: hideAlert, style: 'cancel' },
         {
-          text: "Generate",
+          text: 'Generate',
           onPress: async () => {
+            hideAlert();
             setLoading(true, 'Generating quiz with AI...');
             
             try {
@@ -515,15 +644,25 @@ const QuizMaker = () => {
                 setQuizTitle(topic);
               }
               
-              Alert.alert("Success", `Added ${convertedQuestions.length} question${convertedQuestions.length > 1 ? 's' : ''} to your quiz!`);
+              showAlert(
+                'success',
+                'Success',
+                `Added ${convertedQuestions.length} question${convertedQuestions.length > 1 ? 's' : ''} to your quiz!`,
+                [{ text: 'OK', onPress: hideAlert, style: 'primary' }]
+              );
             } catch (error: any) {
               console.error(error);
-              Alert.alert("Error", error.message || 'Failed to generate quiz questions.');
-              
+              showAlert(
+                'error',
+                'Error',
+                error.message || 'Failed to generate quiz questions.',
+                [{ text: 'OK', onPress: hideAlert, style: 'primary' }]
+              );
             } finally {
               setLoading(false);
             }
-          }
+          },
+          style: 'primary'
         }
       ]
     );
@@ -1145,6 +1284,16 @@ const QuizMaker = () => {
             </Text>
           </View>
         )}
+
+        {/* Custom Alert Modal */}
+        <CustomAlertModal
+          visible={alertModal.visible}
+          type={alertModal.type}
+          title={alertModal.title}
+          message={alertModal.message}
+          buttons={alertModal.buttons}
+          onClose={hideAlert}
+        />
       </SafeAreaView>
     </LinearGradient>
   );

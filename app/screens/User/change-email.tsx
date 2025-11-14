@@ -1,4 +1,5 @@
 //app/screens/User/change-email.tsx
+import { CustomAlertModal } from '@/components/Interface/custom-alert-modal';
 import { useBacklogLogger } from "@/hooks/useBackLogLogger";
 import { Montserrat_400Regular, Montserrat_600SemiBold, Montserrat_700Bold, useFonts } from '@expo-google-fonts/montserrat';
 import { Ionicons } from '@expo/vector-icons';
@@ -8,7 +9,6 @@ import { getAuth } from "firebase/auth";
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Animated,
   StyleSheet,
   Text,
@@ -36,6 +36,42 @@ export default function ChangeEmail() {
   const { addBacklogEvent } = useBacklogLogger();
   const API_URL = "https://api-m2tvqc6zqq-uc.a.run.app";
 
+  // Alert modal state
+  const [alertModal, setAlertModal] = useState({
+    visible: false,
+    type: 'info' as 'info' | 'success' | 'error' | 'warning',
+    title: '',
+    message: '',
+    buttons: [] as Array<{
+      text: string;
+      onPress: () => void;
+      style?: 'default' | 'cancel' | 'primary';
+    }>,
+  });
+
+  const showAlert = (
+    type: 'info' | 'success' | 'error' | 'warning',
+    title: string,
+    message: string,
+    buttons: Array<{
+      text: string;
+      onPress: () => void;
+      style?: 'default' | 'cancel' | 'primary';
+    }>
+  ) => {
+    setAlertModal({
+      visible: true,
+      type,
+      title,
+      message,
+      buttons,
+    });
+  };
+
+  const hideAlert = () => {
+    setAlertModal(prev => ({ ...prev, visible: false }));
+  };
+
   // Fade in animation when step changes
   useEffect(() => {
     Animated.timing(fadeAnim, {
@@ -44,29 +80,47 @@ export default function ChangeEmail() {
       useNativeDriver: true,
     }).start();
   }, [step]);
-  // NEW: Timer effect for resend countdown (decrements every second)
+
+  // Timer effect for resend countdown (decrements every second)
   useEffect(() => {
     if (resendTimer > 0) {
       const interval = setInterval(() => {
         setResendTimer(prev => prev - 1);
-      }, 1000); // Decrement every 1 second
-      return () => clearInterval(interval); // Cleanup on unmount or change
+      }, 1000);
+      return () => clearInterval(interval);
     }
   }, [resendTimer]);
 
   // Check if user is authenticated
   useEffect(() => {
     if (!auth.currentUser) {
-      Alert.alert("Error", "You must be logged in to change your email.", [
-        { text: "OK", onPress: () => router.back() }
-      ]);
+      showAlert(
+        'error',
+        'Error',
+        'You must be logged in to change your email.',
+        [
+          {
+            text: 'OK',
+            onPress: () => {
+              hideAlert();
+              router.back();
+            },
+            style: 'primary'
+          }
+        ]
+      );
     }
   }, []);
 
   // STEP 1: Send OTP to the current email
   const handleSendOtp = async () => {
     if (!currentEmail) {
-      Alert.alert("Error", "No authenticated user found.");
+      showAlert(
+        'error',
+        'Error',
+        'No authenticated user found.',
+        [{ text: 'OK', onPress: hideAlert, style: 'primary' }]
+      );
       addBacklogEvent("change_email_error", { errorType: "no_auth", step: 1 });
       return;
     }
@@ -90,14 +144,18 @@ export default function ChangeEmail() {
       }
 
       if (data.success) {
-        // Alert.alert("OTP Sent", `An OTP has been sent to ${currentEmail}.`);
         setStep(2);
-        setResendTimer(60); // Start 60-second timer after sending OTP
+        setResendTimer(60);
         addBacklogEvent("otp_sent", { step: 1, email: currentEmail });
       }
     } catch (error: any) {
       console.error("Send OTP error:", error);
-      Alert.alert("Error", error.message || "Failed to send OTP.");
+      showAlert(
+        'error',
+        'Error',
+        error.message || 'Failed to send OTP.',
+        [{ text: 'OK', onPress: hideAlert, style: 'primary' }]
+      );
       addBacklogEvent("otp_send_error", { step: 1, email: currentEmail, error: error.message });
     } finally {
       setIsLoading(false);
@@ -107,13 +165,23 @@ export default function ChangeEmail() {
   // STEP 2: Verify OTP from current email
   const handleVerifyOtp = async () => {
     if (!otp.trim()) {
-      Alert.alert("Error", "Please enter your OTP.");
+      showAlert(
+        'error',
+        'Error',
+        'Please enter your OTP.',
+        [{ text: 'OK', onPress: hideAlert, style: 'primary' }]
+      );
       addBacklogEvent("otp_validation_error", { step: 2, error: "empty_otp" });
       return;
     }
 
     if (otp.length !== 6) {
-      Alert.alert("Error", "OTP must be 6 digits.");
+      showAlert(
+        'error',
+        'Error',
+        'OTP must be 6 digits.',
+        [{ text: 'OK', onPress: hideAlert, style: 'primary' }]
+      );
       addBacklogEvent("otp_validation_error", { step: 2, error: "invalid_length" });
       return;
     }
@@ -138,13 +206,17 @@ export default function ChangeEmail() {
       }
 
       if (data.success) {
-        // Alert.alert("Verified", "OTP verified successfully. Now enter your new email.");
         setStep(3);
         addBacklogEvent("otp_verified", { step: 2, email: currentEmail });
       }
     } catch (error: any) {
       console.error("Verify OTP error:", error);
-      Alert.alert("Error", error.message || "Failed to verify OTP.");
+      showAlert(
+        'error',
+        'Error',
+        error.message || 'Failed to verify OTP.',
+        [{ text: 'OK', onPress: hideAlert, style: 'primary' }]
+      );
       addBacklogEvent("otp_verification_error", { step: 2, email: currentEmail, error: error.message });
     } finally {
       setIsLoading(false);
@@ -154,19 +226,34 @@ export default function ChangeEmail() {
   // STEP 3: Send verification link to new email
   const handleSubmitNewEmail = async () => {
     if (!newEmail.trim()) {
-      Alert.alert("Error", "Please enter your new email address.");
+      showAlert(
+        'error',
+        'Error',
+        'Please enter your new email address.',
+        [{ text: 'OK', onPress: hideAlert, style: 'primary' }]
+      );
       addBacklogEvent("email_validation_error", { step: 3, error: "empty_email" });
       return;
     }
 
     if (!newEmail.includes("@")) {
-      Alert.alert("Error", "Please enter a valid email address.");
+      showAlert(
+        'error',
+        'Error',
+        'Please enter a valid email address.',
+        [{ text: 'OK', onPress: hideAlert, style: 'primary' }]
+      );
       addBacklogEvent("email_validation_error", { step: 3, error: "invalid_email" });
       return;
     }
 
     if (newEmail.toLowerCase() === currentEmail?.toLowerCase()) {
-      Alert.alert("Error", "New email must be different from current email.");
+      showAlert(
+        'error',
+        'Error',
+        'New email must be different from current email.',
+        [{ text: 'OK', onPress: hideAlert, style: 'primary' }]
+      );
       addBacklogEvent("email_validation_error", { step: 3, error: "same_email" });
       return;
     }
@@ -192,13 +279,18 @@ export default function ChangeEmail() {
       }
 
       if (data.success) {
-        Alert.alert(
-          "Verification Sent",
+        showAlert(
+          'success',
+          'Verification Sent',
           `A verification link was sent to ${newEmail}. Check your inbox.`,
           [
             {
-              text: "OK",
-              onPress: () => router.push("/screens/User/check-email")
+              text: 'OK',
+              onPress: () => {
+                hideAlert();
+                router.push("/screens/User/check-email");
+              },
+              style: 'primary'
             }
           ]
         );
@@ -206,7 +298,12 @@ export default function ChangeEmail() {
       }
     } catch (error: any) {
       console.error("Send verification error:", error);
-      Alert.alert("Error", error.message || "Failed to send verification link.");
+      showAlert(
+        'error',
+        'Error',
+        error.message || 'Failed to send verification link.',
+        [{ text: 'OK', onPress: hideAlert, style: 'primary' }]
+      );
       addBacklogEvent("change_email_error", { step: 3, oldEmail: currentEmail, newEmail: newEmail.trim().toLowerCase(), error: error.message });
     } finally {
       setIsLoading(false);
@@ -215,23 +312,26 @@ export default function ChangeEmail() {
 
   const handleBack = () => {
     if (step > 1) {
-      Alert.alert(
-        "Go Back?",
-        "Your progress will be lost. Do you want to go back?",
+      showAlert(
+        'warning',
+        'Go Back?',
+        'Your progress will be lost. Do you want to go back?',
         [
-          { text: "Cancel", style: "cancel" },
+          { text: 'Cancel', onPress: hideAlert, style: 'cancel' },
           {
-            text: "Yes",
+            text: 'Yes',
             onPress: () => {
+              hideAlert();
               if (step === 3) {
                 setStep(2);
                 setNewEmail("");
               } else if (step === 2) {
                 setStep(1);
                 setOtp("");
-                setResendTimer(0); // Reset timer on back
+                setResendTimer(0);
               }
-            }
+            },
+            style: 'primary'
           }
         ]
       );
@@ -440,6 +540,16 @@ export default function ChangeEmail() {
             </View>
           )}
         </Animated.View>
+
+        {/* Custom Alert Modal */}
+        <CustomAlertModal
+          visible={alertModal.visible}
+          type={alertModal.type}
+          title={alertModal.title}
+          message={alertModal.message}
+          buttons={alertModal.buttons}
+          onClose={hideAlert}
+        />
       </View>
     </LinearGradient>
   );

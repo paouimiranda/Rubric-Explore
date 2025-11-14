@@ -6,21 +6,33 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import React, { useEffect, useState } from 'react';
 import {
-    ActivityIndicator,
-    Animated,
-    Dimensions,
-    FlatList,
-    Modal,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Animated,
+  Dimensions,
+  FlatList,
+  Modal,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 
 const { width } = Dimensions.get('window');
 const CARD_WIDTH = (width - 56) / 2;
 
 type ShopCategory = 'themes' | 'avatars' | 'badges' | 'effects';
+
+interface AlertState {
+  visible: boolean;
+  type: 'info' | 'success' | 'error' | 'warning';
+  title: string;
+  message: string;
+  buttons?: Array<{
+    text: string;
+    onPress: () => void;
+    style?: 'default' | 'cancel' | 'primary';
+  }>;
+}
 
 const CATEGORIES = [
   { id: 'themes' as const, label: 'Themes', icon: 'color-palette' as const },
@@ -48,22 +60,37 @@ const ShopTab = () => {
   const [owned, setOwned] = useState<string[]>([]);
   const [active, setActive] = useState('default');
   const [loading, setLoading] = useState(true);
-  const [alert, setAlert] = useState<{
-    visible: boolean;
-    type: 'info' | 'success' | 'error' | 'warning';
-    title: string;
-    message: string;
-    buttons?: Array<{
-      text: string;
-      onPress: () => void;
-      style?: 'default' | 'cancel' | 'primary';
-    }>;
-  }>({
+  const [alert, setAlert] = useState<AlertState>({
     visible: false,
     type: 'info',
     title: '',
     message: '',
   });
+
+  const showAlert = (
+    type: 'info' | 'success' | 'error' | 'warning',
+    title: string,
+    message: string,
+    buttons?: AlertState['buttons']
+  ) => {
+    setAlert({
+      visible: true,
+      type,
+      title,
+      message,
+      buttons: buttons || [
+        {
+          text: 'OK',
+          onPress: () => closeAlert(),
+          style: 'primary',
+        },
+      ],
+    });
+  };
+
+  const closeAlert = () => {
+    setAlert(prev => ({ ...prev, visible: false }));
+  };
 
   useEffect(() => {
     loadData();
@@ -80,13 +107,7 @@ const ShopTab = () => {
       setOwned(inventory.ownedThemes);
       setActive(inventory.activeTheme);
     } catch (error) {
-      setAlert({
-        visible: true,
-        type: 'error',
-        title: 'Error',
-        message: 'Failed to load shop data',
-        buttons: [{ text: 'OK', onPress: () => {}, style: 'primary' }],
-      });
+      showAlert('error', 'Error', 'Failed to load shop data');
     } finally {
       setLoading(false);
     }
@@ -233,7 +254,7 @@ const ShopTab = () => {
         title={alert.title}
         message={alert.message}
         buttons={alert.buttons}
-        onClose={() => setAlert({ ...alert, visible: false })}
+        onClose={closeAlert}
       />
     </View>
   );
@@ -312,23 +333,38 @@ const ThemeModal: React.FC<ThemeModalProps> = ({ theme, owned, active, shards, o
   const [loading, setLoading] = useState(false);
   const [fadeAnim] = useState(new Animated.Value(0));
   const [slideAnim] = useState(new Animated.Value(300));
-  const [alert, setAlert] = useState<{
-    visible: boolean;
-    type: 'info' | 'success' | 'error' | 'warning';
-    title: string;
-    message: string;
-    buttons?: Array<{
-      text: string;
-      onPress: () => void;
-      style?: 'default' | 'cancel' | 'primary';
-    }>;
-  }>({
+  const [alert, setAlert] = useState<AlertState>({
     visible: false,
     type: 'info',
     title: '',
     message: '',
   });
   const canAfford = shards >= theme.price;
+
+  const showAlert = (
+    type: 'info' | 'success' | 'error' | 'warning',
+    title: string,
+    message: string,
+    buttons?: AlertState['buttons']
+  ) => {
+    setAlert({
+      visible: true,
+      type,
+      title,
+      message,
+      buttons: buttons || [
+        {
+          text: 'OK',
+          onPress: () => closeAlert(),
+          style: 'primary',
+        },
+      ],
+    });
+  };
+
+  const closeAlert = () => {
+    setAlert(prev => ({ ...prev, visible: false }));
+  };
 
   useEffect(() => {
     Animated.parallel([
@@ -371,39 +407,27 @@ const ThemeModal: React.FC<ThemeModalProps> = ({ theme, owned, active, shards, o
       setLoading(true);
       const result = await ShopService.purchaseTheme(theme.id, theme.price);
       if (result.success) {
-        setAlert({
-          visible: true,
-          type: 'success',
-          title: 'Success! ✨',
-          message: result.message,
-          buttons: [
+        showAlert(
+          'success',
+          'Success! ✨',
+          result.message,
+          [
             {
               text: 'OK',
               onPress: () => {
+                closeAlert();
                 onSuccess();
                 handleClose();
               },
               style: 'primary',
             },
-          ],
-        });
+          ]
+        );
       } else {
-        setAlert({
-          visible: true,
-          type: 'error',
-          title: 'Failed',
-          message: result.message,
-          buttons: [{ text: 'OK', onPress: () => {}, style: 'primary' }],
-        });
+        showAlert('error', 'Failed', result.message);
       }
     } catch (error) {
-      setAlert({
-        visible: true,
-        type: 'error',
-        title: 'Error',
-        message: 'Something went wrong',
-        buttons: [{ text: 'OK', onPress: () => {}, style: 'primary' }],
-      });
+      showAlert('error', 'Error', 'Something went wrong');
     } finally {
       setLoading(false);
     }
@@ -414,39 +438,27 @@ const ThemeModal: React.FC<ThemeModalProps> = ({ theme, owned, active, shards, o
       setLoading(true);
       const result = await ShopService.setActiveTheme(theme.id);
       if (result.success) {
-        setAlert({
-          visible: true,
-          type: 'success',
-          title: 'Activated! ✨',
-          message: result.message,
-          buttons: [
+        showAlert(
+          'success',
+          'Activated! ✨',
+          result.message,
+          [
             {
               text: 'OK',
               onPress: () => {
+                closeAlert();
                 onSuccess();
                 handleClose();
               },
               style: 'primary',
             },
-          ],
-        });
+          ]
+        );
       } else {
-        setAlert({
-          visible: true,
-          type: 'error',
-          title: 'Error',
-          message: result.message,
-          buttons: [{ text: 'OK', onPress: () => {}, style: 'primary' }],
-        });
+        showAlert('error', 'Error', result.message);
       }
     } catch (error) {
-      setAlert({
-        visible: true,
-        type: 'error',
-        title: 'Error',
-        message: 'Something went wrong',
-        buttons: [{ text: 'OK', onPress: () => {}, style: 'primary' }],
-      });
+      showAlert('error', 'Error', 'Something went wrong');
     } finally {
       setLoading(false);
     }
@@ -569,7 +581,7 @@ const ThemeModal: React.FC<ThemeModalProps> = ({ theme, owned, active, shards, o
         title={alert.title}
         message={alert.message}
         buttons={alert.buttons}
-        onClose={() => setAlert({ ...alert, visible: false })}
+        onClose={closeAlert}
       />
     </>
   );
