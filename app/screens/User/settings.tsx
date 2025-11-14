@@ -14,7 +14,10 @@ import React, { useEffect, useState } from 'react';
 import { Animated, LogBox, Modal, SafeAreaView, ScrollView, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { auth, db } from '../../../firebase'; // Added db import (assuming it's exported from firebase.ts)
 import { useAuth } from '../../contexts/AuthContext';
+import FaqModal from "../Misc/FaqModal";
+import PrivacyPolicyModal from '../Misc/privacy-policy-modal';
 import TermsModal from '../Misc/t&c';
+
 
 const translations: Record<string, Record<string, string>> = {
   en: {
@@ -58,8 +61,9 @@ const SettingsScreen = () => {
   const [isDarkMode, setIsDarkMode] = useState(true);
   const [lang, setLang] = useState<'en' | 'tl'>('en');
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
-
+  const [showFaqModal, setShowFaqModal] = useState(false);
   const [showPrivacyModal, setShowPrivacyModal] = useState(false);
+  const [showTermsModal, setShowTermsModal] = useState(false);
   
   // Modal states for Contact Support and Submit Feedback
   const [showContactModal, setShowContactModal] = useState(false);
@@ -260,6 +264,8 @@ const SettingsScreen = () => {
     }
   };
 
+  
+
   const t = translations[lang];
   const textColor = isDarkMode ? '#ffffff' : '#113470ff';
   const cardBg = isDarkMode ? 'rgba(255, 255, 255, 0.08)' : 'rgba(255, 255, 255, 0.7)';
@@ -436,7 +442,7 @@ const SettingsScreen = () => {
             <ActionButton 
               label="View Terms and Condition" 
               iconName="document-text" 
-              onPress={() => setShowPrivacyModal(true)} 
+              onPress={() => setShowTermsModal(true)} 
             />
             
             
@@ -450,7 +456,11 @@ const SettingsScreen = () => {
             gradientColors={['#fa709a', '#fee140']}
           >
             <ActionButton label="Contact Support" iconName="chatbubbles" onPress={() => setShowContactModal(true)} />
-            <ActionButton label="FAQ" iconName="help-buoy" onPress={() => {}} />
+            <ActionButton label="FAQ" iconName="help-circle" onPress={() => {setShowFaqModal(true)}} />
+              <FaqModal 
+                visible={showFaqModal} 
+                onClose={() => setShowFaqModal(false)} 
+              />
             <ActionButton label="Submit Feedback" iconName="megaphone" onPress={() => setShowFeedbackModal(true)} />
           </SettingCard>
 
@@ -489,8 +499,13 @@ const SettingsScreen = () => {
         
         
         
-        {/* Privacy Policy Modal */}
+        {/* Privacy Policy Modal and Terms and Condition */}
         <TermsModal 
+          visible={showTermsModal} 
+          onClose={() => setShowTermsModal(false)} 
+        />
+
+        <PrivacyPolicyModal 
           visible={showPrivacyModal} 
           onClose={() => setShowPrivacyModal(false)} 
         />
