@@ -1,4 +1,4 @@
-// components/RichTextEditor/RichTextToolbar.tsx
+// components/RichTextEditor/RichTextToolbar.tsx (UPDATED)
 import { createToolbarThemedStyles } from '@/constants/themedStyles';
 import { useTheme } from '@/hooks/useTheme';
 import { pickImage, takePhoto, uploadNoteImage } from '@/services/image-service';
@@ -7,6 +7,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { ActivityIndicator } from 'react-native-paper';
 import { RichToolbar, actions } from 'react-native-pell-rich-editor';
+import DrawingScreen from '../RichTextEditor/drawing-screen';
 import MathEquationBuilder from '../RichTextEditor/math-equation-builder';
 import TableBuilder from '../RichTextEditor/table-builder';
 
@@ -16,7 +17,6 @@ interface RichTextToolbarProps {
   noteId: string;
   userId: string;
   style?: any;
-  // NEW: Yjs undo/redo support
   onUndo?: () => void;
   onRedo?: () => void;
   canUndo?: boolean;
@@ -64,6 +64,9 @@ const RichTextToolbar: React.FC<RichTextToolbarProps> = ({ getEditor, onMetadata
   
   const [tableBuilderVisible, setTableBuilderVisible] = useState(false);
   const [mathEquationVisible, setMathEquationVisible] = useState(false);
+  
+  // NEW: Drawing screen state
+  const [drawingScreenVisible, setDrawingScreenVisible] = useState(false);
 
   // Formatting states
   const [isBold, setIsBold] = useState(false);
@@ -77,16 +80,13 @@ const RichTextToolbar: React.FC<RichTextToolbarProps> = ({ getEditor, onMetadata
   const { colors, themeMode } = useTheme();
   const styles = createToolbarThemedStyles(colors, themeMode);
 
-  // Check formatting state by evaluating JavaScript and parsing result
   const checkFormattingState = useCallback(async () => {
-    // FIX: Add safety checks before accessing editor
     if (!isMountedRef.current) return;
     
     const editor = getEditor();
     if (!editor || !editor.webviewBridge) return;
 
     try {
-      // Use a unique callback name for this check
       const callbackName = `__fmt_${Date.now()}`;
       
       const script = `
@@ -108,7 +108,6 @@ const RichTextToolbar: React.FC<RichTextToolbarProps> = ({ getEditor, onMetadata
 
       editor.webviewBridge.injectJavaScript(script);
       
-      // Poll for the result - add mounted check
       setTimeout(() => {
         if (!isMountedRef.current) return;
         
@@ -133,7 +132,6 @@ const RichTextToolbar: React.FC<RichTextToolbarProps> = ({ getEditor, onMetadata
     }
   }, [getEditor]);
 
-  // Poll for formatting state
   useEffect(() => {
     isMountedRef.current = true;
     
@@ -149,7 +147,6 @@ const RichTextToolbar: React.FC<RichTextToolbarProps> = ({ getEditor, onMetadata
 
     startPolling();
 
-    // FIX: Proper cleanup on unmount
     return () => {
       isMountedRef.current = false;
       if (stateCheckRef.current) {
@@ -159,12 +156,10 @@ const RichTextToolbar: React.FC<RichTextToolbarProps> = ({ getEditor, onMetadata
     };
   }, [checkFormattingState]);
 
-  // Listen for formatting state messages
   useEffect(() => {
     const editor = getEditor();
     if (!editor) return;
 
-    // Patch the onMessage handler
     const originalHandler = editor.onMessage;
     
     editor.onMessage = (event: any) => {
@@ -181,7 +176,6 @@ const RichTextToolbar: React.FC<RichTextToolbarProps> = ({ getEditor, onMetadata
         // Ignore
       }
       
-      // Call original handler
       if (originalHandler && typeof originalHandler === 'function') {
         originalHandler(event);
       }
@@ -192,7 +186,6 @@ const RichTextToolbar: React.FC<RichTextToolbarProps> = ({ getEditor, onMetadata
     };
   }, [getEditor]);
 
-  // Formatting handlers with state update
   const handleBold = useCallback(() => {
     const editor = getEditor();
     if (editor && editor.webviewBridge) {
@@ -336,6 +329,30 @@ const RichTextToolbar: React.FC<RichTextToolbarProps> = ({ getEditor, onMetadata
     } catch (error) {
       console.error('Error uploading image:', error);
       alert('Error! Failed to upload image. Please try again.');
+    } finally {
+      setUploadingImage(false);
+    }
+  }, [getEditor, noteId, userId]);
+
+  // NEW: Handle drawing completion
+  const handleDrawingComplete = useCallback(async (imageUri: string) => {
+    setDrawingScreenVisible(false);
+    setUploadingImage(true);
+
+    try {
+      // Upload the drawing as an image
+      const uploadResult = await uploadNoteImage(noteId, imageUri, userId);
+
+      // Insert into editor
+      const editor = getEditor();
+      if (editor) {
+        editor.insertImage(uploadResult.url, 'Hand-drawn image');
+      }
+
+      alert('Success! Drawing inserted successfully!');
+    } catch (error) {
+      console.error('Error uploading drawing:', error);
+      alert('Error! Failed to insert drawing. Please try again.');
     } finally {
       setUploadingImage(false);
     }
@@ -570,6 +587,14 @@ const RichTextToolbar: React.FC<RichTextToolbarProps> = ({ getEditor, onMetadata
             ) : (
               <Ionicons name="image" size={20} color="#ffffff" />
             )}
+          </TouchableOpacity>
+
+          {/* NEW: Drawing button */}
+          <TouchableOpacity 
+            style={styles.customButton}
+            onPress={() => setDrawingScreenVisible(true)}
+          >
+            <Ionicons name="brush-outline" size={20} color="#ffffff" />
           </TouchableOpacity>
 
           {/* Table button */}
@@ -815,6 +840,19 @@ const RichTextToolbar: React.FC<RichTextToolbarProps> = ({ getEditor, onMetadata
         onClose={() => setMathEquationVisible(false)}
         onInsert={handleInsertEquation}
       />
+
+      {/* NEW: Drawing Screen Modal */}
+      <Modal
+        visible={drawingScreenVisible}
+        animationType="slide"
+        presentationStyle="fullScreen"
+        onRequestClose={() => setDrawingScreenVisible(false)}
+      >
+        <DrawingScreen
+          onComplete={handleDrawingComplete}
+          onCancel={() => setDrawingScreenVisible(false)}
+        />
+      </Modal>
     </>
   );
 };
