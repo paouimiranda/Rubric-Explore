@@ -227,6 +227,44 @@ export const createThemedStyles = (colors: ThemeColors, mode: ThemeMode) => {
       right: 0,
       marginBottom: 20,
     },
+    exportOptionsContent: {
+  padding: 20,
+},
+exportOption: {
+  flexDirection: 'row',
+  alignItems: 'flex-start',
+  marginBottom: 20,
+},
+exportOptionText: {
+  flex: 1,
+  marginLeft: 12,
+},
+exportOptionTitle: {
+  fontSize: 16,
+  fontWeight: '600',
+  color: '#1f2937',
+  marginBottom: 4,
+},
+exportOptionDescription: {
+  fontSize: 14,
+  color: '#6b7280',
+  lineHeight: 20,
+},
+exportButton: {
+  backgroundColor: '#3b82f6',
+  flexDirection: 'row',
+  alignItems: 'center',
+  justifyContent: 'center',
+  padding: 16,
+  borderRadius: 8,
+  marginTop: 12,
+},
+exportButtonText: {
+  color: '#ffffff',
+  fontSize: 16,
+  fontWeight: '600',
+  marginLeft: 8,
+},
   });
 };
 
@@ -427,5 +465,6 @@ export const createToolbarThemedStyles = (colors: ThemeColors, mode: ThemeMode) 
       fontWeight: '500',
       marginLeft: 12,
     },
+    
   });
 };

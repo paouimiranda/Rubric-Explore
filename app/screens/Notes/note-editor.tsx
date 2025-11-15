@@ -11,6 +11,7 @@ import { useBacklogLogger } from "@/hooks/useBackLogLogger";
 import { useTheme } from "@/hooks/useTheme";
 import { BACKLOG_EVENTS } from "@/services/backlogEvents";
 import { getNotesInNotebook, updateNote } from '@/services/notes-service';
+import PDFService from '@/services/pdf-service';
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
@@ -58,6 +59,105 @@ export default function NoteEditor({
 
   const { colors, themeMode, toggleTheme, isLoading } = useTheme();
   const styles = createThemedStyles(colors, themeMode);
+  // NEW CONST FOR EXPORT/IMPORT
+  const [pdfExportModalVisible, setPdfExportModalVisible] = useState(false);
+  const [exportOptions, setExportOptions] = useState({
+    includeProperties: true,
+    includeMetadata: true,
+  });
+
+  const handleExportPDF = async () => {
+  if (!note) {
+    Alert.alert('Error', 'No note to export');
+    return;
+  }
+
+  setEllipsisMenuVisible(false);
+  
+  // Show options modal first
+  setPdfExportModalVisible(true);
+};
+
+const confirmExportPDF = async () => {
+  setPdfExportModalVisible(false);
+  
+  if (!note) return;
+  
+  try {
+    // Show loading indicator
+    Alert.alert('Exporting...', 'Generating PDF file');
+    
+    const filePath = await PDFService.exportNoteToPDF(
+      note,
+      content,
+      {
+        includeProperties: exportOptions.includeProperties,
+        includeMetadata: exportOptions.includeMetadata,
+        fileName: `${note.title || 'note'}.pdf`
+      }
+    );
+    
+    if (filePath) {
+      // addBacklogEvent(BACKLOG_EVENTS.USER_EXPORTED_NOTE_PDF, { 
+      //   noteId: note.id,
+      //   options: exportOptions 
+      // });
+      
+      Alert.alert(
+        'Success',
+        'PDF exported successfully!',
+        [{ text: 'OK' }]
+      );
+    }
+  } catch (error) {
+    console.error('Export error:', error);
+    Alert.alert('Error', 'Failed to export PDF');
+  }
+};
+
+const handleImportPDF = async () => {
+  setEllipsisMenuVisible(false);
+  
+  try {
+    const result = await PDFService.importPDFAsNote();
+    
+    if (result) {
+      // Show success and ask user what to do
+      Alert.alert(
+        'PDF Imported',
+        `Successfully extracted text from "${result.title}"\n\n${result.metadata?.pages ? `Pages: ${result.metadata.pages}\n` : ''}Characters: ${result.metadata?.characterCount || 0}`,
+        [
+          {
+            text: 'Cancel',
+            style: 'cancel'
+          },
+          {
+            text: 'Replace Current Note',
+            style: 'destructive',
+            onPress: () => {
+              // Replace current note content
+              collaborative.handleTitleChange(result.title);
+              collaborative.handleContentChange(result.content);
+              setHasUnsavedChanges(true);                   
+            }
+          },
+          {
+            text: 'Append to Note',
+            onPress: () => {
+              // Append to existing content
+              const newContent = content + '<p><br></p>' + result.content;
+              collaborative.handleContentChange(newContent);
+              setHasUnsavedChanges(true);
+            }
+          }
+        ]
+      );
+    }
+  } catch (error) {
+    console.error('Import error:', error);
+    // Error is already handled in PDFService
+  }
+};
   
   if (!uid) {
     return (
@@ -698,8 +798,24 @@ export default function NoteEditor({
                 <Ionicons name="information-circle-outline" size={20} color={colors.text} />
                 <Text style={styles.menuItemText}>Note Information</Text>
               </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.menuItem}
+                onPress={handleExportPDF}
+              >
+                <Ionicons name="download-outline" size={20} color={colors.text} />
+                <Text style={styles.menuItemText}>Export as PDF</Text>
+              </TouchableOpacity>
             </View>
           </TouchableOpacity>
+
+          {/* <TouchableOpacity
+            style={styles.menuItem}
+            onPress={handleImportPDF}
+          >
+            <Ionicons name="cloud-upload-outline" size={20} color={colors.text} />
+            <Text style={styles.menuItemText}>Import from PDF</Text>
+          </TouchableOpacity> */}
         </Modal>
 
         {/* Collaborators List Modal */}
@@ -810,6 +926,74 @@ export default function NoteEditor({
                     )}
                   </>
                 )}
+              </View>
+            </View>
+          </View>
+        </Modal>
+
+        <Modal
+          visible={pdfExportModalVisible}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setPdfExportModalVisible(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.metadataModal}>
+              <View style={styles.metadataHeader}>
+                <Text style={styles.metadataTitle}>Export Options</Text>
+                <TouchableOpacity onPress={() => setPdfExportModalVisible(false)}>
+                  <Ionicons name="close" size={24} color="#1f2937" />
+                </TouchableOpacity>
+              </View>
+              
+              <View style={styles.exportOptionsContent}>
+                <TouchableOpacity
+                  style={styles.exportOption}
+                  onPress={() => setExportOptions(prev => ({ 
+                    ...prev, 
+                    includeProperties: !prev.includeProperties 
+                  }))}
+                >
+                  <Ionicons 
+                    name={exportOptions.includeProperties ? "checkbox" : "square-outline"} 
+                    size={24} 
+                    color="#3b82f6" 
+                  />
+                  <View style={styles.exportOptionText}>
+                    <Text style={styles.exportOptionTitle}>Include Properties</Text>
+                    <Text style={styles.exportOptionDescription}>
+                      Export note properties like tags and custom fields
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+                
+                <TouchableOpacity
+                  style={styles.exportOption}
+                  onPress={() => setExportOptions(prev => ({ 
+                    ...prev, 
+                    includeMetadata: !prev.includeMetadata 
+                  }))}
+                >
+                  <Ionicons 
+                    name={exportOptions.includeMetadata ? "checkbox" : "square-outline"} 
+                    size={24} 
+                    color="#3b82f6" 
+                  />
+                  <View style={styles.exportOptionText}>
+                    <Text style={styles.exportOptionTitle}>Include Metadata</Text>
+                    <Text style={styles.exportOptionDescription}>
+                      Export creation date, last modified, and statistics
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+                
+                <TouchableOpacity
+                  style={styles.exportButton}
+                  onPress={confirmExportPDF}
+                >
+                  <Ionicons name="download" size={20} color="#ffffff" />
+                  <Text style={styles.exportButtonText}>Export PDF</Text>
+                </TouchableOpacity>
               </View>
             </View>
           </View>
@@ -1069,4 +1253,6 @@ const styles = StyleSheet.create({
     right: 0,
     marginBottom: 20,
   },
+  
+  
 });

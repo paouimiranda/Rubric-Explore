@@ -3,7 +3,10 @@ import cors from "cors";
 import express from "express";
 import * as admin from "firebase-admin";
 import * as functions from "firebase-functions";
+import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import nodemailer from "nodemailer";
+
+const pdfParse = require('pdf-parse');
 
 
 admin.initializeApp();
@@ -1028,6 +1031,141 @@ app.post("/resendVerificationEmail", async (req, res) => {
     return res.status(500).send({ error: error.message });
   }
 });
+
+// ========================================
+// 🆕 NEW: PDF TEXT EXTRACTION FUNCTION
+// ========================================
+
+/**
+ * Cloud Function to extract text from PDF
+ * Called from the mobile app with PDF file data
+ */
+export const extractPDFText = onCall(
+  {
+    timeoutSeconds: 300, // 5 minutes for large PDFs
+    memory: '1GiB', // More memory for PDF processing
+    cors: true,
+  },
+  async (request) => {
+    console.log('\n' + '='.repeat(60));
+    console.log('📄 NEW PDF EXTRACTION REQUEST');
+    console.log('='.repeat(60));
+
+    // Check authentication
+    if (!request.auth) {
+      throw new HttpsError(
+        'unauthenticated',
+        'User must be authenticated to extract PDF text'
+      );
+    }
+
+    const { base64Data, fileName } = request.data;
+
+    if (!base64Data) {
+      throw new HttpsError(
+        'invalid-argument',
+        'PDF data is required'
+      );
+    }
+
+    try {
+      console.log(`Processing PDF: ${fileName || 'unnamed'}`);
+      console.log(`User: ${request.auth.uid}`);
+
+      // Convert base64 to buffer
+      const pdfBuffer = Buffer.from(base64Data, 'base64');
+      const sizeInMB = (pdfBuffer.length / (1024 * 1024)).toFixed(2);
+      console.log(`PDF size: ${sizeInMB} MB`);
+
+      // Check size limit (10MB for callable functions)
+      if (pdfBuffer.length > 10 * 1024 * 1024) {
+        throw new HttpsError(
+          'invalid-argument',
+          'PDF file too large. Maximum size is 10MB.'
+        );
+      }
+
+      // Extract text from PDF
+      console.log('Extracting text from PDF...');
+      const pdfData = await pdfParse(pdfBuffer, {
+        max: 0, // Extract all pages
+      });
+
+      // Clean up the extracted text
+      let text = pdfData.text;
+      
+      // Remove excessive whitespace
+      text = text.replace(/\n\s*\n\s*\n/g, '\n\n');
+      text = text.replace(/[ \t]+/g, ' ');
+      text = text.trim();
+
+      // Convert plain text to basic HTML paragraphs
+      const htmlContent = text
+        .split('\n\n')
+        .map((paragraph: string) => {
+          if (paragraph.trim()) {
+            return `<p>${escapeHtml(paragraph.trim()).replace(/\n/g, '<br>')}</p>`;
+          }
+          return '';
+        })
+        .filter((p: string) => p)
+        .join('\n');
+
+      const wordCount = text.split(/\s+/).filter((w: string) => w.length > 0).length;
+
+      console.log(`✅ Successfully extracted ${text.length} characters from PDF`);
+      console.log(`Pages: ${pdfData.numpages}, Words: ${wordCount}`);
+
+      // Log to Firestore for analytics (optional)
+      await db.collection('pdf_extractions').add({
+        userId: request.auth.uid,
+        fileName: fileName || 'unknown',
+        pages: pdfData.numpages,
+        characterCount: text.length,
+        wordCount: wordCount,
+        sizeBytes: pdfBuffer.length,
+        timestamp: admin.firestore.FieldValue.serverTimestamp(),
+      });
+
+      return {
+        success: true,
+        text: text,
+        htmlContent: htmlContent,
+        metadata: {
+          pages: pdfData.numpages,
+          info: pdfData.info,
+          characterCount: text.length,
+          wordCount: wordCount,
+        }
+      };
+
+    } catch (error: any) {
+      console.error('❌ Error extracting PDF text:', error);
+      
+      // Don't expose internal errors to client
+      if (error instanceof HttpsError) {
+        throw error;
+      }
+
+      throw new HttpsError(
+        'internal',
+        'Failed to extract text from PDF. The file might be corrupted or image-based.'
+      );
+    }
+  }
+);
+
+// Helper function to escape HTML
+function escapeHtml(text: string): string {
+  const map: { [key: string]: string } = {
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#039;'
+  };
+  return text.replace(/[&<>"']/g, m => map[m]);
+}
 
 // ========================================
 // EXPORT THE EXPRESS API (v1 function)
