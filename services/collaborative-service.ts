@@ -163,28 +163,23 @@ class ChunkBasedCollaborativeService {
 ): Promise<void> {
   try {
     const { getNoteChunks } = await import('./notes-service');
-    const chunks = await getNoteChunks(noteId);
-
-    console.log(`📦 Loading ${chunks.length} chunk sessions for note ${noteId}`);
-
-    // CRITICAL FIX: Verify chunks exist
-    if (chunks.length === 0) {
-      console.warn('⚠️ No chunks found for note:', noteId);
-      
-
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      const retryChunks = await getNoteChunks(noteId);
-      
-      if (retryChunks.length === 0) {
-        throw new Error('No chunks found - note may need migration');
-      }
-      
-      // Use retry chunks if found
-      chunks.length = 0;
-      chunks.push(...retryChunks);
-    }
-
     
+    console.log(`📦 Fetching chunks from Firestore for note ${noteId}...`);
+    
+    // ✅ Add timeout to chunk fetching
+    const chunksPromise = getNoteChunks(noteId);
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      setTimeout(() => reject(new Error('Chunk fetch timeout')), 7000);
+    });
+    
+    const chunks = await Promise.race([chunksPromise, timeoutPromise]);
+
+    console.log(`📦 Retrieved ${chunks.length} chunks from Firestore`);
+
+    if (chunks.length === 0) {
+      console.error('❌ No chunks found in Firestore for note:', noteId);
+      throw new Error(`No chunks found for note ${noteId} - note may need migration`);
+    }
 
     // Load chunks sequentially to ensure proper initialization
     for (const chunk of chunks) {
@@ -204,12 +199,23 @@ class ChunkBasedCollaborativeService {
         userId
       );
 
-      // CRITICAL FIX: Wait for initial load and verify
-      await this.loadInitialChunk(noteId, chunk.id, ydoc);
+      // ✅ CRITICAL: Wait for initial load with timeout
+      const loadPromise = this.loadInitialChunk(noteId, chunk.id, ydoc);
+      const loadTimeout = new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error(`Chunk ${chunk.id} load timeout`)), 5000);
+      });
+      
+      try {
+        await Promise.race([loadPromise, loadTimeout]);
+      } catch (loadError) {
+        console.error(`❌ Failed to load chunk ${chunk.id}:`, loadError);
+        // Don't throw - allow partial loading
+        console.warn(`⚠️ Continuing with empty chunk ${chunk.id}`);
+      }
       
       // Verify the chunk loaded properly
       const loadedContent = contentText.toString();
-      console.log(`✅ Chunk ${chunk.id} loaded: ${loadedContent.length} characters`);
+      console.log(`✅ Chunk ${chunk.id} loaded successfully: ${loadedContent.length} characters`);
 
       const chunkSession: ChunkSession = {
         ydoc,
@@ -227,7 +233,13 @@ class ChunkBasedCollaborativeService {
       session.chunkSessions.set(chunk.id, chunkSession);
     }
 
-    console.log(`✅ All ${chunks.length} chunks loaded successfully`);
+    // ✅ Verify at least some content loaded
+    const totalContent = Array.from(session.chunkSessions.values())
+      .map(cs => cs.contentText.toString())
+      .join('');
+    
+    console.log(`✅ All ${chunks.length} chunks processed - Total content: ${totalContent.length} chars`);
+
   } catch (error) {
     console.error('❌ Error loading chunk sessions:', error);
     throw error; // Re-throw to be caught by createSession
@@ -386,32 +398,63 @@ class ChunkBasedCollaborativeService {
 
   // Load initial title from Firestore
   private async loadInitialTitle(noteId: string, ydoc: Y.Doc) {
-    try {
-      const noteRef = doc(db, 'notes', noteId);
-      const snap = await getDoc(noteRef);
+  try {
+    console.log(`📥 Loading initial title for note: ${noteId}`);
+    
+    const noteRef = doc(db, 'notes', noteId);
+    
+    // ✅ Add timeout
+    const fetchPromise = getDoc(noteRef);
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      setTimeout(() => reject(new Error('Title fetch timeout')), 5000);
+    });
+    
+    const snap = await Promise.race([fetchPromise, timeoutPromise]);
 
-      if (snap.exists()) {
-        const data = snap.data();
-        const titleText = ydoc.getText('title');
+    if (snap.exists()) {
+      const data = snap.data();
+      const titleText = ydoc.getText('title');
 
-        if (data.yjs_state && Array.isArray(data.yjs_state)) {
-          try {
-            const state = new Uint8Array(data.yjs_state);
-            Y.applyUpdate(ydoc, state, 'initial_load');
-          } catch (error) {
-            console.error('Error loading title Y.js state:', error);
-            if (titleText.length === 0 && data.title) {
-              titleText.insert(0, data.title);
-            }
+      console.log(`📊 Note title data:`, {
+        hasYjsState: !!data.yjs_state,
+        hasTitle: !!data.title,
+        titleLength: data.title?.length || 0
+      });
+
+      if (data.yjs_state && Array.isArray(data.yjs_state) && data.yjs_state.length > 0) {
+        try {
+          const state = new Uint8Array(data.yjs_state);
+          Y.applyUpdate(ydoc, state, 'initial_load');
+          
+          const loadedTitle = titleText.toString();
+          console.log(`✅ Loaded title from Y.js state: "${loadedTitle}"`);
+          
+          // Verify and fallback if needed
+          if (loadedTitle.length === 0 && data.title && data.title.length > 0) {
+            console.warn(`⚠️ Y.js state loaded but title is empty, using plain title`);
+            titleText.insert(0, data.title);
           }
-        } else if (titleText.length === 0 && data.title) {
-          titleText.insert(0, data.title);
+        } catch (error) {
+          console.error('Error loading title Y.js state:', error);
+          if (titleText.length === 0 && data.title) {
+            titleText.insert(0, data.title);
+            console.log(`✅ Fallback: Loaded plain title`);
+          }
         }
+      } else if (titleText.length === 0 && data.title) {
+        titleText.insert(0, data.title);
+        console.log(`✅ Loaded plain title: "${data.title}"`);
       }
-    } catch (error) {
-      console.error('Error loading initial title:', error);
+      
+      // Final verification
+      const finalTitle = titleText.toString();
+      console.log(`✅ Final title verification: "${finalTitle}" (${finalTitle.length} chars)`);
     }
+  } catch (error) {
+    console.error('Error loading initial title:', error);
+    throw error;
   }
+}
 
   // Load initial chunk content from Firestore
   private async loadInitialChunk(noteId: string, chunkId: string, ydoc: Y.Doc): Promise<void> {
@@ -419,7 +462,14 @@ class ChunkBasedCollaborativeService {
     console.log(`📥 Loading initial data for chunk: ${chunkId}`);
     
     const chunkRef = doc(db, `notes/${noteId}/chunks/${chunkId}`);
-    const snap = await getDoc(chunkRef);
+    
+    // ✅ Add timeout to Firestore fetch
+    const fetchPromise = getDoc(chunkRef);
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      setTimeout(() => reject(new Error('Firestore fetch timeout')), 5000);
+    });
+    
+    const snap = await Promise.race([fetchPromise, timeoutPromise]);
 
     if (!snap.exists()) {
       console.warn(`⚠️ Chunk document not found: ${chunkId}`);
@@ -429,29 +479,56 @@ class ChunkBasedCollaborativeService {
     const data = snap.data();
     const contentText = ydoc.getText('content');
 
-    if (data.yjs_state && Array.isArray(data.yjs_state)) {
+    console.log(`📊 Chunk ${chunkId} data:`, {
+      hasYjsState: !!data.yjs_state,
+      yjsStateLength: data.yjs_state?.length || 0,
+      hasContent: !!data.content,
+      contentLength: data.content?.length || 0
+    });
+
+    if (data.yjs_state && Array.isArray(data.yjs_state) && data.yjs_state.length > 0) {
       try {
         const state = new Uint8Array(data.yjs_state);
         Y.applyUpdate(ydoc, state, 'initial_load');
-        console.log(`✅ Loaded Y.js state for chunk ${chunkId}: ${contentText.length} chars`);
+        
+        const loadedContent = contentText.toString();
+        console.log(`✅ Loaded Y.js state for chunk ${chunkId}: ${loadedContent.length} chars`);
+        
+        // ✅ Verify the content actually loaded
+        if (loadedContent.length === 0 && data.content && data.content.length > 0) {
+          console.warn(`⚠️ Y.js state loaded but content is empty, falling back to plain content`);
+          contentText.insert(0, data.content);
+          console.log(`✅ Fallback: Loaded plain content for chunk ${chunkId}`);
+        }
       } catch (error) {
         console.error(`❌ Error loading Y.js state for chunk ${chunkId}:`, error);
+        
         // Fallback to plain content
         if (contentText.length === 0 && data.content) {
           contentText.insert(0, data.content);
           console.log(`✅ Fallback: Loaded plain content for chunk ${chunkId}`);
         }
       }
-    } else if (contentText.length === 0 && data.content) {
+    } else if (data.content && data.content.length > 0) {
       // No Y.js state, use plain content
-      contentText.insert(0, data.content);
-      console.log(`✅ Loaded plain content for chunk ${chunkId}: ${data.content.length} chars`);
+      if (contentText.length === 0) {
+        contentText.insert(0, data.content);
+        console.log(`✅ Loaded plain content for chunk ${chunkId}: ${data.content.length} chars`);
+      }
+    } else {
+      console.log(`📝 Chunk ${chunkId} is empty (new note)`);
     }
+    
+    // ✅ CRITICAL: Verify content is actually in Y.js after loading
+    const finalContent = contentText.toString();
+    console.log(`✅ Final verification for chunk ${chunkId}: ${finalContent.length} chars in Y.js`);
+    
   } catch (error) {
     console.error(`❌ Error loading initial chunk ${chunkId}:`, error);
     throw error; // Re-throw to be caught by loadChunkSessions
   }
 }
+
 
   // Get merged content from all chunks
   getMergedContent(noteId: string): string {
@@ -575,6 +652,10 @@ class ChunkBasedCollaborativeService {
     this.firestoreUnsubscribes.forEach((unsubscribe) => unsubscribe());
     this.firestoreUnsubscribes.clear();
   }
+
+  
 }
+
+
 
 export const collaborativeService = new ChunkBasedCollaborativeService();

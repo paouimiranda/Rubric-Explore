@@ -1,3 +1,4 @@
+//app/screens/Planner/planner.tsx
 import { CustomAlertModal } from '@/components/Interface/custom-alert-modal';
 import BottomNavigation from '@/components/Interface/nav-bar';
 import AnalyticsModal from '@/components/Interface/plan-analytics';

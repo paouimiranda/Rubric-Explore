@@ -25,8 +25,8 @@ interface UserData {
 }
 
 export const saveUserData = async (data: UserData): Promise<void> => {
+  const jsonValue = JSON.stringify(data);
   try {
-    const jsonValue = JSON.stringify(data);
     await SecureStore.setItemAsync(USER_KEY, jsonValue); // Encrypted save
     console.log('🔒 SecureStore: userData saved securely');
   } catch (error) {

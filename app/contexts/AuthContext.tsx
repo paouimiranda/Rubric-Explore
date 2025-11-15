@@ -3,7 +3,7 @@ import React, { createContext, ReactNode, useContext, useEffect, useState } from
 
 import { auth } from '../../firebase';
 import { getCurrentUserData } from '../../services/auth-service';
-import { clearUserData, getUserData, saveUserData } from '../../services/storage';
+import { clearUserData, getUserData, saveUserData } from '../../services/storage'; // Updated: Use new storage service
 
 interface UserData {
   uid: string;
@@ -49,55 +49,53 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   const [user, setUser] = useState<User | null>(null);
   const [userData, setUserData] = useState<UserData | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
+  const [initialized, setInitialized] = useState<boolean>(false);
 
   useEffect(() => {
-    // ✅ FIXED: This listener fires AFTER Firebase checks AsyncStorage
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      console.log('🧠 Auth state changed:', user ? `Signed in as ${user.uid}` : 'Signed out');
+      console.log('🧠 Auth state changed');
 
       if (user) {
+        console.log('🔐 Signed in as:', user.uid);
         setUser(user);
 
         try {
-          // Try cached data first for instant load
-          const cached = await getUserData();
+          // Try cached data first
+          const cached = await getUserData(); // Updated: Use encrypted storage
           if (cached) {
             setUserData(cached);
             console.log('💾 Loaded userData from secure storage');
           }
 
-          // Fetch fresh data in background
+          // Always refresh in background
           const freshData = await getCurrentUserData();
           if (freshData) {
             setUserData(freshData as UserData);
-            await saveUserData(freshData as UserData);
-            console.log('✅ Updated userData from Firestore');
+            await saveUserData(freshData as UserData); // Updated: Save securely
+            console.log('✅ Updated userData from Firestore and saved securely');
           }
         } catch (err) {
-          console.error('❌ Failed to load user data:', err);
-          // Keep user logged in even if Firestore fetch fails
-          if (!userData) {
-            setUserData(null);
-          }
+          console.error('❌ Failed to load/save user data:', err);
+          setUserData(null);
         }
       } else {
-        // User signed out
+        console.log('🚪 User signed out');
         setUser(null);
         setUserData(null);
-        await clearUserData();
+        await clearUserData(); // Updated: Clear securely
       }
 
-      // ✅ CRITICAL: Only set loading to false AFTER auth state is determined
       setLoading(false);
+      setInitialized(true);
     });
 
     return unsubscribe;
-  }, []); // ✅ Empty dependency array - only run once on mount
+  }, []);
 
   const value: AuthContextType = {
     user,
     userData,
-    loading, // ✅ Simplified: just use loading directly
+    loading: !initialized || loading,
     isAuthenticated: !!user,
   };
 
