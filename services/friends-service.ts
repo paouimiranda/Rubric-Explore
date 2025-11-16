@@ -44,6 +44,7 @@ export interface User {
   lastSeen?: Timestamp | null;
   createdAt: Timestamp;
   updatedAt: Timestamp;
+  avatarIndex?: number;
 }
 
 export interface FriendRequest {

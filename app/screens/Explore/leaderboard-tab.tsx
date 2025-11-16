@@ -1,23 +1,26 @@
-// File: screens/Explore/leaderboard-tab.tsx
+// File: screens/Explore/leaderboard-tab.tsx with Avatars & Themes
+import ThemeAnimations from '@/components/Interface/theme-animations';
 import { getAvatarUrl } from '@/constants/avatars';
+import { getTheme } from '@/constants/friend-card-themes';
 import { auth, db } from '@/firebase';
 import { getUserFriends, User } from '@/services/friends-service';
 import { JourneyService, UserProgress, UserStats } from '@/services/journey-service';
+import { getUserThemesBatch } from '@/services/theme-service';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { doc, getDoc } from 'firebase/firestore';
 import React, { useEffect, useRef, useState } from 'react';
 import {
-    ActivityIndicator,
-    Animated,
-    Dimensions,
-    FlatList,
-    Image,
-    RefreshControl,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View
+  ActivityIndicator,
+  Animated,
+  Dimensions,
+  FlatList,
+  Image,
+  RefreshControl,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
 } from 'react-native';
 
 const { width } = Dimensions.get('window');
@@ -34,22 +37,10 @@ interface LeaderboardUser extends User {
   rank: number;
   isCurrentUser: boolean;
   avatarIndex?: number;
+  themeId?: string; // NEW: Theme ID
 }
 
 type SortByType = 'stars' | 'shards' | 'level' | 'xp';
-
-const AVATAR_COLORS = [
-  ['#667eea', '#764ba2'], // Purple
-  ['#f093fb', '#f5576c'], // Pink
-  ['#4facfe', '#00f2fe'], // Blue
-  ['#43e97b', '#38f9d7'], // Green
-  ['#fa709a', '#fee140'], // Orange
-  ['#30cfd0', '#330867'], // Deep Blue
-  ['#a8edea', '#fed6e3'], // Pastel
-  ['#ff9a9e', '#fecfef'], // Rose
-  ['#ffecd2', '#fcb69f'], // Peach
-  ['#ff6e7f', '#bfe9ff'], // Coral
-];
 
 const RANK_GRADIENTS = {
   1: ['#FFD700', '#FFA500'],
@@ -68,12 +59,18 @@ const StatBadge = ({ icon, value, label, color }: any) => (
   </View>
 );
 
-// Leaderboard Item Component
-const LeaderboardItem = ({ item, index, isTopThree }: any) => {
+// Leaderboard Item Component with Theme Support
+const LeaderboardItem = React.memo(({ item, index, isTopThree }: any) => {
   const scaleAnim = useRef(new Animated.Value(0)).current;
-  const avatarGradient = AVATAR_COLORS[(item.avatarIndex || 0) % AVATAR_COLORS.length];
+  const glowAnim = useRef(new Animated.Value(0)).current;
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+  const [isMounted, setIsMounted] = useState(false);
+
+  const theme = getTheme(item.themeId || 'default');
+  const rankGradient = RANK_GRADIENTS[item.rank as keyof typeof RANK_GRADIENTS];
 
   useEffect(() => {
+    setIsMounted(true);
     Animated.spring(scaleAnim, {
       toValue: 1,
       delay: index * 40,
@@ -83,92 +80,207 @@ const LeaderboardItem = ({ item, index, isTopThree }: any) => {
     }).start();
   }, []);
 
-  const rankGradient = RANK_GRADIENTS[item.rank as keyof typeof RANK_GRADIENTS];
+  // Theme animations
+  useEffect(() => {
+    if (theme.animated && isMounted) {
+      if (theme.animationType === 'glow' || theme.borderGlow) {
+        Animated.loop(
+          Animated.sequence([
+            Animated.timing(glowAnim, {
+              toValue: 1,
+              duration: 1500,
+              useNativeDriver: true,
+            }),
+            Animated.timing(glowAnim, {
+              toValue: 0,
+              duration: 1500,
+              useNativeDriver: true,
+            }),
+          ])
+        ).start();
+      }
+
+      if (theme.animationType === 'pulse') {
+        Animated.loop(
+          Animated.sequence([
+            Animated.timing(pulseAnim, {
+              toValue: 1.03,
+              duration: 1000,
+              useNativeDriver: true,
+            }),
+            Animated.timing(pulseAnim, {
+              toValue: 1,
+              duration: 1000,
+              useNativeDriver: true,
+            }),
+          ])
+        ).start();
+      }
+    }
+  }, [theme.animated, theme.animationType, theme.borderGlow, isMounted]);
+
+  const glowOpacity = glowAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.2, 0.5],
+  });
+
+  // Determine card background opacity (more transparent)
+  const getCardColors = () => {
+    if (theme.gradientColors && theme.gradientColors.length > 0) {
+      // Make theme gradients more transparent
+      return theme.gradientColors.map(color => {
+        // Add transparency to theme colors
+        if (color.startsWith('rgba')) {
+          return color.replace(/[\d.]+\)$/g, '0.15)');
+        } else if (color.startsWith('#')) {
+          return color + '26'; // 15% opacity
+        }
+        return color;
+      });
+    }
+    
+    if (item.isCurrentUser) {
+      return ['rgba(102, 126, 234, 0.15)', 'rgba(118, 75, 162, 0.15)'];
+    }
+    
+    return ['rgba(255, 255, 255, 0.03)', 'rgba(255, 255, 255, 0.01)'];
+  };
 
   return (
     <Animated.View
       style={[
         styles.leaderboardItem,
-        { transform: [{ scale: scaleAnim }] },
+        { transform: [{ scale: scaleAnim }, { scale: pulseAnim }] },
         isTopThree && styles.topThreeItem,
       ]}
     >
-      <LinearGradient
-        colors={item.isCurrentUser 
-          ? ['rgba(102, 126, 234, 0.25)', 'rgba(118, 75, 162, 0.25)']
-          : ['rgba(255, 255, 255, 0.05)', 'rgba(255, 255, 255, 0.02)']}
-        style={[
-          styles.itemGradient,
-          item.isCurrentUser && styles.currentUserHighlight,
-          isTopThree && styles.topThreeGradient,
-        ]}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-      >
-        {/* User Avatar & Info */}
-        <View style={styles.userSection}>
-            <View style={styles.avatarContainer}>
-            <Image
-                source={{ uri: getAvatarUrl(item.avatarIndex || 0) }}
-                style={styles.avatar}
+      <View style={styles.cardWrapper}>
+        {/* Theme gradient background (transparent) */}
+        {theme.gradientColors && theme.gradientColors.length > 0 && (
+          <LinearGradient
+            colors={getCardColors() as any}
+            style={[StyleSheet.absoluteFillObject, { borderRadius: 16 }]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+          />
+        )}
+
+        {/* Theme animations */}
+        {theme.animated && (
+          <View style={[StyleSheet.absoluteFillObject, { opacity: 0.3 }]}>
+            <ThemeAnimations 
+              theme={theme}
+              containerStyle={{ borderRadius: 16 }}
             />
-            {/* Rank Badge on Avatar */}
-            {rankGradient ? (
-                <LinearGradient
-                colors={rankGradient as any}
-                style={styles.rankBadgeOnAvatar}
+          </View>
+        )}
+
+        {/* Theme glow effect (transparent) */}
+        {theme.borderGlow && theme.glowColor && (
+          <Animated.View
+            style={[
+              StyleSheet.absoluteFillObject,
+              {
+                borderRadius: 16,
+                borderWidth: 2,
+                borderColor: theme.glowColor,
+                opacity: glowOpacity,
+              },
+            ]}
+          />
+        )}
+
+        <LinearGradient
+          colors={!theme.gradientColors ? getCardColors() as any : ['transparent', 'transparent']}
+          style={[
+            styles.itemGradient,
+            item.isCurrentUser && styles.currentUserHighlight,
+            isTopThree && styles.topThreeGradient,
+            {
+              backgroundColor: theme.gradientColors ? 'transparent' : undefined,
+              borderColor: theme.borderColor || 'rgba(255, 255, 255, 0.1)',
+              borderWidth: theme.borderWidth || 1,
+            }
+          ]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+        >
+          {/* User Avatar & Info */}
+          <View style={styles.userSection}>
+            <View style={styles.avatarContainer}>
+              {/* Avatar with theme border */}
+              <LinearGradient
+                colors={theme.gradientColors && theme.gradientColors.length > 0 
+                  ? theme.gradientColors as any 
+                  : ['#667eea', '#764ba2']}
+                style={styles.avatarBorder}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
+              >
+                <Image
+                  source={{ uri: getAvatarUrl(item.avatarIndex || 0) }}
+                  style={styles.avatar}
+                />
+              </LinearGradient>
+
+              {/* Rank Badge on Avatar */}
+              {rankGradient ? (
+                <LinearGradient
+                  colors={rankGradient as any}
+                  style={styles.rankBadgeOnAvatar}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
                 >
-                <Text style={styles.rankBadgeText}>{item.rank}</Text>
+                  <Text style={styles.rankBadgeText}>{item.rank}</Text>
                 </LinearGradient>
-            ) : (
+              ) : (
                 <View style={styles.rankBadgeOnAvatarDefault}>
-                <Text style={styles.rankBadgeTextDefault}>{item.rank}</Text>
-                </View>
-            )}
-            </View>
-          
-          <View style={styles.userInfo}>
-            <View style={styles.nameContainer}>
-              <Text style={styles.userName} numberOfLines={1}>
-                {item.isCurrentUser ? 'You' : item.displayName}
-              </Text>
-              {item.isCurrentUser && (
-                <View style={styles.youBadge}>
-                  <Text style={styles.youBadgeText}>YOU</Text>
+                  <Text style={styles.rankBadgeTextDefault}>{item.rank}</Text>
                 </View>
               )}
             </View>
-            <Text style={styles.userLevel}>Level {item.stats.currentLevel}</Text>
+            
+            <View style={styles.userInfo}>
+              <View style={styles.nameContainer}>
+                <Text style={styles.userName} numberOfLines={1}>
+                  {item.isCurrentUser ? 'You' : item.displayName}
+                </Text>
+                {item.isCurrentUser && (
+                  <View style={styles.youBadge}>
+                    <Text style={styles.youBadgeText}>YOU</Text>
+                  </View>
+                )}
+              </View>
+              <Text style={styles.userLevel}>Level {item.stats.currentLevel}</Text>
+            </View>
           </View>
-        </View>
 
-        {/* Stats Grid */}
-        <View style={styles.statsGrid}>
-          <StatBadge 
-            icon="star" 
-            value={item.stats.totalStars} 
-            label="Stars"
-            color="#FFD700"
-          />
-          <StatBadge 
-            icon="diamond" 
-            value={item.stats.totalShards} 
-            label="Shards"
-            color="#4facfe"
-          />
-          <StatBadge 
-            icon="flash" 
-            value={item.stats.experience} 
-            label="XP"
-            color="#43e97b"
-          />
-        </View>
-      </LinearGradient>
+          {/* Stats Grid */}
+          <View style={styles.statsGrid}>
+            <StatBadge 
+              icon="star" 
+              value={item.stats.totalStars} 
+              label="Stars"
+              color="#FFD700"
+            />
+            <StatBadge 
+              icon="diamond" 
+              value={item.stats.totalShards} 
+              label="Shards"
+              color="#4facfe"
+            />
+            <StatBadge 
+              icon="flash" 
+              value={item.stats.experience} 
+              label="XP"
+              color="#43e97b"
+            />
+          </View>
+        </LinearGradient>
+      </View>
     </Animated.View>
   );
-};
+});
 
 const LeaderboardTab = () => {
   const [loading, setLoading] = useState(true);
@@ -204,6 +316,7 @@ const LeaderboardTab = () => {
 
       const usersWithStats: LeaderboardUser[] = [];
 
+      // Load current user
       if (currentUserDoc) {
         const currentUserDocData = await getDoc(doc(db, 'users', currentUserId));
         const userData = currentUserDocData.exists() ? currentUserDocData.data() : null;
@@ -236,9 +349,11 @@ const LeaderboardTab = () => {
           },
           rank: 0,
           isCurrentUser: true,
+          themeId: userData?.inventory?.selectedFriendCardTheme || 'default',
         });
       }
 
+      // Load friends stats
       for (const friend of friends) {
         try {
           const statsDoc = await getDoc(doc(db, 'userStats', friend.uid));
@@ -294,8 +409,21 @@ const LeaderboardTab = () => {
         }
       }
 
-      setLeaderboardData(usersWithStats);
-      sortLeaderboard(sortBy, usersWithStats);
+      // NEW: Batch fetch themes
+      const userIds = usersWithStats.map(u => u.uid);
+      const themeMap = await getUserThemesBatch(userIds);
+      console.log('✅ Leaderboard themes fetched:', Object.fromEntries(themeMap));
+
+      // Add themes to users
+      const usersWithThemes = usersWithStats.map(user => ({
+        ...user,
+        themeId: user.isCurrentUser 
+          ? user.themeId 
+          : (themeMap.get(user.uid) || 'default')
+      }));
+
+      setLeaderboardData(usersWithThemes);
+      sortLeaderboard(sortBy, usersWithThemes);
     } catch (error) {
       console.error('Error loading leaderboard:', error);
     } finally {
@@ -640,10 +768,13 @@ const styles = StyleSheet.create({
   topThreeItem: {
     marginBottom: 12,
   },
+  cardWrapper: {
+    position: 'relative',
+    borderRadius: 16,
+    overflow: 'hidden',
+  },
   itemGradient: {
     borderRadius: 16,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
     padding: 16,
   },
   topThreeGradient: {
@@ -654,25 +785,22 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: 'rgba(102, 126, 234, 0.6)',
   },
-  rankSection: {
-    marginBottom: 12,
-  },
   avatarContainer: {
     position: 'relative',
     marginRight: 14,
+  },
+  avatarBorder: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    padding: 2,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   avatar: {
     width: 52,
     height: 52,
     borderRadius: 26,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  avatarText: {
-    fontFamily: 'Montserrat',
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#fff',
   },
   rankBadgeOnAvatar: {
     position: 'absolute',

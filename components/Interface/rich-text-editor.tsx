@@ -1,10 +1,8 @@
-// components/RichTextEditor/RichTextEditor.tsx (PRODUCTION)
+// components/RichTextEditor/RichTextEditor.tsx (FIXED - Wrapper Height)
 import { useTheme } from '@/hooks/useTheme';
 import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
-import { LogBox, StyleSheet, View } from 'react-native';
+import { LogBox, View } from 'react-native';
 import { RichEditor } from 'react-native-pell-rich-editor';
-
-
 
 interface RichTextEditorProps {
   initialContent: string;
@@ -64,39 +62,24 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(({
 
   const { colors } = useTheme();
 
-  
-
-  // ADD THIS: Create styles inside component so they update with theme
-  const styles = StyleSheet.create({
-    container: {
-      flex: 1,
-      backgroundColor: 'transparent',
-    }
-  });
+  // ✨ CRITICAL: Start with large height
+  const [editorHeight, setEditorHeight] = useState(2000);
+  const hasInitialHeightSet = useRef(false);
 
   const extractPlainTextFromHtml = (html: string): string => {
     if (!html) return '';
     
-    // Remove script and style tags completely
     let text = html.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '');
     text = text.replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, '');
-    
-    // Remove images, videos, iframes, and other media elements
     text = text.replace(/<img[^>]*>/gi, '');
     text = text.replace(/<video[^>]*>.*?<\/video>/gi, '');
     text = text.replace(/<audio[^>]*>.*?<\/audio>/gi, '');
     text = text.replace(/<iframe[^>]*>.*?<\/iframe>/gi, '');
     text = text.replace(/<svg[^>]*>.*?<\/svg>/gi, '');
     text = text.replace(/<canvas[^>]*>.*?<\/canvas>/gi, '');
-    
-    // Replace block-level elements with newlines
     text = text.replace(/<\/?(div|p|br|h[1-6]|li|tr)[^>]*>/gi, '\n');
     text = text.replace(/<\/?(ul|ol|table|tbody|thead)[^>]*>/gi, '\n\n');
-    
-    // Remove all other HTML tags
     text = text.replace(/<[^>]+>/g, '');
-    
-    // Decode HTML entities
     text = text.replace(/&nbsp;/g, ' ');
     text = text.replace(/&amp;/g, '&');
     text = text.replace(/&lt;/g, '<');
@@ -104,15 +87,12 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(({
     text = text.replace(/&quot;/g, '"');
     text = text.replace(/&#039;/g, "'");
     text = text.replace(/&apos;/g, "'");
-    
-    // Clean up whitespace
-    text = text.replace(/\n\s*\n\s*\n/g, '\n\n'); // Multiple newlines to double
-    text = text.replace(/[ \t]+/g, ' '); // Multiple spaces to single
+    text = text.replace(/\n\s*\n\s*\n/g, '\n\n');
+    text = text.replace(/[ \t]+/g, ' ');
     text = text.trim();
     
     return text;
   };
-  
   
   const [pendingRequests] = useState<Map<string, {
     resolve: (value: any) => void;
@@ -146,6 +126,73 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(({
       }
     }, 1000);
   }, [onMessageWorking]);
+
+  const measureAndSetHeight = useCallback(() => {
+    if (!richText.current) return;
+
+    const script = `
+      (function() {
+        function measure() {
+          const editor = document.querySelector('.pell-content');
+          if (!editor) {
+            setTimeout(measure, 50);
+            return;
+          }
+          
+          // Wait for all images
+          const images = Array.from(editor.querySelectorAll('img'));
+          
+          if (images.length > 0) {
+            let loaded = 0;
+            const checkComplete = () => {
+              loaded++;
+              if (loaded >= images.length) {
+                setTimeout(reportHeight, 100);
+              }
+            };
+            
+            images.forEach(img => {
+              if (img.complete) {
+                checkComplete();
+              } else {
+                img.onload = checkComplete;
+                img.onerror = checkComplete;
+              }
+            });
+            
+            // Timeout fallback
+            setTimeout(reportHeight, 2000);
+          } else {
+            reportHeight();
+          }
+          
+          function reportHeight() {
+            // ✨ FIX: Only measure the EDITOR content, not the body
+            // The body includes our container which creates the infinite loop!
+            const height = Math.max(500, editor.scrollHeight + 100);
+            
+            window.ReactNativeWebView.postMessage(JSON.stringify({
+              type: 'height-measured',
+              height: height,
+              scrollHeight: editor.scrollHeight,
+              imageCount: images.length
+            }));
+          }
+        }
+        
+        // Start measuring
+        if (document.readyState === 'complete') {
+          measure();
+        } else {
+          window.addEventListener('load', measure);
+          setTimeout(measure, 100);
+        }
+      })();
+      true;
+    `;
+
+    richText.current.injectJavascript(script);
+  }, []);
 
   const injectSelectionUtilities = useCallback(() => {
     if (!richText.current) return;
@@ -348,36 +395,45 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(({
       }
       
       const message = JSON.parse(messageData);
-      const { type, requestId } = message;
+      const { type } = message;
+
+      if (type === 'height-measured') {
+        // console.log('📏 Height measured:', message.height, 'images:', message.imageCount, 'editorScrollHeight:', message.scrollHeight);
+        setEditorHeight(message.height);
+        hasInitialHeightSet.current = true;
+        return;
+      }
 
       if (type === 'diagnosticTest') {
         setOnMessageWorking(true);
         return;
       }
 
-      if (type === 'serializedSelection' && requestId) {
-        const pending = pendingRequests.get(requestId);
+      if (type === 'serializedSelection') {
+        const pending = pendingRequests.get(message.requestId);
         if (pending) {
           clearTimeout(pending.timeout);
-          pendingRequests.delete(requestId);
+          pendingRequests.delete(message.requestId);
           pending.resolve(message.selection);
           
           if (message.selection) {
             savedSelection.current = message.selection;
           }
         }
+        return;
       }
 
-      if (type === 'selectionRestored' && requestId) {
-        const pending = pendingRequests.get(requestId);
+      if (type === 'selectionRestored') {
+        const pending = pendingRequests.get(message.requestId);
         if (pending) {
           clearTimeout(pending.timeout);
-          pendingRequests.delete(requestId);
+          pendingRequests.delete(message.requestId);
           pending.resolve(message.success);
         }
+        return;
       }
     } catch (error) {
-      // Silently handle errors in production
+      // Silently handle errors
     }
   }, [pendingRequests]);
 
@@ -387,6 +443,7 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(({
     if (!isFocused.current) {
       richText.current.setContentHTML(html);
       lastContent.current = html;
+      setTimeout(() => measureAndSetHeight(), 200);
       return;
     }
 
@@ -401,11 +458,14 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(({
       if (isFocused.current && selection) {
         await deserializeSelection(selection);
       }
+      
+      setTimeout(() => measureAndSetHeight(), 200);
     } catch (error) {
       richText.current.setContentHTML(html);
       lastContent.current = html;
+      setTimeout(() => measureAndSetHeight(), 200);
     }
-  }, [serializeSelection, deserializeSelection]);
+  }, [serializeSelection, deserializeSelection, measureAndSetHeight]);
 
   const getCursorPosition = useCallback(async (): Promise<number> => {
     return lastCursorPosition.current;
@@ -453,7 +513,6 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(({
       }
       return '';
     },
-
     
     focusEditor: () => {
       richText.current?.focusContentEditor();
@@ -484,23 +543,40 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(({
   useEffect(() => {
     if (richText.current && onEditorReady) {
       onEditorReady(richText.current);
+      
       setTimeout(() => {
         testWebViewMessaging();
         injectSelectionUtilities();
+        measureAndSetHeight();
       }, 500);
+      
+      const interval = setInterval(() => {
+        if (!hasInitialHeightSet.current) {
+          measureAndSetHeight();
+        } else {
+          clearInterval(interval);
+        }
+      }, 500);
+      
+      setTimeout(() => clearInterval(interval), 5000);
     }
-  }, [onEditorReady, injectSelectionUtilities, testWebViewMessaging]);
+  }, [onEditorReady, injectSelectionUtilities, testWebViewMessaging, measureAndSetHeight]);
 
   useEffect(() => {
     if (isInitialMount.current && richText.current && initialContent) {
       richText.current.setContentHTML(initialContent);
       lastContent.current = initialContent;
       isInitialMount.current = false;
+      
+      [500, 1000, 1500, 2000, 2500, 3000].forEach(delay => {
+        setTimeout(() => {
+          if (!hasInitialHeightSet.current) {
+            measureAndSetHeight();
+          }
+        }, delay);
+      });
     }
-  }, [initialContent]);
-  
-
-
+  }, [initialContent, measureAndSetHeight]);
 
   const handleCursorPosition = useCallback(async (position: number) => {
     if (!isApplyingRemoteUpdate.current) {
@@ -535,6 +611,8 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(({
     lastContent.current = html;
     onContentChange(html);
     
+    setTimeout(() => measureAndSetHeight(), 200);
+    
     typingTimeoutRef.current = setTimeout(async () => {
       isTyping.current = false;
       
@@ -550,7 +628,7 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(({
         }
       }
     }, 400);
-  }, [onContentChange, applyHtmlWithAccurateSelection]);
+  }, [onContentChange, applyHtmlWithAccurateSelection, measureAndSetHeight]);
 
   const handleFocus = useCallback(async () => {
     isFocused.current = true;
@@ -579,8 +657,9 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(({
     LogBox.ignoreLogs(['VirtualizedLists should never be nested']);
   }, []);
 
+  // ✨ CRITICAL FIX: Wrap editor in a View with explicit height
   return (
-    <View style={[styles.container, style]}>
+    <View style={[{ width: '100%', height: editorHeight, backgroundColor: 'transparent' }, style]}>
       <RichEditor
         ref={richText}
         onChange={handleContentChange}
@@ -591,6 +670,7 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(({
         disabled={!editable}
         initialContentHTML={initialContent}
         onMessage={handleWebViewMessage}
+        style={{ flex: 1 }}
         editorStyle={{
           backgroundColor: colors.editorBackground,
           color: colors.editorText,
@@ -599,10 +679,20 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(({
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
             font-size: 16px;
             line-height: 1.6;
-            padding: 12px;
-            min-height: 200px;
+            padding: 12px 0;
             color: ${colors.editorText};
             background-color: ${colors.editorBackground};
+            
+            img {
+              max-width: 100%;
+              height: auto;
+              display: block;
+              margin: 12px 0;
+            }
+            
+            * {
+              max-width: 100%;
+            }
           `
         }}
         useContainer={true}
@@ -611,6 +701,5 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(({
     </View>
   );
 });
-
 
 export default RichTextEditor;

@@ -1,9 +1,10 @@
-// components/Interface/friend-card.tsx (With Theme Support)
+// components/Interface/friend-card.tsx (With Avatar Support)
+import { getAvatarUrl } from '@/constants/avatars';
 import { getTheme } from '@/constants/friend-card-themes';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import React, { useEffect, useRef, useState } from 'react';
-import { Animated, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Animated, Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import ThemeAnimations from './theme-animations';
 
 interface FriendCardProps {
@@ -15,7 +16,8 @@ interface FriendCardProps {
   onMenuPress?: () => void;
   isMuted?: boolean;
   isPinned?: boolean;
-  themeId?: string; // Theme identifier from user's Firestore
+  themeId?: string;
+  avatarIndex?: number; // NEW: Avatar index from Firestore
 }
 
 export default function FriendCard({ 
@@ -28,6 +30,7 @@ export default function FriendCard({
   isMuted = false,
   isPinned = false,
   themeId = 'default',
+  avatarIndex = 0, // NEW: Default to first avatar
 }: FriendCardProps) {
   const theme = getTheme(themeId);
   const glowAnim = useRef(new Animated.Value(0)).current;
@@ -35,46 +38,46 @@ export default function FriendCard({
   const [isMounted, setIsMounted] = useState(false);
 
   useEffect(() => {
-  setIsMounted(true);
-}, []);
+    setIsMounted(true);
+  }, []);
 
-useEffect(() => {
-  if (theme.animated && isMounted) {
-    if (theme.animationType === 'glow' || theme.borderGlow) {
-      Animated.loop(
-        Animated.sequence([
-          Animated.timing(glowAnim, {
-            toValue: 1,
-            duration: 1500,
-            useNativeDriver: true,
-          }),
-          Animated.timing(glowAnim, {
-            toValue: 0,
-            duration: 1500,
-            useNativeDriver: true,
-          }),
-        ])
-      ).start();
-    }
+  useEffect(() => {
+    if (theme.animated && isMounted) {
+      if (theme.animationType === 'glow' || theme.borderGlow) {
+        Animated.loop(
+          Animated.sequence([
+            Animated.timing(glowAnim, {
+              toValue: 1,
+              duration: 1500,
+              useNativeDriver: true,
+            }),
+            Animated.timing(glowAnim, {
+              toValue: 0,
+              duration: 1500,
+              useNativeDriver: true,
+            }),
+          ])
+        ).start();
+      }
 
-    if (theme.animationType === 'pulse') {
-      Animated.loop(
-        Animated.sequence([
-          Animated.timing(pulseAnim, {
-            toValue: 1.05,
-            duration: 1000,
-            useNativeDriver: true,
-          }),
-          Animated.timing(pulseAnim, {
-            toValue: 1,
-            duration: 1000,
-            useNativeDriver: true,
-          }),
-        ])
-      ).start();
+      if (theme.animationType === 'pulse') {
+        Animated.loop(
+          Animated.sequence([
+            Animated.timing(pulseAnim, {
+              toValue: 1.05,
+              duration: 1000,
+              useNativeDriver: true,
+            }),
+            Animated.timing(pulseAnim, {
+              toValue: 1,
+              duration: 1000,
+              useNativeDriver: true,
+            }),
+          ])
+        ).start();
+      }
     }
-  }
-}, [theme.animated, theme.animationType, theme.borderGlow, isMounted, glowAnim, pulseAnim]);
+  }, [theme.animated, theme.animationType, theme.borderGlow, isMounted, glowAnim, pulseAnim]);
 
   const getStatusColor = () => {
     switch (status) {
@@ -146,6 +149,9 @@ useEffect(() => {
     outputRange: [0.3, 0.8],
   });
 
+  // NEW: Get avatar URL
+  const avatarUrl = getAvatarUrl(avatarIndex);
+
   return (
     <View style={styles.cardWrapper}>
       {/* Background gradient layer */}
@@ -191,13 +197,18 @@ useEffect(() => {
         >
           <View style={styles.leftSection}>
             <View style={styles.avatarContainer}>
+              {/* NEW: Display avatar image with gradient border */}
               <LinearGradient
                 colors={getAvatarGradient()} 
-                style={styles.avatar}
+                style={styles.avatarBorder}
               >
-                <Text style={styles.avatarText}>
-                  {name ? name.charAt(0).toUpperCase() : '?'} 
-                </Text>
+                <View style={styles.avatarImageWrapper}>
+                  <Image
+                    source={{ uri: avatarUrl }}
+                    style={styles.avatarImage}
+                    resizeMode="cover"
+                  />
+                </View>
               </LinearGradient>
               <View style={[styles.statusIndicator, { backgroundColor: getStatusColor() }]}>
                 <View style={styles.statusPulse} />
@@ -263,27 +274,8 @@ useEffect(() => {
           <Ionicons name="pin" size={14} color="#10b981" />
         </View>
       )}
-
-      {/* Theme badge (optional - shows theme rarity)
-      {themeId !== 'default' && (
-        <View style={[styles.themeBadge, { backgroundColor: getRarityColor(theme.rarity) }]}>
-          <Text style={styles.themeBadgeText}>{theme.rarity.toUpperCase()}</Text>
-        </View>
-      )} */}
     </View>
   );
-}
-
-// Helper function for rarity colors
-function getRarityColor(rarity: string): string {
-  switch (rarity) {
-    case 'common': return 'rgba(156, 163, 175, 0.8)';
-    case 'rare': return 'rgba(59, 130, 246, 0.8)';
-    case 'epic': return 'rgba(168, 85, 247, 0.8)';
-    case 'legendary': return 'rgba(251, 191, 36, 0.8)';
-    case 'mythic': return 'rgba(244, 63, 94, 0.8)';
-    default: return 'rgba(156, 163, 175, 0.8)';
-  }
 }
 
 const styles = StyleSheet.create({
@@ -309,19 +301,24 @@ const styles = StyleSheet.create({
     position: 'relative',
     marginRight: 12,
   },
-  avatar: {
+  avatarBorder: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    padding: 2,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  avatarImageWrapper: {
     width: 48,
     height: 48,
     borderRadius: 24,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 2,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
+    overflow: 'hidden',
+    backgroundColor: 'rgba(31, 41, 55, 0.5)',
   },
-  avatarText: {
-    color: '#FFF',
-    fontSize: 20,
-    fontWeight: '700',
+  avatarImage: {
+    width: '100%',
+    height: '100%',
   },
   statusIndicator: {
     position: 'absolute',
@@ -420,20 +417,5 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 2,
     zIndex: 10,
-  },
-  themeBadge: {
-    position: 'absolute',
-    bottom: 8,
-    right: 8,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 8,
-    zIndex: 10,
-  },
-  themeBadgeText: {
-    color: '#FFF',
-    fontSize: 9,
-    fontWeight: '700',
-    letterSpacing: 0.5,
   },
 });

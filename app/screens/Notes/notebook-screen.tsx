@@ -1017,7 +1017,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.3,
     shadowRadius: 4,
-    elevation: 4,
+    elevation: 0,
     top: 10,
   },
   listContent: {
@@ -1065,7 +1065,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.3,
     shadowRadius: 12,
-    elevation: 8,
+    elevation: 0,
   },
   infoCardHeader: {
     flexDirection: 'row',
@@ -1271,7 +1271,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
-    elevation: 2,
+    elevation: 0,
   },
   noteLeftSection: {
     marginRight: 12,

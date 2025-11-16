@@ -1,10 +1,11 @@
-// Enhanced friendlist.tsx with Theme Support - FIXED VERSION
+// Enhanced friendlist.tsx with Theme Support and Avatars - KEY CHANGES
 
 import { useNotifications } from '@/app/contexts/NotificationContext';
 import ChatList from '@/components/Interface/chat-list';
 import { CustomAlertModal } from '@/components/Interface/custom-alert-modal';
 import FriendCard from '@/components/Interface/friend-card';
 import BottomNavigation from '@/components/Interface/nav-bar';
+import { getAvatarUrl } from '@/constants/avatars';
 import { useBacklogLogger } from "@/hooks/useBackLogLogger";
 import { BACKLOG_EVENTS } from "@/services/backlogEvents";
 import { getTotalUnreadCount } from '@/services/chat-service';
@@ -24,7 +25,6 @@ import {
   togglePinFriend,
   User,
 } from '@/services/friends-service';
-// ADDED: Import theme service
 import { clearUserThemeCache, getUserThemesBatch } from '@/services/theme-service';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -33,6 +33,7 @@ import LottieView from 'lottie-react-native';
 import React, { useEffect, useRef, useState } from 'react';
 import {
   Animated,
+  Image,
   Modal,
   RefreshControl,
   SafeAreaView,
@@ -51,10 +52,13 @@ type Status = 'online' | 'busy' | 'offline';
 interface Friend extends User {
   status?: Status;
   themeId?: string;
+  avatarIndex?: number; // NEW: Avatar index from Firestore
 }
 
 interface FriendRequest extends ServiceFriendRequest {}
-interface SearchResult extends SearchUser {}
+interface SearchResult extends SearchUser {
+  avatarIndex?: number; // NEW: Avatar index for search results
+}
 
 export default function Friendlist() {
   const router = useRouter();
@@ -164,10 +168,8 @@ export default function Friendlist() {
     }
   }, [search, activeTab]);
 
-  // FIX: Add effect to reload themes when switching to friends tab
   useEffect(() => {
     if (activeTab === 'friends' && friends.length > 0) {
-      // Reload themes for current friends
       reloadThemesForFriends();
     }
   }, [activeTab]);
@@ -182,7 +184,6 @@ export default function Friendlist() {
     setSelectedFriend(null);
   };
 
-  // FIX: New function to reload themes without full friend reload
   const reloadThemesForFriends = async () => {
     if (friends.length === 0) return;
     
@@ -239,7 +240,6 @@ export default function Friendlist() {
                 removeFriend(currentUser.uid, friend.uid),
               ]);
               
-              // Clear theme cache for unfriended user
               clearUserThemeCache(friend.uid);
               
               showAlert(
@@ -326,7 +326,6 @@ export default function Friendlist() {
     }
   };
 
-  // FIX: Enhanced loadFriends with better error handling and logging
   const loadFriends = async () => {
     if (!currentUser) return;
     
@@ -337,25 +336,25 @@ export default function Friendlist() {
       const userFriends = await getUserFriends(currentUser.uid);
       console.log(`✅ Loaded ${userFriends.length} friends`);
       
-      // Batch fetch themes for all friends
       const friendIds = userFriends.map(f => f.uid);
       console.log('🎨 Fetching themes for:', friendIds);
       
       const themeMap = await getUserThemesBatch(friendIds);
       console.log('✅ Themes fetched:', Object.fromEntries(themeMap));
       
-      // Add theme IDs to friend objects
+      // NEW: Map friends with themes AND avatarIndex
       const friendsWithThemes = userFriends.map(friend => {
         const themeId = themeMap.get(friend.uid) || 'default';
-        console.log(`👤 ${friend.displayName}: theme = ${themeId}`);
+        console.log(`👤 ${friend.displayName}: theme = ${themeId}, avatar = ${friend.avatarIndex || 0}`);
         return {
           ...friend,
-          themeId
+          themeId,
+          avatarIndex: friend.avatarIndex ?? 0 // NEW: Include avatarIndex from user data
         };
       });
       
       setFriends(friendsWithThemes);
-      console.log('✅ Friends with themes set in state');
+      console.log('✅ Friends with themes and avatars set in state');
     } catch (error) {
       console.error('❌ Error loading friends:', error);
       showAlert(
@@ -635,8 +634,7 @@ export default function Friendlist() {
                 </View>
               ) : getFilteredFriends().length > 0 ? (
                 getFilteredFriends().map((friend) => {
-                  // FIX: Log each friend's theme as it renders
-                  console.log(`🎨 Rendering friend ${friend.displayName} with theme: ${friend.themeId || 'undefined'}`);
+                  console.log(`🎨 Rendering friend ${friend.displayName} with theme: ${friend.themeId || 'undefined'}, avatar: ${friend.avatarIndex ?? 0}`);
                   return (
                     <FriendCard 
                       key={friend.uid} 
@@ -648,7 +646,8 @@ export default function Friendlist() {
                       onMenuPress={() => openMenu(friend)}
                       isMuted={isFriendMuted(friend.uid)}
                       isPinned={pinnedFriends.has(friend.uid)}
-                      themeId={friend.themeId || 'default'} // FIX: Explicit fallback
+                      themeId={friend.themeId || 'default'}
+                      avatarIndex={friend.avatarIndex ?? 0} // NEW: Pass avatar index
                     />
                   );
                 })
@@ -980,138 +979,138 @@ export default function Friendlist() {
   );
 }
 
-// Search Result Card Component
+// Search Result Card Component - NEW: With Avatar
 const SearchResultCard = ({ user, onSendRequest, onViewProfile }: { 
   user: SearchResult; 
   onSendRequest: (userId: string, username: string) => void;
   onViewProfile: () => void;
-}) => (
-  <TouchableOpacity 
-    style={styles.cardWrapper}
-    onPress={onViewProfile}
-    activeOpacity={0.8}
-  >
-    <LinearGradient
-      colors={['rgba(255, 255, 255, 0.08)', 'rgba(255, 255, 255, 0.04)']}
-      start={{ x: 0, y: 0 }}
-      end={{ x: 0, y: 1 }}
-      style={styles.searchResultCard}
+}) => {
+  const avatarUrl = getAvatarUrl(user.avatarIndex ?? 0);
+  
+  return (
+    <TouchableOpacity 
+      style={styles.cardWrapper}
+      onPress={onViewProfile}
+      activeOpacity={0.8}
     >
-      <View style={styles.searchResultLeft}>
-        <LinearGradient
-          colors={['#667eea', '#764ba2']}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={styles.searchResultAvatar}
-        >
-          <Text style={styles.searchResultAvatarText}>
-            {((user.displayName || '').charAt(0).toUpperCase() || '?')}
-          </Text>
-        </LinearGradient>
-        <View style={styles.searchResultInfo}>
-          <Text style={styles.searchResultName}>{user.displayName}</Text>
-          <Text style={styles.searchResultUsername}>@{user.username}</Text>
-        </View>
-      </View>
-      <TouchableOpacity 
-        style={styles.addButton}
-        onPress={(e) => {
-          e.stopPropagation();
-          onSendRequest(user.uid, user.username);
-        }}
-        activeOpacity={0.8}
+      <LinearGradient
+        colors={['rgba(255, 255, 255, 0.08)', 'rgba(255, 255, 255, 0.04)']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 0, y: 1 }}
+        style={styles.searchResultCard}
       >
-        <LinearGradient
-          colors={['#4facfe', '#00f2fe']}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={styles.addButtonGradient}
+        <View style={styles.searchResultLeft}>
+          <View style={styles.searchResultAvatarWrapper}>
+            <Image
+              source={{ uri: avatarUrl }}
+              style={styles.searchResultAvatar}
+              resizeMode="cover"
+            />
+          </View>
+          <View style={styles.searchResultInfo}>
+            <Text style={styles.searchResultName}>{user.displayName}</Text>
+            <Text style={styles.searchResultUsername}>@{user.username}</Text>
+          </View>
+        </View>
+        <TouchableOpacity 
+          style={styles.addButton}
+          onPress={(e) => {
+            e.stopPropagation();
+            onSendRequest(user.uid, user.username);
+          }}
+          activeOpacity={0.8}
         >
-          <Ionicons name="person-add" size={16} color="#fff" />
-          <Text style={styles.addButtonText}>Add</Text>
-        </LinearGradient>
-      </TouchableOpacity>
-    </LinearGradient>
-  </TouchableOpacity>
-);
+          <LinearGradient
+            colors={['#4facfe', '#00f2fe']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.addButtonGradient}
+          >
+            <Ionicons name="person-add" size={16} color="#fff" />
+            <Text style={styles.addButtonText}>Add</Text>
+          </LinearGradient>
+        </TouchableOpacity>
+      </LinearGradient>
+    </TouchableOpacity>
+  );
+};
 
-// Friend Request Card Component
+// Friend Request Card Component - NEW: With Avatar
 const FriendRequestCard = ({ request, onAccept, onReject, onViewProfile }: {
   request: FriendRequest;
   onAccept: (request: FriendRequest) => void;
   onReject: (request: FriendRequest) => void;
   onViewProfile: () => void;
-}) => (
-  <View style={styles.cardWrapper}>
-    <LinearGradient
-      colors={['rgba(255, 255, 255, 0.08)', 'rgba(255, 255, 255, 0.04)']}
-      start={{ x: 0, y: 0 }}
-      end={{ x: 0, y: 1 }}
-      style={styles.requestCard}
-    >
-      <TouchableOpacity 
-        style={styles.requestLeft}
-        onPress={onViewProfile}
-        activeOpacity={0.8}
+}) => {
+  const avatarUrl = getAvatarUrl(request.senderInfo.avatarIndex ?? 0);
+  
+  return (
+    <View style={styles.cardWrapper}>
+      <LinearGradient
+        colors={['rgba(255, 255, 255, 0.08)', 'rgba(255, 255, 255, 0.04)']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 0, y: 1 }}
+        style={styles.requestCard}
       >
-        <View style={styles.requestAvatarWrapper}>
-          <LinearGradient
-            colors={['#f093fb', '#f5576c']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.requestAvatar}
-          >
-            <Text style={styles.requestAvatarText}>
-              {((request.senderInfo.displayName || '').charAt(0).toUpperCase() || '?')}
-            </Text>
-          </LinearGradient>
-          <LinearGradient
-            colors={['#fa709a', '#fee140']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.requestBadge}
-          >
-            <Ionicons name="person-add" size={10} color="#fff" />
-          </LinearGradient>
-        </View>
-        <View style={styles.requestInfo}>
-          <Text style={styles.requestName}>{request.senderInfo.displayName}</Text>
-          <Text style={styles.requestUsername}>@{request.senderInfo.username}</Text>
-        </View>
-      </TouchableOpacity>
-      <View style={styles.requestActions}>
         <TouchableOpacity 
-          style={styles.actionButton}
-          onPress={() => onAccept(request)}
+          style={styles.requestLeft}
+          onPress={onViewProfile}
           activeOpacity={0.8}
         >
-          <LinearGradient
-            colors={['#22c55e', '#16a34a']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.acceptButton}
-          >
-            <Ionicons name="checkmark" size={20} color="#fff" />
-          </LinearGradient>
+          <View style={styles.requestAvatarWrapper}>
+            <Image
+              source={{ uri: avatarUrl }}
+              style={styles.requestAvatar}
+              resizeMode="cover"
+            />
+            <LinearGradient
+              colors={['#fa709a', '#fee140']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.requestBadge}
+            >
+              <Ionicons name="person-add" size={10} color="#fff" />
+            </LinearGradient>
+          </View>
+          <View style={styles.requestInfo}>
+            <Text style={styles.requestName}>{request.senderInfo.displayName}</Text>
+            <Text style={styles.requestUsername}>@{request.senderInfo.username}</Text>
+          </View>
         </TouchableOpacity>
-        <TouchableOpacity 
-          style={styles.actionButton}
-          onPress={() => onReject(request)}
-          activeOpacity={0.8}
-        >
-          <LinearGradient
-            colors={['#ef4444', '#dc2626']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.rejectButton}
+        <View style={styles.requestActions}>
+          <TouchableOpacity 
+            style={styles.actionButton}
+            onPress={() => onAccept(request)}
+            activeOpacity={0.8}
           >
-            <Ionicons name="close" size={20} color="#fff" />
-          </LinearGradient>
-        </TouchableOpacity>
-      </View>
-    </LinearGradient>
-  </View>
-);
+            <LinearGradient
+              colors={['#22c55e', '#16a34a']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.acceptButton}
+            >
+              <Ionicons name="checkmark" size={20} color="#fff" />
+            </LinearGradient>
+          </TouchableOpacity>
+          <TouchableOpacity 
+            style={styles.actionButton}
+            onPress={() => onReject(request)}
+            activeOpacity={0.8}
+          >
+            <LinearGradient
+              colors={['#ef4444', '#dc2626']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.rejectButton}
+            >
+              <Ionicons name="close" size={20} color="#fff" />
+            </LinearGradient>
+          </TouchableOpacity>
+        </View>
+      </LinearGradient>
+    </View>
+  );
+};
 
 const styles = StyleSheet.create({
   container: { 
@@ -1406,22 +1405,16 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: 14,
   },
-  searchResultAvatar: {
+  searchResultAvatarWrapper: {
     width: 50,
     height: 50,
-    borderRadius: 16,
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#667eea',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 6,
-    elevation: 4,
+    borderRadius: 25,
+    overflow: 'hidden',
+    backgroundColor: 'rgba(31, 41, 55, 0.5)',
   },
-  searchResultAvatarText: {
-    color: '#fff',
-    fontSize: 20,
-    fontWeight: '700',
+  searchResultAvatar: {
+    width: '100%',
+    height: '100%',
   },
   searchResultInfo: {
     flex: 1,
@@ -1500,23 +1493,13 @@ const styles = StyleSheet.create({
   },
   requestAvatarWrapper: {
     position: 'relative',
-  },
-  requestAvatar: {
     width: 50,
     height: 50,
-    borderRadius: 16,
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#f093fb',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 6,
-    elevation: 4,
   },
-  requestAvatarText: {
-    color: '#fff',
-    fontSize: 20,
-    fontWeight: '700',
+  requestAvatar: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 25,
   },
   requestBadge: {
     position: 'absolute',

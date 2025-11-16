@@ -1,4 +1,4 @@
-// app/screens/Notes/note-editor.tsx 
+// app/screens/Notes/note-editor.tsx (COMPLETE - ScrollView Fixed)
 import { Note, NotebookProperty } from "@/app/types/notebook";
 import NoteSidebar from "@/components/Interface/note-sidebar";
 import RichTextEditor, { RichTextEditorRef } from '@/components/Interface/rich-text-editor';
@@ -23,19 +23,19 @@ import LottieView from 'lottie-react-native';
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   Alert,
+  Animated,
   Dimensions,
-  FlatList,
   KeyboardAvoidingView,
   Modal,
   NativeSyntheticEvent,
   Platform,
   SafeAreaView,
-  StyleSheet,
+  ScrollView,
   Text,
   TextInput,
   TextInputSelectionChangeEventData,
   TouchableOpacity,
-  View
+  View,
 } from "react-native";
 import { useAuth } from "../../contexts/AuthContext";
 import OCRModal from "./ocr";
@@ -59,7 +59,7 @@ export default function NoteEditor({
 
   const { colors, themeMode, toggleTheme, isLoading } = useTheme();
   const styles = createThemedStyles(colors, themeMode);
-  // NEW CONST FOR EXPORT/IMPORT
+  
   const [pdfExportModalVisible, setPdfExportModalVisible] = useState(false);
   const [exportOptions, setExportOptions] = useState({
     includeProperties: true,
@@ -67,97 +67,85 @@ export default function NoteEditor({
   });
 
   const handleExportPDF = async () => {
-  if (!note) {
-    Alert.alert('Error', 'No note to export');
-    return;
-  }
+    if (!note) {
+      Alert.alert('Error', 'No note to export');
+      return;
+    }
 
-  setEllipsisMenuVisible(false);
-  
-  // Show options modal first
-  setPdfExportModalVisible(true);
-};
+    setEllipsisMenuVisible(false);
+    setPdfExportModalVisible(true);
+  };
 
-const confirmExportPDF = async () => {
-  setPdfExportModalVisible(false);
-  
-  if (!note) return;
-  
-  try {
-    // Show loading indicator
-    Alert.alert('Exporting...', 'Generating PDF file');
+  const confirmExportPDF = async () => {
+    setPdfExportModalVisible(false);
     
-    const filePath = await PDFService.exportNoteToPDF(
-      note,
-      content,
-      {
-        includeProperties: exportOptions.includeProperties,
-        includeMetadata: exportOptions.includeMetadata,
-        fileName: `${note.title || 'note'}.pdf`
-      }
-    );
+    if (!note) return;
     
-    if (filePath) {
-      // addBacklogEvent(BACKLOG_EVENTS.USER_EXPORTED_NOTE_PDF, { 
-      //   noteId: note.id,
-      //   options: exportOptions 
-      // });
+    try {
+      Alert.alert('Exporting...', 'Generating PDF file');
       
-      Alert.alert(
-        'Success',
-        'PDF exported successfully!',
-        [{ text: 'OK' }]
+      const filePath = await PDFService.exportNoteToPDF(
+        note,
+        content,
+        {
+          includeProperties: exportOptions.includeProperties,
+          includeMetadata: exportOptions.includeMetadata,
+          fileName: `${note.title || 'note'}.pdf`
+        }
       );
+      
+      if (filePath) {
+        Alert.alert(
+          'Success',
+          'PDF exported successfully!',
+          [{ text: 'OK' }]
+        );
+      }
+    } catch (error) {
+      console.error('Export error:', error);
+      Alert.alert('Error', 'Failed to export PDF');
     }
-  } catch (error) {
-    console.error('Export error:', error);
-    Alert.alert('Error', 'Failed to export PDF');
-  }
-};
+  };
 
-const handleImportPDF = async () => {
-  setEllipsisMenuVisible(false);
-  
-  try {
-    const result = await PDFService.importPDFAsNote();
+  const handleImportPDF = async () => {
+    setEllipsisMenuVisible(false);
     
-    if (result) {
-      // Show success and ask user what to do
-      Alert.alert(
-        'PDF Imported',
-        `Successfully extracted text from "${result.title}"\n\n${result.metadata?.pages ? `Pages: ${result.metadata.pages}\n` : ''}Characters: ${result.metadata?.characterCount || 0}`,
-        [
-          {
-            text: 'Cancel',
-            style: 'cancel'
-          },
-          {
-            text: 'Replace Current Note',
-            style: 'destructive',
-            onPress: () => {
-              // Replace current note content
-              collaborative.handleTitleChange(result.title);
-              collaborative.handleContentChange(result.content);
-              setHasUnsavedChanges(true);                   
+    try {
+      const result = await PDFService.importPDFAsNote();
+      
+      if (result) {
+        Alert.alert(
+          'PDF Imported',
+          `Successfully extracted text from "${result.title}"\n\n${result.metadata?.pages ? `Pages: ${result.metadata.pages}\n` : ''}Characters: ${result.metadata?.characterCount || 0}`,
+          [
+            {
+              text: 'Cancel',
+              style: 'cancel'
+            },
+            {
+              text: 'Replace Current Note',
+              style: 'destructive',
+              onPress: () => {
+                collaborative.handleTitleChange(result.title);
+                collaborative.handleContentChange(result.content);
+                setHasUnsavedChanges(true);                   
+              }
+            },
+            {
+              text: 'Append to Note',
+              onPress: () => {
+                const newContent = content + '<p><br></p>' + result.content;
+                collaborative.handleContentChange(newContent);
+                setHasUnsavedChanges(true);
+              }
             }
-          },
-          {
-            text: 'Append to Note',
-            onPress: () => {
-              // Append to existing content
-              const newContent = content + '<p><br></p>' + result.content;
-              collaborative.handleContentChange(newContent);
-              setHasUnsavedChanges(true);
-            }
-          }
-        ]
-      );
+          ]
+        );
+      }
+    } catch (error) {
+      console.error('Import error:', error);
     }
-  } catch (error) {
-    console.error('Import error:', error);
-    // Error is already handled in PDFService
-  }
-};
+  };
   
   if (!uid) {
     return (
@@ -192,26 +180,37 @@ const handleImportPDF = async () => {
   const [showCollaborators, setShowCollaborators] = useState(false);
   const [metadataModalVisible, setMetadataModalVisible] = useState(false);
   
-  // Sidebar state
   const [sidebarVisible, setSidebarVisible] = useState(false);
   const [notebookNotes, setNotebookNotes] = useState<Note[]>([]);
   const [notebookTitle, setNotebookTitle] = useState('');
 
-  //themes
-   const gradientColors = themeMode === 'dark' 
+  // Add these state variables after your existing useState declarations:
+  const [headerCollapsed, setHeaderCollapsed] = useState(false);
+  const headerHeight = useRef(new Animated.Value(1)).current; // 1 = expanded, 0 = collapsed
+
+  const gradientColors = themeMode === 'dark' 
     ? ["#324762", "#324762"] 
     : ["#ffffff", "#f8fafc"];
-
-  
     
   const richEditorRef = useRef<RichTextEditorRef>(null);
+
+  const toggleHeader = () => {
+    const toValue = headerCollapsed ? 1 : 0;
+    
+    Animated.timing(headerHeight, {
+      toValue,
+      duration: 300,
+      useNativeDriver: false,
+    }).start();
+    
+    setHeaderCollapsed(!headerCollapsed);
+  };
   
   const isUserTyping = useCallback(() => {
     return richEditorRef.current?.isTyping() || false;
   }, []);
   
   const handlePropertiesUpdate = (updatedProperties: NotebookProperty[]) => {
-    // Mark all updated properties as manually edited
     const propertiesWithSource = updatedProperties.map(prop => ({
       ...prop,
       source: 'manual' as const
@@ -296,7 +295,6 @@ const handleImportPDF = async () => {
 
   const autoSaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Fetch notebook notes for sidebar
   const fetchNotebookNotes = useCallback(async () => {
     if (!notebookId || !uid) return;
     
@@ -308,7 +306,6 @@ const handleImportPDF = async () => {
     }
   }, [notebookId, uid]);
 
-  // Fetch notebook title
   const fetchNotebookTitle = useCallback(async () => {
     if (!notebookId) return;
     
@@ -323,7 +320,6 @@ const handleImportPDF = async () => {
     }
   }, [notebookId]);
 
-  // Refresh notebook notes when focusing
   useFocusEffect(
     useCallback(() => {
       if (notebookId && uid) {
@@ -332,14 +328,12 @@ const handleImportPDF = async () => {
     }, [notebookId, uid, fetchNotebookNotes])
   );
 
-  // Fetch note data when noteId changes
   useEffect(() => {
     if (routeNoteId && uid) {
       fetchNote(routeNoteId as string);
     }
   }, [routeNoteId, uid]);
 
-  // Fetch notebook metadata separately
   useEffect(() => {
     if (notebookId) {
       fetchNotebookTitle();
@@ -472,22 +466,18 @@ const handleImportPDF = async () => {
   };
 
   const handleNoteSelect = useCallback((noteId: string) => {
-    // Close sidebar first to prevent animation conflicts
     setSidebarVisible(false);
     
-    // Use setTimeout to defer state updates until after the current render cycle
     setTimeout(() => {
-      // Save current note before switching
       if (hasUnsavedChanges) {
         saveNote(false);
       }
       
-      // Navigate to new note
       router.replace({
         pathname: "./note-editor",
         params: { noteId, notebookId },
       });
-    }, 300); // Match sidebar close animation duration
+    }, 300);
   }, [hasUnsavedChanges, notebookId]);
 
   const handleOCRTextInsert = useCallback((text: string) => {
@@ -504,40 +494,37 @@ const handleImportPDF = async () => {
     return text.substring(0, maxLength) + '...';
   };
 
-  // Show loading screen while note metadata is loading OR content is not ready
   if (loading || !collaborative.contentReady) {
-  return (
-    <LinearGradient colors={["#324762", "#0A1C3C"]} style={styles.loadingContainer}>
-      <SafeAreaView style={styles.loadingContent}>
-        <LottieView
-          source={require('@/assets/animations/quiz-loading.json')}
-          autoPlay
-          loop
-          style={styles.lottieAnimation}
-        />
-        <Text style={styles.loadingText}>
-          {loading ? 'Loading note...' : 'Syncing content...'}
-        </Text>
-        {collaborative.chunkCount > 0 && (
-          <Text style={styles.loadingSubtext}>
-            Loading {collaborative.chunkCount} chunk{collaborative.chunkCount !== 1 ? 's' : ''}
+    return (
+      <LinearGradient colors={["#324762", "#0A1C3C"]} style={styles.loadingContainer}>
+        <SafeAreaView style={styles.loadingContent}>
+          <LottieView
+            source={require('@/assets/animations/quiz-loading.json')}
+            autoPlay
+            loop
+            style={styles.lottieAnimation}
+          />
+          <Text style={styles.loadingText}>
+            {loading ? 'Loading note...' : 'Syncing content...'}
           </Text>
-        )}
-        {/* NEW: Show what's happening */}
-        {!loading && !collaborative.contentReady && (
-          <Text style={[styles.loadingSubtext, { marginTop: 8 }]}>
-            First-time initialization may take a moment...
-          </Text>
-        )}
-      </SafeAreaView>
-    </LinearGradient>
-  );
-}
+          {collaborative.chunkCount > 0 && (
+            <Text style={styles.loadingSubtext}>
+              Loading {collaborative.chunkCount} chunk{collaborative.chunkCount !== 1 ? 's' : ''}
+            </Text>
+          )}
+          {!loading && !collaborative.contentReady && (
+            <Text style={[styles.loadingSubtext, { marginTop: 8 }]}>
+              First-time initialization may take a moment...
+            </Text>
+          )}
+        </SafeAreaView>
+      </LinearGradient>
+    );
+  }
 
   return (
     <LinearGradient colors={gradientColors as any} style={styles.container}>
       <SafeAreaView style={styles.container}>
-        {/* Minimalist Header */}
         <View style={styles.header}>
           <TouchableOpacity 
             style={styles.iconButton} 
@@ -547,7 +534,19 @@ const handleImportPDF = async () => {
           </TouchableOpacity>
           
           <View style={styles.headerRight}>
-             <TouchableOpacity
+            {/* NEW: Collapse/Expand Button */}
+            <TouchableOpacity
+              style={styles.iconButton}
+              onPress={toggleHeader}
+            >
+              <Ionicons 
+                name={headerCollapsed ? "chevron-down" : "chevron-up"} 
+                size={22} 
+                color={colors.text} 
+              />
+            </TouchableOpacity>
+
+            <TouchableOpacity
               style={styles.iconButton}
               onPress={toggleTheme}
             >
@@ -594,126 +593,138 @@ const handleImportPDF = async () => {
 
         <KeyboardAvoidingView 
           style={styles.content} 
-          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+          keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 0}
         >
-          <FlatList
-            data={[{ key: 'editor-content' }]}
-            keyExtractor={(item) => item.key}
-            showsVerticalScrollIndicator={false}
-            keyboardShouldPersistTaps="handled"
-            renderItem={() => (
-              <>
-            {/* Title */}
-            <TextInput
-              ref={collaborative.titleInputRef}
-              style={styles.titleInput}
-              value={title}
-              onChangeText={(text) => handleTitleChange(text)}
-              onSelectionChange={handleTitleSelectionChange}
-              editable={!(effectiveIsSharedAccess && effectiveSharedPermission === "view")}
-              placeholder="Untitled"
-              placeholderTextColor="#6b7280"
-              multiline
-              textAlignVertical="top"
-              autoCapitalize="sentences"
-              autoCorrect={true}
-              spellCheck={true}
-            />
+          {/* Animated Collapsible Header */}
+          <Animated.View
+            style={[
+              styles.headerContainer,
+              {
+                maxHeight: headerHeight.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [0, 500], // 0 when collapsed, 500 when expanded
+                }),
+                opacity: headerHeight.interpolate({
+                  inputRange: [0, 0.5, 1],
+                  outputRange: [0, 0.5, 1],
+                }),
+                overflow: 'hidden',
+              }
+            ]}
+          >
+            <ScrollView
+              showsVerticalScrollIndicator={false}
+              bounces={false}
+              scrollEnabled={!headerCollapsed}
+            >
+              <TextInput
+                ref={collaborative.titleInputRef}
+                style={styles.titleInput}
+                value={title}
+                onChangeText={(text) => handleTitleChange(text)}
+                onSelectionChange={handleTitleSelectionChange}
+                editable={!(effectiveIsSharedAccess && effectiveSharedPermission === "view") && !headerCollapsed}
+                placeholder="Untitled"
+                placeholderTextColor="#6b7280"
+                multiline
+                textAlignVertical="top"
+                autoCapitalize="sentences"
+                autoCorrect={true}
+                spellCheck={true}
+              />
 
-            {/* Properties Section */}
-            {properties.length > 0 && (
-              <View style={styles.propertiesSection}>
-                {properties.map((property, index) => (
-                  <TouchableOpacity
-                    key={index}
-                    style={styles.propertyRow}
-                    onPress={() => !effectiveIsSharedAccess && setPropertiesModalVisible(true)}
-                    activeOpacity={0.7}
-                    disabled={effectiveIsSharedAccess}
-                  >
-                    {/* Icon Display */}
-                    {property.icon && (
-                      <Ionicons 
-                        name={property.icon as any} 
-                        size={18} 
-                        color={property.iconColor || '#6b7280'} 
-                        style={{ marginRight: 8 }}
-                      />
-                    )}
-                    
-                    <Text style={styles.propertyKey}>
-                      {truncateText(property.key, 20)}
-                    </Text>
-                    <Text style={styles.propertyValue}>
-                      {property.value}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-                
-                {!effectiveIsSharedAccess && (
+              {properties.length > 0 && (
+                <View style={styles.propertiesSection}>
+                  {properties.map((property, index) => (
+                    <TouchableOpacity
+                      key={index}
+                      style={styles.propertyRow}
+                      onPress={() => !effectiveIsSharedAccess && setPropertiesModalVisible(true)}
+                      activeOpacity={0.7}
+                      disabled={effectiveIsSharedAccess || headerCollapsed}
+                    >
+                      {property.icon && (
+                        <Ionicons 
+                          name={property.icon as any} 
+                          size={18} 
+                          color={property.iconColor || '#6b7280'} 
+                          style={{ marginRight: 8 }}
+                        />
+                      )}
+                      
+                      <Text style={styles.propertyKey}>
+                        {truncateText(property.key, 20)}
+                      </Text>
+                      <Text style={styles.propertyValue}>
+                        {property.value}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                  
+                  {!effectiveIsSharedAccess && (
+                    <TouchableOpacity
+                      style={styles.addPropertyButton}
+                      onPress={() => setPropertiesModalVisible(true)}
+                      activeOpacity={0.7}
+                      disabled={headerCollapsed}
+                    >
+                      <Ionicons name="add" size={16} color="#6b7280" />
+                      <Text style={styles.addPropertyText}>Add property</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              )}
+
+              {properties.length === 0 && !effectiveIsSharedAccess && (
+                <View style={styles.propertiesSection}>
                   <TouchableOpacity
                     style={styles.addPropertyButton}
                     onPress={() => setPropertiesModalVisible(true)}
                     activeOpacity={0.7}
+                    disabled={headerCollapsed}
                   >
                     <Ionicons name="add" size={16} color="#6b7280" />
                     <Text style={styles.addPropertyText}>Add property</Text>
                   </TouchableOpacity>
-                )}
-              </View>
-            )}
+                </View>
+              )}
+            </ScrollView>
+          </Animated.View>
 
-            {/* Add property button when no properties exist */}
-            {properties.length === 0 && !effectiveIsSharedAccess && (
-              <View style={styles.propertiesSection}>
-                <TouchableOpacity
-                  style={styles.addPropertyButton}
-                  onPress={() => setPropertiesModalVisible(true)}
-                  activeOpacity={0.7}
-                >
-                  <Ionicons name="add" size={16} color="#6b7280" />
-                  <Text style={styles.addPropertyText}>Add property</Text>
-                </TouchableOpacity>
-              </View>
-            )}
+  {/* Editor - takes remaining space */}
+  <View style={styles.editorWrapper}>
+    <RichTextEditor
+      key={`editor-${themeMode}`}
+      ref={richEditorRef}
+      initialContent={content}
+      onContentChange={handleContentChange}
+      editable={!(effectiveIsSharedAccess && effectiveSharedPermission === "view")}
+      placeholder="Start writing..."
+      onCursorPosition={handleContentCursorPosition}
+      style={styles.richEditor}
+      onEditorReady={(editor) => {
+        // console.log('✅ Rich text editor ready');
+      }}
+    />
+  </View>
 
-            {/* Rich Text Editor */}
-            <View style={styles.editorWrapper}>
-              <RichTextEditor
-                key={`editor-${themeMode}`}
-                ref={richEditorRef}
-                initialContent={content}
-                onContentChange={handleContentChange}
-                editable={!(effectiveIsSharedAccess && effectiveSharedPermission === "view")}
-                placeholder="Start writing..."
-                onCursorPosition={handleContentCursorPosition}
-                style={styles.richEditor}
-                onEditorReady={(editor) => {
-                  // console.log('✅ Rich text editor ready');
-                }}
-              />
-            </View>
-          </>
-            )}
-            />
+  {!(effectiveIsSharedAccess && effectiveSharedPermission === "view") && (
+    <RichTextToolbar
+      key={`toolbar-${themeMode}`}
+      getEditor={() => richEditorRef.current?.getEditor()}
+      onMetadataPress={() => setMetadataModalVisible(true)}
+      noteId={routeNoteId as string}
+      userId={uid!}
+      onUndo={collaborative.undo}
+      onRedo={collaborative.redo}
+      canUndo={collaborative.canUndo}
+      canRedo={collaborative.canRedo}     
+      style={styles.toolbar}         
+    />
+  )}
+</KeyboardAvoidingView>
 
-          {!(effectiveIsSharedAccess && effectiveSharedPermission === "view") && (
-            <RichTextToolbar
-              key={`editor-${themeMode}`}
-              getEditor={() => richEditorRef.current?.getEditor()}
-              onMetadataPress={() => setMetadataModalVisible(true)}
-              noteId={routeNoteId as string}
-              userId={uid!}
-              onUndo={collaborative.undo}
-              onRedo={collaborative.redo}
-              canUndo={collaborative.canUndo}
-              canRedo={collaborative.canRedo}     
-              style={styles.toolbar}         
-            />
-          )}
-        </KeyboardAvoidingView>
-
-        {/* Note Sidebar */}
         <NoteSidebar
           visible={sidebarVisible}
           onClose={() => setSidebarVisible(false)}
@@ -724,7 +735,6 @@ const handleImportPDF = async () => {
           onNoteSelect={handleNoteSelect}
         />
 
-        {/* Ellipsis Bottom Sheet Menu */}
         <Modal
           visible={ellipsisMenuVisible}
           transparent
@@ -808,17 +818,8 @@ const handleImportPDF = async () => {
               </TouchableOpacity>
             </View>
           </TouchableOpacity>
-
-          {/* <TouchableOpacity
-            style={styles.menuItem}
-            onPress={handleImportPDF}
-          >
-            <Ionicons name="cloud-upload-outline" size={20} color={colors.text} />
-            <Text style={styles.menuItemText}>Import from PDF</Text>
-          </TouchableOpacity> */}
         </Modal>
 
-        {/* Collaborators List Modal */}
         <Modal
           visible={showCollaborators}
           transparent
@@ -850,7 +851,6 @@ const handleImportPDF = async () => {
           </TouchableOpacity>
         </Modal>
 
-        {/* Metadata Modal */}
         <Modal
           visible={metadataModalVisible}
           transparent
@@ -1032,227 +1032,3 @@ const handleImportPDF = async () => {
 
 const { width } = Dimensions.get('window');
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  loadingContainer: {
-    flex: 1,
-  },
-  loadingContent: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-  },
-  lottieAnimation: {
-    width: 200,
-    height: 200,
-  },
-  loadingText: {
-    color: '#ffffff',
-    fontSize: 18,
-    fontWeight: '600',
-    marginTop: 24,
-    textAlign: 'center',
-  },
-  loadingSubtext: {
-    color: '#9ca3af',
-    fontSize: 14,
-    marginTop: 8,
-    textAlign: 'center',
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255, 255, 255, 0.05)',
-  },
-  iconButton: {
-    width: 36,
-    height: 36,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  headerRight: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  content: {
-    flex: 1,
-  },
-  scrollView: {
-    flex: 1,
-    paddingBottom: 98,
-  },
-  titleInput: {
-    fontSize: 32,
-    fontWeight: '700',
-    color: '#ffffff',
-    paddingHorizontal: 20,
-    paddingTop: 24,
-    paddingBottom: 8,
-    minHeight: 60,
-  },
-  propertiesSection: {
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-  },
-  propertyRow: {
-    flexDirection: 'row',
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255, 255, 255, 0.05)',
-  },
-  propertyKey: {
-    flex: 0.4,
-    color: '#9ca3af',
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  propertyValue: {
-    flex: 0.6,
-    color: '#ffffff',
-    fontSize: 14,
-  },
-  addPropertyButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 8,
-    marginTop: 4,
-  },
-  addPropertyText: {
-    color: '#6b7280',
-    fontSize: 14,
-    marginLeft: 6,
-  },
-  editorWrapper: {
-    flex: 1,
-    paddingHorizontal: 20,
-    paddingTop: 16,
-    minHeight: 400,
-  },
-  richEditor: {
-    flex: 1,
-    minHeight: 300,
-  },
-  bottomSheetOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'flex-end',
-  },
-  bottomSheet: {
-    backgroundColor: '#1f2937',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    paddingBottom: 34,
-    paddingHorizontal: 20,
-  },
-  bottomSheetHandle: {
-    width: 40,
-    height: 4,
-    backgroundColor: '#4b5563',
-    borderRadius: 2,
-    alignSelf: 'center',
-    marginTop: 12,
-    marginBottom: 20,
-  },
-  bottomSheetTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#ffffff',
-    marginBottom: 16,
-  },
-  menuItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255, 255, 255, 0.05)',
-  },
-  menuItemDisabled: {
-    opacity: 0.5,
-  },
-  menuItemText: {
-    color: '#ffffff',
-    fontSize: 16,
-    marginLeft: 16,
-  },
-  collaboratorItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255, 255, 255, 0.05)',
-  },
-  collaboratorAvatar: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    marginRight: 12,
-  },
-  collaboratorName: {
-    color: '#ffffff',
-    fontSize: 16,
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  metadataModal: {
-    backgroundColor: '#ffffff',
-    borderRadius: 16,
-    width: width * 0.9,
-    maxWidth: 400,
-    maxHeight: '80%',
-  },
-  metadataHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
-  },
-  metadataTitle: {
-    fontSize: 20,
-    fontWeight: '600',
-    color: '#1f2937',
-  },
-  metadataContent: {
-    padding: 20,
-  },
-  metadataItem: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    marginBottom: 16,
-  },
-  metadataTextContainer: {
-    flex: 1,
-    marginLeft: 12,
-  },
-  metadataLabel: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#6b7280',
-    marginBottom: 4,
-  },
-  metadataValue: {
-    fontSize: 14,
-    color: '#1f2937',
-  },
-  toolbar: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    marginBottom: 20,
-  },
-  
-  
-});

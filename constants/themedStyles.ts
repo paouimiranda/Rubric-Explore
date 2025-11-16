@@ -70,6 +70,7 @@ export const createThemedStyles = (colors: ThemeColors, mode: ThemeMode) => {
       paddingTop: 24,
       paddingBottom: 8,
       minHeight: 60,
+      maxHeight: 200,
     },
     propertiesSection: {
       paddingHorizontal: 20,
@@ -103,16 +104,16 @@ export const createThemedStyles = (colors: ThemeColors, mode: ThemeMode) => {
       fontSize: 14,
       marginLeft: 6,
     },
-    editorWrapper: {
-      flex: 1,
-      paddingHorizontal: 20,
-      paddingTop: 16,
-      minHeight: 400,
-    },
-    richEditor: {
-      flex: 1,
-      minHeight: 300,
-    },
+    // editorWrapper: {
+    //   flex: 1,
+    //   paddingHorizontal: 20,
+    //   paddingTop: 16,
+    //   minHeight: 400,
+    // },
+    // richEditor: {
+    //   flex: 1,
+    //   minHeight: 300,
+    // },
     bottomSheetOverlay: {
       flex: 1,
       backgroundColor: colors.modalOverlay,
@@ -264,6 +265,30 @@ exportButtonText: {
   fontSize: 16,
   fontWeight: '600',
   marginLeft: 8,
+},
+
+  
+  scrollContent: {
+    paddingBottom: 100, // Space for toolbar
+    flexGrow: 1,
+  },
+  
+  editorWrapper: {
+    flex: 1,
+    paddingHorizontal: 15,
+    paddingTop: 16,
+    minHeight: 500, // Ensure minimum height for editor
+  },
+  
+  richEditor: {
+    width: '100%',
+    minHeight: 400,
+    flex: 0, // Don't use flex, use fixed/min height instead
+  },
+  headerContainer: {
+  borderBottomWidth: 1,
+  borderBottomColor: colors.border,
+  backgroundColor: colors.background,
 },
   });
 };

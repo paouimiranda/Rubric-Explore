@@ -1,6 +1,6 @@
-// components/RichTextEditor/RichTextToolbar.tsx (UPDATED)
+// components/RichTextEditor/RichTextToolbar.tsx (UPDATED with fixed keyboard button)
 import { createToolbarThemedStyles } from '@/constants/themedStyles';
-import { useTheme } from '@/hooks/useTheme';
+import { ThemeColors, ThemeMode, useTheme } from '@/hooks/useTheme';
 import { pickImage, takePhoto, uploadNoteImage } from '@/services/image-service';
 import { Ionicons } from '@expo/vector-icons';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
@@ -64,8 +64,6 @@ const RichTextToolbar: React.FC<RichTextToolbarProps> = ({ getEditor, onMetadata
   
   const [tableBuilderVisible, setTableBuilderVisible] = useState(false);
   const [mathEquationVisible, setMathEquationVisible] = useState(false);
-  
-  // NEW: Drawing screen state
   const [drawingScreenVisible, setDrawingScreenVisible] = useState(false);
 
   // Formatting states
@@ -79,6 +77,7 @@ const RichTextToolbar: React.FC<RichTextToolbarProps> = ({ getEditor, onMetadata
 
   const { colors, themeMode } = useTheme();
   const styles = createToolbarThemedStyles(colors, themeMode);
+  const localStyles = createLocalStyles(colors, themeMode);
 
   const checkFormattingState = useCallback(async () => {
     if (!isMountedRef.current) return;
@@ -288,6 +287,55 @@ const RichTextToolbar: React.FC<RichTextToolbarProps> = ({ getEditor, onMetadata
     }
   }, [getEditor, checkFormattingState]);
 
+  // NEW: Handle keyboard button press
+  const handleKeyboardPress = useCallback(() => {
+    const editor = getEditor();
+    if (editor) {
+      // Try multiple methods to focus and bring up keyboard
+      if (editor.webviewBridge) {
+        editor.webviewBridge.injectJavaScript(`
+          (function() {
+            try {
+              var editor = document.getElementById('editor') || document.querySelector('[contenteditable="true"]');
+              if (editor) {
+                // Force focus with click simulation
+                editor.focus();
+                
+                // Try to place cursor at the end
+                var range = document.createRange();
+                var sel = window.getSelection();
+                
+                if (editor.childNodes.length > 0) {
+                  var lastNode = editor.childNodes[editor.childNodes.length - 1];
+                  range.setStartAfter(lastNode);
+                  range.collapse(true);
+                } else {
+                  range.selectNodeContents(editor);
+                  range.collapse(false);
+                }
+                
+                sel.removeAllRanges();
+                sel.addRange(range);
+                
+                // Trigger input event to ensure keyboard shows
+                editor.dispatchEvent(new Event('touchstart', { bubbles: true }));
+                editor.dispatchEvent(new Event('focus', { bubbles: true }));
+              }
+            } catch (e) {
+              console.error('Focus error:', e);
+            }
+          })();
+          true;
+        `);
+      }
+      
+      // Also try the editor's built-in focus method if available
+      if (typeof editor.focusContentEditor === 'function') {
+        setTimeout(() => editor.focusContentEditor(), 100);
+      }
+    }
+  }, [getEditor]);
+
   const handleColorSelect = useCallback((colorObj: typeof COLORS[0]) => {
     const editor = getEditor();
     if (editor) {
@@ -334,16 +382,13 @@ const RichTextToolbar: React.FC<RichTextToolbarProps> = ({ getEditor, onMetadata
     }
   }, [getEditor, noteId, userId]);
 
-  // NEW: Handle drawing completion
   const handleDrawingComplete = useCallback(async (imageUri: string) => {
     setDrawingScreenVisible(false);
     setUploadingImage(true);
 
     try {
-      // Upload the drawing as an image
       const uploadResult = await uploadNoteImage(noteId, imageUri, userId);
 
-      // Insert into editor
       const editor = getEditor();
       if (editor) {
         editor.insertImage(uploadResult.url, 'Hand-drawn image');
@@ -386,243 +431,260 @@ const RichTextToolbar: React.FC<RichTextToolbarProps> = ({ getEditor, onMetadata
 
   return (
     <>
-      <View style={[styles.toolbarContainer, style]}>
-        <ScrollView 
-          horizontal 
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.scrollContent}
-        >
-          {/* Undo/Redo */}
-          <TouchableOpacity 
-            style={styles.customButton}
-            onPress={handleUndo}
+      <View style={[localStyles.toolbarWrapper, style]}>
+        <View style={[styles.toolbarContainer, localStyles.toolbarContainer]}>
+          <ScrollView 
+            horizontal 
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={[styles.scrollContent, localStyles.scrollContent]}
           >
-            <Ionicons name="arrow-undo" size={20} color={colors.text} />
-          </TouchableOpacity>
+            {/* Undo/Redo */}
+            <TouchableOpacity 
+              style={styles.customButton}
+              onPress={handleUndo}
+            >
+              <Ionicons name="arrow-undo" size={20} color={colors.text} />
+            </TouchableOpacity>
 
-          <TouchableOpacity 
-            style={styles.customButton}
-            onPress={handleRedo}
-          >
-            <Ionicons name="arrow-redo" size={20} color={colors.text} />
-          </TouchableOpacity>
+            <TouchableOpacity 
+              style={styles.customButton}
+              onPress={handleRedo}
+            >
+              <Ionicons name="arrow-redo" size={20} color={colors.text} />
+            </TouchableOpacity>
 
-          {/* Text formatting with active states */}
-          <TouchableOpacity 
-            style={[styles.customButton, isBold && styles.activeButton]}
-            onPress={handleBold}
-            activeOpacity={0.7}
-          >
-            <Text style={[
-              styles.formatText,
-              { fontWeight: 'bold' },
-              isBold && styles.activeText
-            ]}>B</Text>
-          </TouchableOpacity>
+            {/* Text formatting with active states */}
+            <TouchableOpacity 
+              style={[styles.customButton, isBold && styles.activeButton]}
+              onPress={handleBold}
+              activeOpacity={0.7}
+            >
+              <Text style={[
+                styles.formatText,
+                { fontWeight: 'bold' },
+                isBold && styles.activeText
+              ]}>B</Text>
+            </TouchableOpacity>
 
-          <TouchableOpacity 
-            style={[styles.customButton, isItalic && styles.activeButton]}
-            onPress={handleItalic}
-            activeOpacity={0.7}
-          >
-            <Text style={[
-              styles.formatText,
-              { fontStyle: 'italic' },
-              isItalic && styles.activeText
-            ]}>I</Text>
-          </TouchableOpacity>
+            <TouchableOpacity 
+              style={[styles.customButton, isItalic && styles.activeButton]}
+              onPress={handleItalic}
+              activeOpacity={0.7}
+            >
+              <Text style={[
+                styles.formatText,
+                { fontStyle: 'italic' },
+                isItalic && styles.activeText
+              ]}>I</Text>
+            </TouchableOpacity>
 
-          <TouchableOpacity 
-            style={[styles.customButton, isUnderline && styles.activeButton]}
-            onPress={handleUnderline}
-            activeOpacity={0.7}
-          >
-            <Text style={[
-              styles.formatText,
-              { textDecorationLine: 'underline' },
-              isUnderline && styles.activeText
-            ]}>U</Text>
-          </TouchableOpacity>
+            <TouchableOpacity 
+              style={[styles.customButton, isUnderline && styles.activeButton]}
+              onPress={handleUnderline}
+              activeOpacity={0.7}
+            >
+              <Text style={[
+                styles.formatText,
+                { textDecorationLine: 'underline' },
+                isUnderline && styles.activeText
+              ]}>U</Text>
+            </TouchableOpacity>
 
-          <TouchableOpacity 
-            style={[styles.customButton, isStrikethrough && styles.activeButton]}
-            onPress={handleStrikethrough}
-            activeOpacity={0.7}
-          >
-            <Text style={[
-              styles.formatText,
-              { textDecorationLine: 'line-through' },
-              isStrikethrough && styles.activeText
-            ]}>S</Text>
-          </TouchableOpacity>
+            <TouchableOpacity 
+              style={[styles.customButton, isStrikethrough && styles.activeButton]}
+              onPress={handleStrikethrough}
+              activeOpacity={0.7}
+            >
+              <Text style={[
+                styles.formatText,
+                { textDecorationLine: 'line-through' },
+                isStrikethrough && styles.activeText
+              ]}>S</Text>
+            </TouchableOpacity>
 
-          {/* Color and highlight */}
-          <TouchableOpacity 
-            style={styles.customButton}
-            onPress={() => setColorPickerVisible(true)}
-          >
-            <Ionicons name="color-palette" size={20} color={colors.text} />
-          </TouchableOpacity>
+            {/* Color and highlight */}
+            <TouchableOpacity 
+              style={styles.customButton}
+              onPress={() => setColorPickerVisible(true)}
+            >
+              <Ionicons name="color-palette" size={20} color={colors.text} />
+            </TouchableOpacity>
 
-          <TouchableOpacity 
-            style={styles.customButton}
-            onPress={() => setHighlightPickerVisible(true)}
-          >
-            <Ionicons name="color-fill" size={20} color={colors.text} />
-          </TouchableOpacity>
+            <TouchableOpacity 
+              style={styles.customButton}
+              onPress={() => setHighlightPickerVisible(true)}
+            >
+              <Ionicons name="color-fill" size={20} color={colors.text} />
+            </TouchableOpacity>
 
-          {/* Headings */}
-          <TouchableOpacity 
-            style={styles.customButton}
-            onPress={() => {
-              const editor = getEditor();
-              if (editor) {
-                editor.sendAction(actions.heading1, 'result');
-              }
-            }}
-          >
-            <Text style={{ color: '#ffffff', fontSize: 18, fontWeight: 'bold' }}>H1</Text>
-          </TouchableOpacity>
+            {/* Headings */}
+            <TouchableOpacity 
+              style={styles.customButton}
+              onPress={() => {
+                const editor = getEditor();
+                if (editor) {
+                  editor.sendAction(actions.heading1, 'result');
+                }
+              }}
+            >
+              <Text style={{ color: colors.text, fontSize: 18, fontWeight: 'bold' }}>H1</Text>
+            </TouchableOpacity>
 
-          <TouchableOpacity 
-            style={styles.customButton}
-            onPress={() => {
-              const editor = getEditor();
-              if (editor) {
-                editor.sendAction(actions.heading2, 'result');
-              }
-            }}
-          >
-            <Text style={{ color: '#ffffff', fontSize: 16, fontWeight: 'bold' }}>H2</Text>
-          </TouchableOpacity>
+            <TouchableOpacity 
+              style={styles.customButton}
+              onPress={() => {
+                const editor = getEditor();
+                if (editor) {
+                  editor.sendAction(actions.heading2, 'result');
+                }
+              }}
+            >
+              <Text style={{ color: colors.text, fontSize: 16, fontWeight: 'bold' }}>H2</Text>
+            </TouchableOpacity>
 
-          <TouchableOpacity 
-            style={styles.customButton}
-            onPress={() => {
-              const editor = getEditor();
-              if (editor) {
-                editor.sendAction(actions.heading3, 'result');
-              }
-            }}
-          >
-            <Text style={{ color: '#ffffff', fontSize: 14, fontWeight: 'bold' }}>H3</Text>
-          </TouchableOpacity>
+            <TouchableOpacity 
+              style={styles.customButton}
+              onPress={() => {
+                const editor = getEditor();
+                if (editor) {
+                  editor.sendAction(actions.heading3, 'result');
+                }
+              }}
+            >
+              <Text style={{ color: colors.text, fontSize: 14, fontWeight: 'bold' }}>H3</Text>
+            </TouchableOpacity>
 
-          {/* Normal paragraph button */}
-          <TouchableOpacity 
-            style={styles.customButton}
-            onPress={() => {
-              const editor = getEditor();
-              if (editor && editor.webviewBridge) {
-                editor.webviewBridge.injectJavaScript(`
-                  document.execCommand('formatBlock', false, '<p>');
-                  true;
-                `);
-              }
-            }}
-          >
-            <Ionicons name="document-text-outline" size={20} color={colors.text} />
-          </TouchableOpacity>
+            {/* Normal paragraph button */}
+            <TouchableOpacity 
+              style={styles.customButton}
+              onPress={() => {
+                const editor = getEditor();
+                if (editor && editor.webviewBridge) {
+                  editor.webviewBridge.injectJavaScript(`
+                    document.execCommand('formatBlock', false, '<p>');
+                    true;
+                  `);
+                }
+              }}
+            >
+              <Ionicons name="document-text-outline" size={20} color={colors.text} />
+            </TouchableOpacity>
 
-          {/* Lists */}
-          <RichToolbar
-            getEditor={getEditor}
-            actions={[
-              actions.insertBulletsList,
-              actions.insertOrderedList,
-            ]}
-            iconMap={{
-              [actions.insertBulletsList]: ({ tintColor }) => <Ionicons name="list" size={20} color={tintColor} />,
-              [actions.insertOrderedList]: ({ tintColor }) => <Ionicons name="list-outline" size={20} color={tintColor} />,
-            }}
-            selectedButtonStyle={styles.selectedButton}
-            iconTint="#ffffff"
-            selectedIconTint="#60a5fa"
-            disabledIconTint="#6b7280"
-            style={styles.richToolbar}
-          />
+            {/* Lists */}
+            <RichToolbar
+              getEditor={getEditor}
+              actions={[
+                actions.insertBulletsList,
+                actions.insertOrderedList,
+              ]}
+              iconMap={{
+                [actions.insertBulletsList]: ({ tintColor }) => <Ionicons name="list" size={20} color={tintColor} />,
+                [actions.insertOrderedList]: ({ tintColor }) => <Ionicons name="list-outline" size={20} color={tintColor} />,
+              }}
+              selectedButtonStyle={styles.selectedButton}
+              iconTint="#ffffff"
+              selectedIconTint="#60a5fa"
+              disabledIconTint="#6b7280"
+              style={styles.richToolbar}
+            />
 
-          {/* Other formatting */}
-          <RichToolbar
-            getEditor={getEditor}
-            actions={[
-              actions.blockquote,
-              actions.alignLeft,
-              actions.alignCenter,
-              actions.alignRight,
-              actions.code,
-              actions.line,
-            ]}
-            iconMap={{
-              [actions.blockquote]: ({ tintColor }) => <Ionicons name="chatbox-ellipses-outline" size={20} color={tintColor} />,
-              [actions.alignLeft]: ({ tintColor }) => <Ionicons name="text-outline" size={20} color={tintColor} />,
-              [actions.alignCenter]: ({ tintColor }) => <Ionicons name="text" size={20} color={tintColor} />,
-              [actions.alignRight]: ({ tintColor }) => <Ionicons name="text-outline" size={20} color={tintColor} style={{ transform: [{ scaleX: -1 }] }} />,
-              [actions.code]: ({ tintColor }) => <Ionicons name="code-slash" size={20} color={tintColor} />,
-              [actions.line]: ({ tintColor }) => <Ionicons name="remove" size={20} color={tintColor} />,
-            }}
-            selectedButtonStyle={styles.selectedButton}
-            iconTint="#ffffff"
-            selectedIconTint="#60a5fa"
-            disabledIconTint="#6b7280"
-            style={styles.richToolbar}
-          />
+            {/* Other formatting */}
+            <RichToolbar
+              getEditor={getEditor}
+              actions={[
+                actions.blockquote,
+                actions.alignLeft,
+                actions.alignCenter,
+                actions.alignRight,
+                actions.code,
+                actions.line,
+              ]}
+              iconMap={{
+                [actions.blockquote]: ({ tintColor }) => <Ionicons name="chatbox-ellipses-outline" size={20} color={tintColor} />,
+                [actions.alignLeft]: ({ tintColor }) => <Ionicons name="text-outline" size={20} color={tintColor} />,
+                [actions.alignCenter]: ({ tintColor }) => <Ionicons name="text" size={20} color={tintColor} />,
+                [actions.alignRight]: ({ tintColor }) => <Ionicons name="text-outline" size={20} color={tintColor} style={{ transform: [{ scaleX: -1 }] }} />,
+                [actions.code]: ({ tintColor }) => <Ionicons name="code-slash" size={20} color={tintColor} />,
+                [actions.line]: ({ tintColor }) => <Ionicons name="remove" size={20} color={tintColor} />,
+              }}
+              selectedButtonStyle={styles.selectedButton}
+              iconTint="#ffffff"
+              selectedIconTint="#60a5fa"
+              disabledIconTint="#6b7280"
+              style={styles.richToolbar}
+            />
 
-          {/* Link button */}
-          <TouchableOpacity 
-            style={styles.customButton}
-            onPress={() => setLinkModalVisible(true)}
-          >
-            <Ionicons name="link" size={20} color={colors.text} />
-          </TouchableOpacity>
+            {/* Link button */}
+            <TouchableOpacity 
+              style={styles.customButton}
+              onPress={() => setLinkModalVisible(true)}
+            >
+              <Ionicons name="link" size={20} color={colors.text} />
+            </TouchableOpacity>
 
-          {/* Image upload button */}
-          <TouchableOpacity 
-            style={styles.customButton}
-            onPress={() => setImagePickerVisible(true)}
-            disabled={uploadingImage}
-          >
-            {uploadingImage ? (
-              <ActivityIndicator size="small" color="#ffffff" />
-            ) : (
-              <Ionicons name="image" size={20} color="#ffffff" />
-            )}
-          </TouchableOpacity>
+            {/* Image upload button */}
+            <TouchableOpacity 
+              style={styles.customButton}
+              onPress={() => setImagePickerVisible(true)}
+              disabled={uploadingImage}
+            >
+              {uploadingImage ? (
+                <ActivityIndicator size="small" color="#ffffff" />
+              ) : (
+                <Ionicons name="image" size={20} color="#ffffff" />
+              )}
+            </TouchableOpacity>
 
-          {/* NEW: Drawing button */}
-          <TouchableOpacity 
-            style={styles.customButton}
-            onPress={() => setDrawingScreenVisible(true)}
-          >
-            <Ionicons name="brush-outline" size={20} color="#ffffff" />
-          </TouchableOpacity>
+            {/* Drawing button */}
+            <TouchableOpacity 
+              style={styles.customButton}
+              onPress={() => setDrawingScreenVisible(true)}
+            >
+              <Ionicons name="brush-outline" size={20} color="#ffffff" />
+            </TouchableOpacity>
 
-          {/* Table button */}
-          <TouchableOpacity 
-            style={styles.customButton}
-            onPress={() => setTableBuilderVisible(true)}
-          >
-            <Ionicons name="grid-outline" size={20} color="#ffffff" />
-          </TouchableOpacity>
+            {/* Table button */}
+            <TouchableOpacity 
+              style={styles.customButton}
+              onPress={() => setTableBuilderVisible(true)}
+            >
+              <Ionicons name="grid-outline" size={20} color="#ffffff" />
+            </TouchableOpacity>
 
-          {/* Math equation button */}
-          <TouchableOpacity 
-            style={styles.customButton}
-            onPress={() => setMathEquationVisible(true)}
-          >
-            <Ionicons name="calculator-outline" size={20} color="#ffffff" />
-          </TouchableOpacity>
+            {/* Math equation button */}
+            <TouchableOpacity 
+              style={styles.customButton}
+              onPress={() => setMathEquationVisible(true)}
+            >
+              <Ionicons name="calculator-outline" size={20} color="#ffffff" />
+            </TouchableOpacity>
 
-          {/* Info button */}
-          <TouchableOpacity 
-            style={styles.customButton}
-            onPress={onMetadataPress}
-          >
-            <Ionicons name="information-circle-outline" size={20} color="#ffffff" />
-          </TouchableOpacity>
-        </ScrollView>
+            {/* Info button */}
+            <TouchableOpacity 
+              style={styles.customButton}
+              onPress={onMetadataPress}
+            >
+              <Ionicons name="information-circle-outline" size={20} color="#ffffff" />
+            </TouchableOpacity>
+
+            {/* Add padding at the end to prevent last items from being hidden by keyboard button */}
+            <View style={localStyles.scrollEndPadding} />
+          </ScrollView>
+
+          {/* Fixed Keyboard Button - Notion style */}
+          <View style={localStyles.keyboardButtonContainer}>
+            <TouchableOpacity 
+              style={localStyles.keyboardButton}
+              onPress={handleKeyboardPress}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="keypad" size={22} color={colors.primary} />
+            </TouchableOpacity>
+          </View>
+        </View>
       </View>
 
+      {/* All modals remain the same... */}
       {/* Color Picker Modal */}
       <Modal
         visible={colorPickerVisible}
@@ -737,7 +799,7 @@ const RichTextToolbar: React.FC<RichTextToolbarProps> = ({ getEditor, onMetadata
               <TextInput
                 style={styles.linkInput}
                 placeholder="Link text"
-                placeholderTextColor="#9ca3af"
+                placeholderTextColor={colors.textSecondary}
                 value={linkText}
                 onChangeText={setLinkText}
               />
@@ -745,7 +807,7 @@ const RichTextToolbar: React.FC<RichTextToolbarProps> = ({ getEditor, onMetadata
               <TextInput
                 style={styles.linkInput}
                 placeholder="URL (e.g., https://example.com)"
-                placeholderTextColor="#9ca3af"
+                placeholderTextColor={colors.textSecondary}
                 value={linkUrl}
                 onChangeText={setLinkUrl}
                 keyboardType="url"
@@ -803,7 +865,7 @@ const RichTextToolbar: React.FC<RichTextToolbarProps> = ({ getEditor, onMetadata
                 style={styles.imagePickerButton}
                 onPress={() => handleImageUpload('gallery')}
               >
-                <Ionicons name="images" size={24} color="#60a5fa" />
+                <Ionicons name="images" size={24} color={colors.primary} />
                 <Text style={styles.imagePickerButtonText}>Choose from Gallery</Text>
               </TouchableOpacity>
               
@@ -811,7 +873,7 @@ const RichTextToolbar: React.FC<RichTextToolbarProps> = ({ getEditor, onMetadata
                 style={styles.imagePickerButton}
                 onPress={() => handleImageUpload('camera')}
               >
-                <Ionicons name="camera" size={24} color="#60a5fa" />
+                <Ionicons name="camera" size={24} color={colors.primary} />
                 <Text style={styles.imagePickerButtonText}>Take Photo</Text>
               </TouchableOpacity>
               
@@ -841,7 +903,7 @@ const RichTextToolbar: React.FC<RichTextToolbarProps> = ({ getEditor, onMetadata
         onInsert={handleInsertEquation}
       />
 
-      {/* NEW: Drawing Screen Modal */}
+      {/* Drawing Screen Modal */}
       <Modal
         visible={drawingScreenVisible}
         animationType="slide"
@@ -856,6 +918,61 @@ const RichTextToolbar: React.FC<RichTextToolbarProps> = ({ getEditor, onMetadata
     </>
   );
 };
+
+const createLocalStyles = (colors: ThemeColors, themeMode: ThemeMode) => StyleSheet.create({
+  toolbarWrapper: {
+    position: 'relative',
+  },
+  toolbarContainer: {
+    overflow: 'visible',
+  },
+  scrollContent: {
+    paddingRight: 60, // Make room for the fixed keyboard button
+  },
+  scrollEndPadding: {
+    width: 20, // Additional padding at the end
+  },
+  keyboardButtonContainer: {
+    position: 'absolute',
+    right: 0,
+    top: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingRight: 8,
+    paddingLeft: 20,
+    // Gradient fade effect using shadow
+    shadowColor: themeMode === 'light' ? colors.surface : colors.toolbarBackground,
+    shadowOffset: {
+      width: -15,
+      height: 0,
+    },
+    shadowOpacity: 1,
+    shadowRadius: 15,
+    // Background with slight gradient effect
+    backgroundColor: colors.toolbarBackground,
+    borderTopRightRadius: 40,
+    borderBottomRightRadius: 40,
+  },
+  keyboardButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: colors.primaryLight,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1.5,
+    borderColor: themeMode === 'light' ? colors.primary : 'rgba(96, 165, 250, 0.3)',
+    shadowColor: colors.primary,
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+});
 
 const styles = StyleSheet.create({
   toolbarContainer: {
@@ -1053,5 +1170,6 @@ const styles = StyleSheet.create({
     marginLeft: 12,
   },
 });
+
 
 export default RichTextToolbar;

@@ -1,4 +1,7 @@
-// app/Quiz/multiplayer-lobby.tsx
+// app/Quiz/multiplayer-lobby.tsx with Avatars & Themes & Animations
+import ThemeAnimations from '@/components/Interface/theme-animations';
+import { getAvatarUrl } from '@/constants/avatars';
+import { getTheme } from '@/constants/friend-card-themes';
 import { db } from '@/firebase';
 import { useBacklogLogger } from '@/hooks/useBackLogLogger';
 import { getCurrentUserData } from '@/services/auth-service';
@@ -15,6 +18,7 @@ import {
   togglePowerUps
 } from '@/services/multiplayer-service';
 import { QuizService, type Quiz } from '@/services/quiz-service';
+import { getUserThemesBatch } from '@/services/theme-service';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -22,8 +26,10 @@ import { doc, getDoc } from 'firebase/firestore';
 import React, { useEffect, useRef, useState } from 'react';
 import {
   Alert,
+  Animated,
   Clipboard,
   FlatList,
+  Image,
   SafeAreaView,
   StyleSheet,
   Switch,
@@ -31,6 +37,181 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+
+// Extended player type with avatar and theme
+interface EnhancedSessionPlayer extends SessionPlayer {
+  avatarIndex?: number;
+  themeId?: string;
+}
+
+// PlayerCard component - defined outside to ensure proper hook initialization
+const PlayerCard = React.memo(({ 
+  item, 
+  currentUserId 
+}: { 
+  item: EnhancedSessionPlayer; 
+  currentUserId: string;
+}) => {
+  const isCurrentUser = item.uid === currentUserId;
+  const statusColor =
+    item.status === 'ready' ? '#10b981' : 
+    item.status === 'disconnected' ? '#ef4444' : 
+    '#94a3b8';
+
+  const avatarUrl = getAvatarUrl(item.avatarIndex ?? 0);
+  const theme = getTheme(item.themeId || 'default');
+  const [isMounted, setIsMounted] = useState(false);
+
+  console.log(`🎨 Rendering player ${item.displayName}: themeId=${item.themeId}, theme=${theme.id}, animated=${theme.animated}`);
+
+  // Animation refs for glow/pulse effects
+  const glowAnim = useRef(new Animated.Value(0)).current;
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+
+  // Mount effect - similar to FriendCard
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
+
+  // Start animations - similar to FriendCard
+  useEffect(() => {
+    if (theme.animated && isMounted) {
+      if (theme.animationType === 'glow' || theme.borderGlow) {
+        Animated.loop(
+          Animated.sequence([
+            Animated.timing(glowAnim, {
+              toValue: 1,
+              duration: 1500,
+              useNativeDriver: true,
+            }),
+            Animated.timing(glowAnim, {
+              toValue: 0,
+              duration: 1500,
+              useNativeDriver: true,
+            }),
+          ])
+        ).start();
+      }
+
+      if (theme.animationType === 'pulse') {
+        Animated.loop(
+          Animated.sequence([
+            Animated.timing(pulseAnim, {
+              toValue: 1.03,
+              duration: 1000,
+              useNativeDriver: true,
+            }),
+            Animated.timing(pulseAnim, {
+              toValue: 1,
+              duration: 1000,
+              useNativeDriver: true,
+            }),
+          ])
+        ).start();
+      }
+    }
+  }, [theme.animated, theme.animationType, theme.borderGlow, isMounted]);
+
+  const glowOpacity = glowAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.3, 0.8],
+  });
+
+  // Apply theme styling to card - make background transparent if gradient exists
+  const cardStyle = [
+    styles.playerCard,
+    {
+      backgroundColor: theme.gradientColors ? 'transparent' : (theme.backgroundColor || '#1e293b'),
+      borderColor: theme.borderColor || '#334155',
+      borderWidth: theme.borderWidth || 1,
+    },
+    theme.shadowColor && {
+      shadowColor: theme.shadowColor,
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.3,
+      shadowRadius: 4,
+      elevation: 4,
+    },
+  ];
+
+  return (
+    <Animated.View style={[styles.playerCardWrapper, { transform: [{ scale: pulseAnim }] }]}>
+      {/* Theme gradient background - must be behind content */}
+      {theme.gradientColors && theme.gradientColors.length > 0 && (
+        <LinearGradient
+          colors={theme.gradientColors as any}
+          style={[StyleSheet.absoluteFillObject, { borderRadius: 12 }]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+        />
+      )}
+
+      {/* Theme animations (particles, shimmer, wave, matrix, etc.) */}
+      {theme.animated && (
+        <ThemeAnimations 
+          theme={theme}
+          containerStyle={{ borderRadius: 12 }}
+        />
+      )}
+
+      {/* Theme glow effect with animation */}
+      {theme.borderGlow && theme.glowColor && (
+        <Animated.View
+          style={[
+            StyleSheet.absoluteFillObject,
+            {
+              borderRadius: 12,
+              borderWidth: 2,
+              borderColor: theme.glowColor,
+              opacity: glowOpacity,
+            },
+          ]}
+        />
+      )}
+
+      <View style={cardStyle}>
+        <View style={styles.playerInfo}>
+          {/* Avatar with theme-colored border */}
+          <View style={styles.avatarWrapper}>
+            <LinearGradient
+              colors={theme.gradientColors && theme.gradientColors.length > 0 
+                ? theme.gradientColors as any 
+                : [statusColor, statusColor]}
+              style={styles.avatarBorder}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+            >
+              <View style={styles.avatarImageContainer}>
+                <Image
+                  source={{ uri: avatarUrl }}
+                  style={styles.avatarImage}
+                  resizeMode="cover"
+                />
+              </View>
+            </LinearGradient>
+            
+            {/* Status indicator */}
+            <View style={[styles.statusIndicator, { backgroundColor: statusColor }]}>
+              <View style={styles.statusPulse} />
+            </View>
+          </View>
+
+          <View style={styles.playerDetails}>
+            <Text style={styles.playerName}>
+              {item.displayName} {isCurrentUser && '(You)'}
+            </Text>
+            <Text style={styles.playerStatus}>
+              {item.status === 'ready' ? '✓ Ready' : 
+               item.status === 'disconnected' ? '✗ Disconnected' : 
+               '○ Waiting'}
+            </Text>
+          </View>
+        </View>
+        <View style={[styles.statusDot, { backgroundColor: statusColor }]} />
+      </View>
+    </Animated.View>
+  );
+});
 
 const MultiplayerLobby = () => {
   const router = useRouter();
@@ -41,13 +222,12 @@ const MultiplayerLobby = () => {
   const [sessionId, setSessionId] = useState<string | null>(
     typeof paramSessionId === 'string' ? paramSessionId : null
   );
-  const [players, setPlayers] = useState<SessionPlayer[]>([]);
+  const [players, setPlayers] = useState<EnhancedSessionPlayer[]>([]);
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [isReady, setIsReady] = useState(false);
   const [loading, setLoading] = useState(true);
   const [isCreator, setIsCreator] = useState(false);
   const isStartingRef = useRef(false);
-
 
   // Load quiz and create session if needed
   useEffect(() => {
@@ -72,9 +252,11 @@ const MultiplayerLobby = () => {
       }
     });
 
-    const unsubscribePlayers = listenToPlayers(sessionId, (playersData) => {
-      setPlayers(playersData);
-      checkAutoStart(playersData);
+    const unsubscribePlayers = listenToPlayers(sessionId, async (playersData) => {
+      // Enhance players with avatar and theme data
+      const enhancedPlayers = await enhancePlayersWithUserData(playersData);
+      setPlayers(enhancedPlayers);
+      checkAutoStart(enhancedPlayers);
     });
 
     return () => {
@@ -83,124 +265,158 @@ const MultiplayerLobby = () => {
     };
   }, [sessionId]);
 
-const initializeLobby = async () => {
-  try {
-    setLoading(true);
-
-    console.log('Initializing lobby with quizId:', quizId, 'sessionId:', paramSessionId);
-
-    // Get current user
-    const user = await getCurrentUserData();
-    if (!user) {
-      console.log('No user found');
-      Alert.alert('Error', 'Please login to continue');
-      router.back();
+  // IMPROVED: Function to fetch avatar and theme data for players using theme service
+  const enhancePlayersWithUserData = async (playersData: SessionPlayer[]): Promise<EnhancedSessionPlayer[]> => {
+    try {
+      const playerIds = playersData.map(p => p.uid);
       
-      return;
+      // Batch fetch themes using the theme service (with caching)
+      const themeMap = await getUserThemesBatch(playerIds);
+      console.log('✅ Themes fetched via theme service:', Object.fromEntries(themeMap));
+      
+      // Fetch avatars in parallel
+      const enhancedPlayers = await Promise.all(
+        playersData.map(async (player) => {
+          try {
+            // Get theme from the batch result
+            const themeId = themeMap.get(player.uid) || 'default';
+            
+            // Fetch avatar index from user document
+            const userDoc = await getDoc(doc(db, 'users', player.uid));
+            const avatarIndex = userDoc.exists() ? (userDoc.data().avatarIndex ?? 0) : 0;
+            
+            console.log(`👤 ${player.displayName}: avatar=${avatarIndex}, theme=${themeId}`);
+            
+            return {
+              ...player,
+              avatarIndex,
+              themeId,
+            };
+          } catch (error) {
+            console.error(`Error fetching user data for ${player.uid}:`, error);
+            return { ...player, avatarIndex: 0, themeId: 'default' };
+          }
+        })
+      );
+      
+      return enhancedPlayers;
+    } catch (error) {
+      console.error('Error enhancing players:', error);
+      return playersData.map(p => ({ ...p, avatarIndex: 0, themeId: 'default' }));
     }
-    console.log('User loaded:', user.uid);
-    setCurrentUser(user);
+  };
 
-    // Normalize params
-    const normalizedQuizId = Array.isArray(quizId) ? quizId[0] : quizId;
-    const normalizedSessionId = Array.isArray(paramSessionId) ? paramSessionId[0] : paramSessionId;
+  const initializeLobby = async () => {
+    try {
+      setLoading(true);
 
-    // If joining (sessionId provided but no quizId), fetch session first to get quizId
-    if (normalizedSessionId && !normalizedQuizId) {
-      console.log('Joining existing session, fetching session data...');
-      
-      const sessionDoc = await getDoc(doc(db, 'multiplayerSessions', normalizedSessionId));
-      if (!sessionDoc.exists()) {
-        Alert.alert('Error', 'Session not found');
+      console.log('Initializing lobby with quizId:', quizId, 'sessionId:', paramSessionId);
+
+      // Get current user
+      const user = await getCurrentUserData();
+      if (!user) {
+        console.log('No user found');
+        Alert.alert('Error', 'Please login to continue');
         router.back();
         return;
       }
-      
-      const sessionData = sessionDoc.data() as MultiplayerSession;
-      const sessionQuizId = sessionData.quizId;
-      
-      console.log('Loading quiz from session:', sessionQuizId);
-      // SKIP OWNERSHIP CHECK for multiplayer quizzes
-      const quizData = await QuizService.getQuizById(sessionQuizId, true);
-      if (!quizData) {
-        Alert.alert('Error', 'Quiz not found');
-        router.back();
-        return;
-      }
-      
-      console.log('Quiz loaded:', quizData.title);
-      setQuiz(quizData);
-      setSessionId(normalizedSessionId);
-      setIsCreator(false);
-      addBacklogEvent(BACKLOG_EVENTS.USER_JOINED_MULTIPLAYER_SESSION, {
+      console.log('User loaded:', user.uid);
+      setCurrentUser(user);
+
+      // Normalize params
+      const normalizedQuizId = Array.isArray(quizId) ? quizId[0] : quizId;
+      const normalizedSessionId = Array.isArray(paramSessionId) ? paramSessionId[0] : paramSessionId;
+
+      // If joining (sessionId provided but no quizId), fetch session first to get quizId
+      if (normalizedSessionId && !normalizedQuizId) {
+        console.log('Joining existing session, fetching session data...');
+        
+        const sessionDoc = await getDoc(doc(db, 'multiplayerSessions', normalizedSessionId));
+        if (!sessionDoc.exists()) {
+          Alert.alert('Error', 'Session not found');
+          router.back();
+          return;
+        }
+        
+        const sessionData = sessionDoc.data() as MultiplayerSession;
+        const sessionQuizId = sessionData.quizId;
+        
+        console.log('Loading quiz from session:', sessionQuizId);
+        const quizData = await QuizService.getQuizById(sessionQuizId, true);
+        if (!quizData) {
+          Alert.alert('Error', 'Quiz not found');
+          router.back();
+          return;
+        }
+        
+        console.log('Quiz loaded:', quizData.title);
+        setQuiz(quizData);
+        setSessionId(normalizedSessionId);
+        setIsCreator(false);
+        addBacklogEvent(BACKLOG_EVENTS.USER_JOINED_MULTIPLAYER_SESSION, {
           sessionId: normalizedSessionId,
           quizId: sessionQuizId,
           userId: user.uid,
         });
-    } else if (normalizedQuizId && typeof normalizedQuizId === 'string') {
-      // Hosting (quizId provided, create session)
-      console.log('Loading quiz:', normalizedQuizId);
-      // CHECK OWNERSHIP when hosting (user must own the quiz)
-      const quizData = await QuizService.getQuizById(normalizedQuizId, false);
-      if (!quizData) {
-        console.log('Quiz not found');
-        Alert.alert('Error', 'Quiz not found');
-        router.back();
-        return;
-      }
-      console.log('Quiz loaded:', quizData.title);
-      setQuiz(quizData);
+      } else if (normalizedQuizId && typeof normalizedQuizId === 'string') {
+        console.log('Loading quiz:', normalizedQuizId);
+        const quizData = await QuizService.getQuizById(normalizedQuizId, false);
+        if (!quizData) {
+          console.log('Quiz not found');
+          Alert.alert('Error', 'Quiz not found');
+          router.back();
+          return;
+        }
+        console.log('Quiz loaded:', quizData.title);
+        setQuiz(quizData);
 
-      // Create session if not provided
-      if (!normalizedSessionId) {
-        console.log('Creating new multiplayer session...');
-        const { sessionId: newSessionId, sessionCode } = await createMultiplayerSession(
-          quizData,
-          user.uid,
-          user.displayName || 'Anonymous'
-        );
-        
-        console.log('Session created:', newSessionId, sessionCode);
-        setSessionId(newSessionId);
-        setIsCreator(true);
-        addBacklogEvent(BACKLOG_EVENTS.USER_CREATED_MULTIPLAYER_SESSION, {
+        if (!normalizedSessionId) {
+          console.log('Creating new multiplayer session...');
+          const { sessionId: newSessionId, sessionCode } = await createMultiplayerSession(
+            quizData,
+            user.uid,
+            user.displayName || 'Anonymous'
+          );
+          
+          console.log('Session created:', newSessionId, sessionCode);
+          setSessionId(newSessionId);
+          setIsCreator(true);
+          addBacklogEvent(BACKLOG_EVENTS.USER_CREATED_MULTIPLAYER_SESSION, {
             sessionId: newSessionId,
             quizId: normalizedQuizId,
             userId: user.uid,
             sessionCode,
           });
+        } else {
+          console.log('Using existing sessionId:', normalizedSessionId);
+          setSessionId(normalizedSessionId);
+        }
       } else {
-        console.log('Using existing sessionId:', normalizedSessionId);
-        setSessionId(normalizedSessionId);
+        console.log('Invalid params - quizId:', normalizedQuizId, 'sessionId:', normalizedSessionId);
+        Alert.alert('Error', 'Invalid session parameters');
+        router.back();
       }
-    } else {
-      console.log('Invalid params - quizId:', normalizedQuizId, 'sessionId:', normalizedSessionId);
-      Alert.alert('Error', 'Invalid session parameters');
+    } catch (error) {
+      console.error('Error initializing lobby:', error);
+      Alert.alert('Error', `Failed to initialize lobby: ${error}`);
+      logError(error, 'initializeLobby', currentUser?.email);
       router.back();
+    } finally {
+      setLoading(false);
     }
-  } catch (error) {
-    console.error('Error initializing lobby:', error);
-    Alert.alert('Error', `Failed to initialize lobby: ${error}`);
-    logError(error, 'initializeLobby', currentUser?.email);
-    router.back();
-  } finally {
-    setLoading(false);
-  }
-};
+  };
 
-    const checkAutoStart = async (playersData: SessionPlayer[]) => {
-  // Auto-start if all players are ready and minimum players met
-  if (playersData.length >= 2) {
-    const allReady = playersData.every((p) => p.status === 'ready');
-    
-    // Don't rely on state - check against session directly if needed
-    if (allReady && sessionId) {
-      console.log('All players ready, starting quiz...');
-      isStartingRef.current = true;
-      await handleStartQuiz();
+  const checkAutoStart = async (playersData: EnhancedSessionPlayer[]) => {
+    if (playersData.length >= 2) {
+      const allReady = playersData.every((p) => p.status === 'ready');
+      
+      if (allReady && sessionId) {
+        console.log('All players ready, starting quiz...');
+        isStartingRef.current = true;
+        await handleStartQuiz();
+      }
     }
-  }
-};
+  };
 
   const handleToggleReady = async () => {
     if (!sessionId || !currentUser) return;
@@ -280,35 +496,9 @@ const initializeLobby = async () => {
     );
   };
 
-  const renderPlayer = ({ item }: { item: SessionPlayer }) => {
-    const isCurrentUser = item.uid === currentUser?.uid;
-    const statusColor =
-      item.status === 'ready' ? '#10b981' : 
-      item.status === 'disconnected' ? '#ef4444' : 
-      '#94a3b8';
-
-    return (
-      <View style={styles.playerCard}>
-        <View style={styles.playerInfo}>
-          <View style={[styles.avatarCircle, { backgroundColor: statusColor }]}>
-            <Text style={styles.avatarText}>
-              {item.displayName.charAt(0).toUpperCase()}
-            </Text>
-          </View>
-          <View style={styles.playerDetails}>
-            <Text style={styles.playerName}>
-              {item.displayName} {isCurrentUser && '(You)'}
-            </Text>
-            <Text style={styles.playerStatus}>
-              {item.status === 'ready' ? 'Ready' : 
-               item.status === 'disconnected' ? 'Disconnected' : 
-               'Waiting'}
-            </Text>
-          </View>
-        </View>
-        <View style={[styles.statusDot, { backgroundColor: statusColor }]} />
-      </View>
-    );
+  // Simplified render function - just returns the PlayerCard component
+  const renderPlayer = ({ item }: { item: EnhancedSessionPlayer }) => {
+    return <PlayerCard item={item} currentUserId={currentUser?.uid || ''} />;
   };
 
   if (loading) {
@@ -336,7 +526,6 @@ const initializeLobby = async () => {
   }
 
   const allPlayersReady = players.length >= 2 && players.every((p) => p.status === 'ready');
-  const canStart = allPlayersReady && isCreator;
 
   return (
     <LinearGradient colors={['#0f172a', '#1e293b']} style={styles.container}>
@@ -579,37 +768,71 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   playersListContent: {
-    gap: 8,
+    gap: 10,
+  },
+  playerCardWrapper: {
+    position: 'relative',
+    borderRadius: 12,
+    overflow: 'hidden',
+    marginBottom: 2,
   },
   playerCard: {
-    backgroundColor: '#1e293b',
     borderRadius: 12,
     padding: 16,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#334155',
   },
   playerInfo: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
+    flex: 1,
   },
-  avatarCircle: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+  avatarWrapper: {
+    position: 'relative',
+  },
+  avatarBorder: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    padding: 2,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  avatarText: {
-    color: '#ffffff',
-    fontSize: 20,
-    fontWeight: 'bold',
+  avatarImageContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    overflow: 'hidden',
+    backgroundColor: 'rgba(31, 41, 55, 0.5)',
+  },
+  avatarImage: {
+    width: '100%',
+    height: '100%',
+  },
+  statusIndicator: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    borderWidth: 2,
+    borderColor: '#1e293b',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  statusPulse: {
+    position: 'absolute',
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    backgroundColor: 'inherit',
   },
   playerDetails: {
-    gap: 4,
+    gap: 3,
+    flex: 1,
   },
   playerName: {
     color: '#ffffff',
@@ -618,8 +841,10 @@ const styles = StyleSheet.create({
   },
   playerStatus: {
     color: '#94a3b8',
-    fontSize: 14,
+    fontSize: 13,
+    fontWeight: '500',
   },
+
   statusDot: {
     width: 12,
     height: 12,
