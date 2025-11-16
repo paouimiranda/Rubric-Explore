@@ -1,9 +1,19 @@
-import { onAuthStateChanged, User } from 'firebase/auth';
-import React, { createContext, ReactNode, useContext, useEffect, useState } from 'react';
+import { onAuthStateChanged, User } from "firebase/auth";
+import React, {
+  createContext,
+  ReactNode,
+  useContext,
+  useEffect,
+  useState,
+} from "react";
 
-import { auth } from '../../firebase';
-import { getCurrentUserData } from '../../services/auth-service';
-import { clearUserData, getUserData, saveUserData } from '../../services/storage'; // Updated: Use new storage service
+import { auth } from "../../firebase";
+import { getCurrentUserData } from "../../services/auth-service";
+import {
+  clearUserData,
+  getUserData,
+  saveUserData,
+} from "../../services/storage";
 
 interface UserData {
   uid: string;
@@ -37,7 +47,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const useAuth = (): AuthContextType => {
   const context = useContext(AuthContext);
-  if (!context) throw new Error('useAuth must be used within an AuthProvider');
+  if (!context) throw new Error("useAuth must be used within an AuthProvider");
   return context;
 };
 
@@ -49,44 +59,43 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   const [user, setUser] = useState<User | null>(null);
   const [userData, setUserData] = useState<UserData | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
-  const [initialized, setInitialized] = useState<boolean>(false);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      console.log('🧠 Auth state changed');
+    const unsubscribe = onAuthStateChanged(auth, async (authUser) => {
+      console.log("🔥 Firebase auth state changed");
 
-      if (user) {
-        console.log('🔐 Signed in as:', user.uid);
-        setUser(user);
-
-        try {
-          // Try cached data first
-          const cached = await getUserData(); // Updated: Use encrypted storage
-          if (cached) {
-            setUserData(cached);
-            console.log('💾 Loaded userData from secure storage');
-          }
-
-          // Always refresh in background
-          const freshData = await getCurrentUserData();
-          if (freshData) {
-            setUserData(freshData as UserData);
-            await saveUserData(freshData as UserData); // Updated: Save securely
-            console.log('✅ Updated userData from Firestore and saved securely');
-          }
-        } catch (err) {
-          console.error('❌ Failed to load/save user data:', err);
-          setUserData(null);
-        }
-      } else {
-        console.log('🚪 User signed out');
+      if (!authUser) {
+        console.log("🚪 Logged out");
         setUser(null);
         setUserData(null);
-        await clearUserData(); // Updated: Clear securely
+        await clearUserData();
+        setLoading(false);
+        return;
+      }
+
+      console.log("🔐 Logged in:", authUser.uid);
+      setUser(authUser);
+
+      try {
+        // 1️⃣ Load cached data instantly (faster UI)
+        const cached = await getUserData();
+        if (cached) {
+          setUserData(cached);
+          console.log("💾 Loaded cached user data");
+        }
+
+        // 2️⃣ Fetch fresh Firestore data in background
+        const fresh = await getCurrentUserData();
+        if (fresh) {
+          setUserData(fresh as UserData);
+          await saveUserData(fresh as UserData);
+          console.log("🌐 Updated user data from Firestore");
+        }
+      } catch (err) {
+        console.error("❌ Error loading user data:", err);
       }
 
       setLoading(false);
-      setInitialized(true);
     });
 
     return unsubscribe;
@@ -95,7 +104,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   const value: AuthContextType = {
     user,
     userData,
-    loading: !initialized || loading,
+    loading,
     isAuthenticated: !!user,
   };
 
