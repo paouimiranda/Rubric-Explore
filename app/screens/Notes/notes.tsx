@@ -14,7 +14,6 @@ import { router } from "expo-router";
 import LottieView from 'lottie-react-native';
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
-  Animated,
   Dimensions,
   FlatList,
   Image,
@@ -22,7 +21,6 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
@@ -334,47 +332,7 @@ export default function NotesHome() {
     }
   };
 
-  const AnimatedNotebookCard = ({ item, index }: { item: Notebook; index: number }) => {
-    const fadeAnim = useRef(new Animated.Value(0)).current;
-    const slideAnim = useRef(new Animated.Value(50)).current;
-    const scaleAnim = useRef(new Animated.Value(0.95)).current;
-
-    useEffect(() => {
-      fadeAnim.setValue(0);
-      slideAnim.setValue(50);
-      scaleAnim.setValue(0.95);
-
-      Animated.parallel([
-        Animated.timing(fadeAnim, {
-          toValue: 1,
-          duration: 500,
-          delay: index * 80,
-          useNativeDriver: true,
-        }),
-        Animated.timing(slideAnim, {
-          toValue: 0,
-          duration: 500,
-          delay: index * 80,
-          useNativeDriver: true,
-        }),
-        Animated.spring(scaleAnim, {
-          toValue: 1,
-          delay: index * 80,
-          tension: 40,
-          friction: 8,
-          useNativeDriver: true,
-        }),
-      ]).start();
-    }, [viewMode]);
-
-    const animatedStyle = {
-      opacity: fadeAnim,
-      transform: [
-        { translateY: slideAnim },
-        { scale: scaleAnim },
-      ],
-    };
-
+  const NotebookCard = ({ item }: { item: Notebook }) => {
     const primaryProperty = item.properties?.[0];
     const coverImageSource = getCoverImageSource(item.coverImage);
     const notebookColor = item.color || "#3b82f6";
@@ -383,7 +341,7 @@ export default function NotesHome() {
 
     if (viewMode === 'list') {
       return (
-        <Animated.View style={[styles.listCardWrapper, animatedStyle]}>
+        <View style={styles.listCardWrapper}>
           <TouchableOpacity
             style={styles.listCardContainer}
             onPress={() =>
@@ -480,13 +438,13 @@ export default function NotesHome() {
               )}
             </LinearGradient>
           </TouchableOpacity>
-        </Animated.View>
+        </View>
       );
     }
 
     if (viewMode === 'compact') {
       return (
-        <Animated.View style={[styles.compactCardWrapper, animatedStyle]}>
+        <View style={styles.compactCardWrapper}>
           <TouchableOpacity
             style={styles.compactCardContainer}
             onPress={() =>
@@ -560,12 +518,12 @@ export default function NotesHome() {
               </View>
             </LinearGradient>
           </TouchableOpacity>
-        </Animated.View>
+        </View>
       );
     }
 
     return (
-      <Animated.View style={[styles.gridCardWrapper, animatedStyle]}>
+      <View style={styles.gridCardWrapper}>
         <TouchableOpacity
           style={styles.gridCardContainer}
           onPress={() =>
@@ -636,7 +594,7 @@ export default function NotesHome() {
             )}
           </LinearGradient>
         </TouchableOpacity>
-      </Animated.View>
+      </View>
     );
   };
 
@@ -657,7 +615,7 @@ export default function NotesHome() {
       <SafeAreaView style={styles.container}>
         <FlatList
           data={filtered}
-          renderItem={({ item, index }) => <AnimatedNotebookCard item={item} index={index} />}
+          renderItem={({ item }) => <NotebookCard item={item} />}
           keyExtractor={(item) => item.id!}
           key={viewMode}
           numColumns={viewMode === 'grid' ? 2 : 1}
@@ -671,63 +629,42 @@ export default function NotesHome() {
           ListHeaderComponent={
             <View style={styles.headerContainer}>
               <View style={styles.titleSection}>
-                <Text style={styles.mainTitle}>My Notebooks</Text>
-                <Text style={styles.subtitle}>Organize your thoughts and ideas</Text>
-              </View>
-
-              <View style={styles.searchRow}>
-                <View style={styles.searchWrapper}>
-                  <LinearGradient
-                    colors={['#ec4899', '#a855f7', '#ec4899']}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 0 }}
-                    style={styles.searchGradientBorder}
-                  >
-                    <View style={styles.searchContainer}>
-                      <Ionicons name="search" size={20} color="#ec4899" />
-                      <TextInput
-                        style={styles.searchInput}
-                        placeholder="Search notebooks..."
-                        placeholderTextColor="#64748b"
-                        value={search}
-                        onChangeText={setSearch}
-                      />
-                      {search.length > 0 && (
-                        <TouchableOpacity onPress={() => setSearch('')} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                          <Ionicons name="close-circle" size={20} color="#64748b" />
-                        </TouchableOpacity>
-                      )}
+                <View style={styles.titleRow}>
+                  <View style={styles.titleTextContainer}>
+                    <Text style={styles.mainTitle}>My Notebooks</Text>
+                    <Text style={styles.subtitle} adjustsFontSizeToFit numberOfLines={1}>Organize your thoughts and ideas</Text>
+                  </View>
+                  
+                  <View style={styles.headerButtons}>
+                    <View style={styles.actionButtonWrapper}>
+                      <LinearGradient
+                        colors={['#8b5cf6', '#a78bfa']}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 1 }}
+                        style={styles.actionButton}
+                      >
+                        <JoinNoteIconButton 
+                          style={styles.joinButtonOverride}
+                          onNoteJoined={(noteId, permission) => {}}
+                        />
+                      </LinearGradient>
                     </View>
-                  </LinearGradient>
-                </View>
-                
-                <TouchableOpacity 
-                  onPress={cycleViewMode}
-                  activeOpacity={0.8}
-                  style={styles.actionButtonWrapper}
-                >
-                  <LinearGradient
-                    colors={['#f59e0b', '#fb923c']}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 1 }}
-                    style={styles.actionButton}
-                  >
-                    <Ionicons name={getViewIcon()} size={22} color="#ffffff" />
-                  </LinearGradient>
-                </TouchableOpacity>
-                
-                <View style={styles.actionButtonWrapper}>
-                  <LinearGradient
-                    colors={['#8b5cf6', '#a78bfa']}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 1 }}
-                    style={styles.actionButton}
-                  >
-                    <JoinNoteIconButton 
-                      style={styles.joinButtonOverride}
-                      onNoteJoined={(noteId, permission) => {}}
-                    />
-                  </LinearGradient>
+                    
+                    <TouchableOpacity 
+                      onPress={cycleViewMode}
+                      activeOpacity={0.8}
+                      style={styles.actionButtonWrapper}
+                    >
+                      <LinearGradient
+                        colors={['#f59e0b', '#fb923c']}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 1 }}
+                        style={styles.actionButton}
+                      >
+                        <Ionicons name={getViewIcon()} size={22} color="#ffffff" />
+                      </LinearGradient>
+                    </TouchableOpacity>
+                  </View>
                 </View>
               </View>
               
@@ -745,7 +682,8 @@ export default function NotesHome() {
                       key={tag}
                       style={[
                         styles.tagPill,
-                        active && { backgroundColor: tagColor, borderColor: tagColor }
+                        { borderColor: tagColor },
+                        active && { backgroundColor: tagColor }
                       ]}
                       onPress={() => setActiveTag(tag)}
                       activeOpacity={0.8}
@@ -763,7 +701,19 @@ export default function NotesHome() {
             </View>
           }
           ListEmptyComponent={
-            !loading ? (
+            loading ? (
+              <View style={styles.loadingContainer}>
+                <View style={styles.lottieContainer}>
+                  <LottieView
+                    source={require('@/assets/animations/quiz-loading.json')}
+                    autoPlay
+                    loop
+                    style={styles.lottieAnimation}
+                  />
+                </View>
+                <Text style={styles.loadingText}>Loading notebooks...</Text>
+              </View>
+            ) : (
               <View style={styles.emptyContainer}>
                 <View style={styles.emptyIconContainer}>
                   <LinearGradient
@@ -783,7 +733,7 @@ export default function NotesHome() {
                   }
                 </Text>
               </View>
-            ) : null
+            )
           }
         />
 
@@ -839,6 +789,14 @@ const styles = StyleSheet.create({
     marginBottom: 24,
     paddingTop: 8,
   },
+  titleRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+  },
+  titleTextContainer: {
+    flex: 1,
+  },
   mainTitle: {
     fontSize: 32,
     fontWeight: '800',
@@ -851,35 +809,10 @@ const styles = StyleSheet.create({
     color: '#94a3b8',
     fontWeight: '500',
   },
-
-  // ========== SEARCH AND ACTIONS ==========
-  searchRow: {
+  headerButtons: {
     flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 20,
     gap: 12,
-  },
-  searchWrapper: {
-    flex: 1,
-  },
-  searchGradientBorder: {
-    borderRadius: 16,
-    padding: 2,
-  },
-  searchContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#1e293b',
-    borderRadius: 14,
-    paddingHorizontal: 18,
-    height: 52,
-    gap: 12,
-  },
-  searchInput: {
-    flex: 1,
-    color: '#ffffff',
-    fontSize: 15,
-    fontWeight: '500',
+    marginLeft: 16,
   },
   actionButtonWrapper: {
     borderRadius: 14,
@@ -917,9 +850,8 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderRadius: 24,
     marginRight: 10,
-    backgroundColor: '#1e293b',
+    backgroundColor: 'transparent',
     borderWidth: 2,
-    borderColor: 'transparent',
   },
   tagText: {
     fontSize: 14,
@@ -1014,37 +946,17 @@ const styles = StyleSheet.create({
     right: 20,
     zIndex: 999,
   },
-  fabGlow: {
-    position: 'absolute',
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    top: -4,
-    left: -4,
-    right: -4,
-    bottom: -4,
-  },
-  fabGlowGradient: {
-    width: '100%',
-    height: '100%',
-    borderRadius: 36,
-    opacity: 0.4,
-  },
-  fabTouchable: {
-    borderRadius: 32,
-    overflow: 'hidden',
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.3,
-    shadowRadius: 12,
-    elevation: 8,
-  },
   fab: {
     width: 64,
     height: 64,
     borderRadius: 34,
     justifyContent: 'center',
     alignItems: 'center',
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 8,
   },
 
   // ========== LIST VIEW ==========
@@ -1378,4 +1290,4 @@ const styles = StyleSheet.create({
     shadowRadius: 2,
     elevation: 2,
   },
-})
+});

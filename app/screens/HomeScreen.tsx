@@ -27,6 +27,7 @@ let hasShownAnimation = false;
 
 export default function HomeScreen() {
   const router = useRouter();
+  const [isNavigating, setIsNavigating] = useState(false);
   const insets = useSafeAreaInsets();
   const [shouldAnimate, setShouldAnimate] = useState(!hasShownAnimation);
   const { userData } = useAuth();
@@ -68,6 +69,16 @@ export default function HomeScreen() {
   ]).current;
 
   const bottomNavAnim = useRef(new Animated.Value(shouldAnimate ? 100 : 0)).current;
+
+  const handleNavigation = (route: string) => {
+    if (isNavigating) return;
+    
+    setIsNavigating(true);
+    router.push(route as any);
+    
+    // Reset after a short delay as backup
+    setTimeout(() => setIsNavigating(false), 1000);
+  };
 
   useEffect(() => {
     if (fontsLoaded && shouldAnimate) {
@@ -208,33 +219,37 @@ export default function HomeScreen() {
             title="notes" 
             color={["#FF999A", "#EE007F"] as const}
             image={require('../../assets/images/notes_img.png')} 
-            onPress={() => router.push('./Notes/notes')}
+            onPress={() => handleNavigation('./Notes/notes')}
             animValue={moduleAnims[0]}
             delay={0}
+            disabled={isNavigating}
           />
           <AnimatedModuleButton 
             title="quiz" 
             color={["#F2CD41", "#E77F00" ] as const}
             image={require('../../assets/images/quiz_img.png')} 
-            onPress={() => router.push('./Quiz/quiz')}
+            onPress={() => handleNavigation('./Quiz/quiz')}
             animValue={moduleAnims[1]}
             delay={500}
+            disabled={isNavigating}
           />
           <AnimatedModuleButton 
             title="planner" 
             color={["#63DC9A", "#52C72B"] as const}
             image={require('../../assets/images/planner_img.png')} 
-            onPress={() => router.push('./Planner/planner')}
+            onPress={() => handleNavigation('./Planner/planner')}
             animValue={moduleAnims[2]}
             delay={1000}
+            disabled={isNavigating}
           />
           <AnimatedModuleButton 
             title="friendlist" 
             color={["#6ADBCE", "#568CD2"] as const}
             image={require('../../assets/images/social_img.png')} 
-            onPress={() => router.push('./Friends/friendlist')}
+            onPress={() => handleNavigation('./Friends/friendlist')}
             animValue={moduleAnims[3]}
             delay={1500}
+            disabled={isNavigating}
           />
         </View>
 
@@ -246,7 +261,7 @@ export default function HomeScreen() {
 
 /* ------------------------------ Component Styles ------------------------------ */
 
-const AnimatedModuleButton = ({ title, color, image, onPress, animValue, delay }: any) => {
+const AnimatedModuleButton = ({ title, color, image, onPress, animValue, delay, disabled }: any) => {
   const scaleValue = useRef(new Animated.Value(1)).current;
   const floatAnim = useRef(new Animated.Value(0)).current;
 
@@ -318,6 +333,7 @@ const AnimatedModuleButton = ({ title, color, image, onPress, animValue, delay }
         onPressIn={handlePressIn}
         onPressOut={handlePressOut}
         activeOpacity={0.8}
+        disabled={disabled}
       >
         <LinearGradient colors={color} start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }} style={styles.moduleButton}>
           <Image source={image} style={styles.moduleImage} resizeMode="contain" />

@@ -3,7 +3,11 @@ import { useAuth } from '@/app/contexts/AuthContext';
 import { Notebook } from '@/app/types/notebook';
 import EditProfileModal from '@/components/Interface/edit-profile-modal';
 import BottomNavigation from '@/components/Interface/nav-bar';
+import AnimatedProfileBackground from '@/components/Profile/AnimatedProfileBackground';
+import ProfileParticles from '@/components/Profile/ProfileParticles';
+import ProfileThemeSelector from '@/components/Profile/ProfileThemeSelector';
 import { getAvatarUrl } from '@/constants/avatars';
+import { getThemeById } from '@/constants/profile-theme';
 import { db } from '@/firebase';
 import { getPublicNotebooks } from '@/services/notes-service';
 import { Quiz, QuizService } from '@/services/quiz-service';
@@ -25,8 +29,6 @@ import {
   TouchableOpacity,
   View
 } from 'react-native';
-import FriendCardThemeSelector from './friend-card-theme-selector';
-
 
 interface UserData {
   uid: string;
@@ -46,7 +48,6 @@ export default function ProfileScreen() {
   const { user } = useAuth();
   const { userId } = useLocalSearchParams();
   
-  // Determine if viewing own profile or someone else's
   const viewingUserId = (userId as string) || user?.uid;
   const isOwnProfile = !userId || userId === user?.uid;
   
@@ -59,9 +60,9 @@ export default function ProfileScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [previewMode, setPreviewMode] = useState(false);
-
   const [themeModalVisible, setThemeModalVisible] = useState(false);
   const [currentThemeId, setCurrentThemeId] = useState<string>('default');
+  const [ownedThemes, setOwnedThemes] = useState<string[]>(['default']);
 
   useEffect(() => {
     if (viewingUserId) {
@@ -78,7 +79,6 @@ export default function ProfileScreen() {
   );
 
   useEffect(() => {
-    // Reload data whenever preview mode changes
     if (viewingUserId && isOwnProfile) {
       loadProfileData();
     }
@@ -88,7 +88,6 @@ export default function ProfileScreen() {
     try {
       setLoading(true);
       
-      // Fetch user document
       const userRef = doc(db, 'users', viewingUserId!);
       const userSnap = await getDoc(userRef);
       
@@ -101,11 +100,12 @@ export default function ProfileScreen() {
       const userData = userSnap.data() as UserData;
       setUserData(userData);
 
-      //NEW !! For loading themes
-      const selectedTheme = userData.inventory?.selectedFriendCardTheme || 'default';
+      // Load theme settings
+      const selectedTheme = userData.inventory?.selectedProfileTheme || 'default';
+      const userOwnedThemes = userData.inventory?.ownedProfileThemes || ['default'];
       setCurrentThemeId(selectedTheme);
+      setOwnedThemes(userOwnedThemes);
       
-      // Fetch stats (own profile gets full stats, others get public stats only)
       if (isOwnProfile && !previewMode) {
         const userStats = await getUserStats(viewingUserId!);
         setStats(userStats);
@@ -114,7 +114,6 @@ export default function ProfileScreen() {
         setStats(publicStats);
       }
       
-      // Fetch public content
       const [quizzes, notebooks] = await Promise.all([
         QuizService.getPublicQuizzes(viewingUserId!),
         getPublicNotebooks(viewingUserId!),
@@ -162,6 +161,9 @@ export default function ProfileScreen() {
     });
   };
 
+  // Get current theme
+  const currentTheme = getThemeById(currentThemeId);
+
   if (loading) {
     return (
       <LinearGradient colors={['#0f2c45', '#1a3a52']} style={styles.container}>
@@ -198,7 +200,6 @@ export default function ProfileScreen() {
 
   const renderOverviewTab = () => (
     <View style={styles.tabContent}>
-      {/* Stats Grid */}
       <View style={styles.statsGrid}>
         {isOwnProfile && !previewMode ? (
           <>
@@ -323,7 +324,7 @@ export default function ProfileScreen() {
         <View style={styles.emptyState}>
           <View style={styles.emptyIconContainer}>
             <LinearGradient
-              colors={['#568CD2', '#6ADBCE']}
+              colors={currentTheme.gradient.accent}
               style={styles.emptyIconGradient}
             >
               <Ionicons name="book-outline" size={32} color="#fff" />
@@ -341,7 +342,7 @@ export default function ProfileScreen() {
             activeOpacity={0.7}
           >
             <LinearGradient
-              colors={['#568CD2', '#6ADBCE']}
+              colors={currentTheme.gradient.accent}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 0 }}
               style={styles.contentCardAccent}
@@ -349,7 +350,7 @@ export default function ProfileScreen() {
             
             <View style={styles.cardIconWrapper}>
               <LinearGradient
-                colors={['#568CD2', '#6ADBCE']}
+                colors={currentTheme.gradient.accent}
                 style={styles.cardIconGradient}
               >
                 <Ionicons name="book" size={22} color="#fff" />
@@ -451,12 +452,31 @@ export default function ProfileScreen() {
   );
 
   return (
-    <LinearGradient 
-      colors={['#0f2c45', '#1a3a52']} 
-      start={{ x: 0, y: 0 }} 
-      end={{ x: 0, y: 1 }} 
-      style={styles.container}
-    >
+    <View style={styles.container}>
+      {/* Themed Background */}
+      {currentTheme.hasAnimatedBackground ? (
+        <AnimatedProfileBackground
+          colors={currentTheme.gradient.background}
+          themeId={currentTheme.id}
+        />
+      ) : (
+        <LinearGradient
+          colors={currentTheme.gradient.background}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 0, y: 1 }}
+          style={StyleSheet.absoluteFill}
+        />
+      )}
+
+      {/* Particles Layer */}
+      {currentTheme.hasParticles && currentTheme.particleConfig && (
+        <ProfileParticles
+          type={currentTheme.particleConfig.type}
+          color={currentTheme.particleConfig.color}
+          count={currentTheme.particleConfig.count}
+        />
+      )}
+
       <SafeAreaView style={styles.container}>
         {/* Header */}
         <View style={styles.header}>
@@ -471,16 +491,15 @@ export default function ProfileScreen() {
             <RefreshControl
               refreshing={refreshing}
               onRefresh={onRefresh}
-              tintColor="#6ADBCE"
-              colors={['#6ADBCE']}
+              tintColor={currentTheme.gradient.accent[0]}
+              colors={currentTheme.gradient.accent}
             />
           }
         >
           {/* Profile Header Card */}
           <View style={styles.profileCard}>
-            {/* Decorative gradient bar */}
             <LinearGradient
-              colors={['#6ADBCE', '#568CD2', '#EE007F']}
+              colors={currentTheme.gradient.decorativeBar}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 0 }}
               style={styles.decorativeBar}
@@ -489,7 +508,7 @@ export default function ProfileScreen() {
             <View style={styles.profileHeader}>
               <View style={styles.avatarWrapper}>
                 <LinearGradient
-                  colors={['#6ADBCE', '#568CD2']}
+                  colors={currentTheme.gradient.accent}
                   style={styles.avatarBorder}
                 >
                   <View style={styles.avatarInner}>
@@ -509,8 +528,8 @@ export default function ProfileScreen() {
                 )}
 
                 <View style={styles.memberBadge}>
-                  <Ionicons name="calendar" size={13} color="#6ADBCE" />
-                  <Text style={styles.memberText}>
+                  <Ionicons name="calendar" size={13} color={currentTheme.gradient.accent[0]} />
+                  <Text style={[styles.memberText, { color: currentTheme.gradient.accent[0] }]}>
                     Joined {formatMemberSince(userData.createdAt?.toDate ? userData.createdAt.toDate() : new Date())}
                   </Text>
                 </View>
@@ -526,37 +545,37 @@ export default function ProfileScreen() {
                   activeOpacity={0.8}
                 >
                   <LinearGradient
-                    colors={['#6ADBCE', '#568CD2']}
+                    colors={currentTheme.gradient.accent}
                     start={{ x: 0, y: 0 }}
                     end={{ x: 1, y: 0 }}
                     style={styles.editButtonBorder}
                   >
                     <View style={styles.editButtonInner}>
-                      <Ionicons name="create" size={16} color="#6ADBCE" />
-                      <Text style={styles.editButtonText}>Edit Profile</Text>
+                      <Ionicons name="create" size={16} color={currentTheme.gradient.accent[0]} />
+                      <Text style={[styles.editButtonText, { color: currentTheme.gradient.accent[0] }]}>
+                        Edit Profile
+                      </Text>
                     </View>
                   </LinearGradient>
                 </TouchableOpacity>
 
-
-                 {/* NEW: Theme Selector Button */}
-                  <TouchableOpacity
-                    style={styles.themeButton}
-                    onPress={() => setThemeModalVisible(true)}
-                    activeOpacity={0.8}
+                <TouchableOpacity
+                  style={styles.themeButton}
+                  onPress={() => setThemeModalVisible(true)}
+                  activeOpacity={0.8}
+                >
+                  <LinearGradient
+                    colors={currentTheme.gradient.decorativeBar}
+                    style={styles.themeButtonGradient}
                   >
-                    <LinearGradient
-                      colors={['#EE007F', '#FF999A']}
-                      style={styles.themeButtonGradient}
-                    >
-                      <Ionicons name="color-palette" size={18} color="#fff" />
-                    </LinearGradient>
-                  </TouchableOpacity>
+                    <Ionicons name="color-palette" size={18} color="#fff" />
+                  </LinearGradient>
+                </TouchableOpacity>
                 
                 <TouchableOpacity
                   style={[styles.previewButton, previewMode && styles.previewButtonActive]}
                   onPress={() => {
-                    setLoading(true); // Set loading immediately to prevent flash
+                    setLoading(true);
                     setPreviewMode(!previewMode);
                   }}
                   activeOpacity={0.8}
@@ -564,7 +583,7 @@ export default function ProfileScreen() {
                   <Ionicons 
                     name={previewMode ? "eye-off" : "eye"} 
                     size={18} 
-                    color={previewMode ? "#fff" : "#6ADBCE"} 
+                    color={previewMode ? "#fff" : currentTheme.gradient.accent[0]} 
                   />
                 </TouchableOpacity>
               </View>
@@ -580,7 +599,7 @@ export default function ProfileScreen() {
             >
               {activeTab === 'overview' && (
                 <LinearGradient
-                  colors={['#6ADBCE', '#568CD2']}
+                  colors={currentTheme.gradient.accent}
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 0 }}
                   style={styles.segmentGradient}
@@ -604,7 +623,7 @@ export default function ProfileScreen() {
             >
               {activeTab === 'notebooks' && (
                 <LinearGradient
-                  colors={['#6ADBCE', '#568CD2']}
+                  colors={currentTheme.gradient.accent}
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 0 }}
                   style={styles.segmentGradient}
@@ -628,7 +647,7 @@ export default function ProfileScreen() {
             >
               {activeTab === 'quizzes' && (
                 <LinearGradient
-                  colors={['#6ADBCE', '#568CD2']}
+                  colors={currentTheme.gradient.accent}
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 0 }}
                   style={styles.segmentGradient}
@@ -652,7 +671,7 @@ export default function ProfileScreen() {
           {activeTab === 'quizzes' && renderQuizzesTab()}
         </ScrollView>
 
-        {/* Edit Profile Modal */}
+        {/* Modals */}
         <EditProfileModal
           visible={editModalVisible}
           onClose={() => setEditModalVisible(false)}
@@ -667,22 +686,26 @@ export default function ProfileScreen() {
             loadProfileData();
           }}
         />
-        {/* Theme Selector Modal */}
-        <FriendCardThemeSelector
+
+        <ProfileThemeSelector
           visible={themeModalVisible}
           onClose={() => setThemeModalVisible(false)}
           userId={userData.uid}
           currentThemeId={currentThemeId}
           onThemeSelected={(themeId) => {
             setCurrentThemeId(themeId);
+            loadProfileData();
           }}
+          ownedThemes={ownedThemes}
         />
-        <BottomNavigation/>
+
+        <BottomNavigation />
       </SafeAreaView>
-    </LinearGradient>
+    </View>
   );
 }
 
+// Styles remain the same as original
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -706,8 +729,6 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingBottom: 100,
   },
-  
-  // Profile Card
   profileCard: {
     margin: 20,
     marginBottom: 16,
@@ -824,8 +845,6 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(106, 219, 206, 0.25)',
     borderColor: '#6ADBCE',
   },
-
-  // Segment Control
   segmentControl: {
     flexDirection: 'row',
     marginHorizontal: 20,
@@ -847,9 +866,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     gap: 6,
   },
-  segmentActive: {
-    // Gradient applied via LinearGradient
-  },
+  segmentActive: {},
   segmentGradient: {
     position: 'absolute',
     top: 0,
@@ -869,13 +886,9 @@ const styles = StyleSheet.create({
   segmentTextActive: {
     color: '#fff',
   },
-
-  // Tab Content
   tabContent: {
     paddingHorizontal: 20,
   },
-
-  // Stats Grid
   statsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -931,8 +944,6 @@ const styles = StyleSheet.create({
     opacity: 0.85,
     marginTop: 2,
   },
-
-  // Content Cards
   contentCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -970,10 +981,6 @@ const styles = StyleSheet.create({
     height: '100%',
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  notebookCover: {
-    width: '100%',
-    height: '100%',
   },
   cardContent: {
     flex: 1,
@@ -1013,8 +1020,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginLeft: 8,
   },
-
-  // Quiz Meta
   quizMeta: {
     flexDirection: 'row',
     gap: 12,
@@ -1029,8 +1034,6 @@ const styles = StyleSheet.create({
     color: '#9ca3af',
     fontWeight: '500',
   },
-
-  // Empty State
   emptyState: {
     alignItems: 'center',
     justifyContent: 'center',
@@ -1065,35 +1068,16 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 18,
   },
-
-  // Loading State
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  loadingIconContainer: {
-    marginBottom: 20,
-  },
-  loadingIconGradient: {
-    width: 80,
-    height: 80,
-    borderRadius: 24,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#6ADBCE',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.4,
-    shadowRadius: 20,
-    elevation: 10,
   },
   loadingText: {
     fontSize: 15,
     color: '#9ca3af',
     fontWeight: '500',
   },
-
-  // Error State
   errorContainer: {
     flex: 1,
     justifyContent: 'center',
@@ -1129,20 +1113,20 @@ const styles = StyleSheet.create({
     marginBottom: 3,
   },
   themeButton: {
-  width: 48,
-  height: 48,
-  borderRadius: 12,
-  overflow: 'hidden',
-  shadowColor: '#EE007F',
-  shadowOffset: { width: 0, height: 2 },
-  shadowOpacity: 0.3,
-  shadowRadius: 4,
-  elevation: 3,
-},
-themeButtonGradient: {
-  width: '100%',
-  height: '100%',
-  alignItems: 'center',
-  justifyContent: 'center',
-},
+    width: 48,
+    height: 48,
+    borderRadius: 12,
+    overflow: 'hidden',
+    shadowColor: '#EE007F',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  themeButtonGradient: {
+    width: '100%',
+    height: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
 });

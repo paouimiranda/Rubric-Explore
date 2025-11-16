@@ -1,12 +1,18 @@
 // app/screens/Misc/loading.tsx
 import { useRouter } from 'expo-router';
-import React, { useEffect } from 'react';
-import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import LottieView from 'lottie-react-native';
+import React, { useEffect, useRef } from 'react';
+import { StyleSheet, View } from 'react-native';
 import { useAuth } from '../../contexts/AuthContext';
 
 const LoadingScreen = () => {
   const { isAuthenticated, loading } = useAuth();
   const router = useRouter();
+  const animationRef = useRef<LottieView>(null);
+
+  useEffect(() => {
+    animationRef.current?.play();
+  }, []);
 
   useEffect(() => {
     if (loading) return;
@@ -20,7 +26,13 @@ const LoadingScreen = () => {
 
   return (
     <View style={styles.container}>
-      <ActivityIndicator size="large" color="#52F7E2" />
+      <LottieView
+        ref={animationRef}
+        source={require('../../../assets/animations/quiz-loading.json')}
+        autoPlay
+        loop
+        style={styles.animation}
+      />
     </View>
   );
 };
@@ -31,6 +43,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: '#1A2D4B',
+  },
+  animation: {
+    width: 200,
+    height: 200,
   },
 });
 

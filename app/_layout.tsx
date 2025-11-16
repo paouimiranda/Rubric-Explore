@@ -39,31 +39,25 @@ function RootNavigator() {
 
   // --- NEW: navigate to correct route once auth + fonts ready ---
   useEffect(() => {
-    // wait until auth has finished checking and fonts are loaded
-    if (loading || !fontsLoaded) return;
+  if (loading || !fontsLoaded) return;
 
-    try {
-      // Adjust these targets to match your actual route layout:
-      // - If your protected screen is at app/(app)/home.tsx, use "/(app)/home"
-      // - If it's app/home.tsx, use "/home"
-      const protectedPath = "/(app)/home";
-      const publicPath = "/";
+  try {
+    const protectedPath = "/screens"; // Your screens are here
+    const publicPath = "/";
 
-      if (isAuthenticated) {
-        // only replace if we're not already at or inside protectedPath
-        if (!pathname?.startsWith(protectedPath)) {
-          router.replace(protectedPath);
-        }
-      } else {
-        if (pathname !== publicPath) {
-          router.replace(publicPath);
-        }
+    if (isAuthenticated) {
+      if (pathname === publicPath) {
+        router.replace("/screens/HomeScreen");  // Changed!
       }
-    } catch (err) {
-      // don't crash app just because navigation failed
-      console.warn("Navigation check failed:", err);
+    } else {
+      if (pathname?.startsWith(protectedPath)) {
+        router.replace(publicPath);
+      }
     }
-  }, [loading, fontsLoaded, isAuthenticated, pathname, router]);
+  } catch (err) {
+    console.warn("Navigation check failed:", err);
+  }
+}, [loading, fontsLoaded, isAuthenticated, pathname, router]);
   // -----------------------------------------------------------------
 
   // global error handling
@@ -112,7 +106,7 @@ function RootNavigator() {
         {/* register both screens so router knows about them */}
         <Stack.Screen name="index" />
         {/* this registers your protected route (app/(app)/home.tsx) */}
-        <Stack.Screen name="(app)/home" />
+        <Stack.Screen name="screens/HomeScreen" />
       </Stack>
     </ThemeProvider>
   );
