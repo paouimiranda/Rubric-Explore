@@ -18,6 +18,8 @@ import { NotificationProvider } from "./contexts/NotificationContext";
 import Loading from "./screens/Misc/loading";
 
 function RootNavigator() {
+
+  
   const { loading, isAuthenticated } = useAuth();
   const colorScheme = useColorScheme();
   const { uploadBacklogs, logError } = useBacklogLogger();
@@ -88,6 +90,7 @@ function RootNavigator() {
     });
     return () => subscription.remove();
   }, [uploadBacklogs]);
+
 
   // show loading screen until both fonts + auth finished
   if (!fontsLoaded || loading) {

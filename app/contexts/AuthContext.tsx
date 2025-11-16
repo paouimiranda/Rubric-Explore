@@ -1,3 +1,4 @@
+// contexts/AuthContext.tsx
 import { onAuthStateChanged, User } from "firebase/auth";
 import React, {
   createContext,
@@ -15,30 +16,12 @@ import {
   saveUserData,
 } from "../../services/storage";
 
-interface UserData {
-  uid: string;
-  username: string;
-  email: string;
-  displayName: string;
-  firstName: string;
-  lastName: string;
-  dateOfBirth: string;
-  profilePicture: string | null;
-  avatar: string | null;
-  headerGradient: string[];
-  bio: string;
-  followers: number;
-  following: number;
-  posts: number;
-  isVerified: boolean;
-  isActive: boolean;
-  createdAt: any;
-  updatedAt: any;
-}
+interface UserData { /* keep your fields as-is */ }
 
 interface AuthContextType {
   user: User | null;
   userData: UserData | null;
+  /** true while auth/user data still initializing */
   loading: boolean;
   isAuthenticated: boolean;
 }
@@ -58,18 +41,24 @@ interface AuthProviderProps {
 export const AuthProvider = ({ children }: AuthProviderProps) => {
   const [user, setUser] = useState<User | null>(null);
   const [userData, setUserData] = useState<UserData | null>(null);
-  const [loading, setLoading] = useState<boolean>(true);
+
+  // true until onAuthStateChanged fires the first time
+  const [initializing, setInitializing] = useState<boolean>(true);
+  // true while fetching fresh user data from network
+  const [userDataLoading, setUserDataLoading] = useState<boolean>(false);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (authUser) => {
       console.log("🔥 Firebase auth state changed");
+
+      // first time onAuthStateChanged called -> not initializing anymore
+      if (initializing) setInitializing(false);
 
       if (!authUser) {
         console.log("🚪 Logged out");
         setUser(null);
         setUserData(null);
         await clearUserData();
-        setLoading(false);
         return;
       }
 
@@ -84,7 +73,8 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
           console.log("💾 Loaded cached user data");
         }
 
-        // 2️⃣ Fetch fresh Firestore data in background
+        // 2️⃣ Fetch fresh Firestore data in background (set loading flag)
+        setUserDataLoading(true);
         const fresh = await getCurrentUserData();
         if (fresh) {
           setUserData(fresh as UserData);
@@ -93,13 +83,17 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         }
       } catch (err) {
         console.error("❌ Error loading user data:", err);
+      } finally {
+        setUserDataLoading(false);
       }
-
-      setLoading(false);
     });
 
     return unsubscribe;
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // run once
+
+  // expose a single `loading` that callers can use to wait for auth + data
+  const loading = initializing || userDataLoading;
 
   const value: AuthContextType = {
     user,
