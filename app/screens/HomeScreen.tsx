@@ -1,9 +1,9 @@
 import BottomNavigation from '@/components/Interface/nav-bar';
 import { BebasNeue_400Regular, useFonts } from '@expo-google-fonts/bebas-neue';
 import { Montserrat_400Regular, Montserrat_700Bold } from '@expo-google-fonts/montserrat';
-
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
+import LottieView from 'lottie-react-native';
 import { useEffect, useRef, useState } from 'react';
 import {
   Animated,
@@ -25,12 +25,19 @@ type Screen = 'notes' | 'quiz' | 'planner' | 'friendlist';
 // Global state to track if animation has been shown
 let hasShownAnimation = false;
 
+// Create animated Lottie component
+const AnimatedLottieView = Animated.createAnimatedComponent(LottieView);
+
 export default function HomeScreen() {
   const router = useRouter();
   const [isNavigating, setIsNavigating] = useState(false);
   const insets = useSafeAreaInsets();
   const [shouldAnimate, setShouldAnimate] = useState(!hasShownAnimation);
   const { userData } = useAuth();
+
+  // Loading animation state
+  const loadingFadeAnim = useRef(new Animated.Value(1)).current;
+  const lottieRef = useRef<LottieView>(null);
 
   const [fontsLoaded] = useFonts({
     BebasNeue_400Regular,
@@ -60,6 +67,7 @@ export default function HomeScreen() {
   const scaleAnim = useRef(new Animated.Value(shouldAnimate ? 0.8 : 1)).current;
   const logoFadeAnim = useRef(new Animated.Value(shouldAnimate ? 0 : 1)).current;
   const logoRotateAnim = useRef(new Animated.Value(shouldAnimate ? 0 : 1)).current;
+  const logoSpinAnim = useRef(new Animated.Value(0)).current;
   
   const moduleAnims = useRef([
     new Animated.Value(shouldAnimate ? 0 : 1),
@@ -79,6 +87,32 @@ export default function HomeScreen() {
     // Reset after a short delay as backup
     setTimeout(() => setIsNavigating(false), 1000);
   };
+
+  const handleLogoPress = () => {
+    // Spin the logo 360 degrees
+    logoSpinAnim.setValue(0);
+    Animated.spring(logoSpinAnim, {
+      toValue: 1,
+      tension: 40,
+      friction: 8,
+      useNativeDriver: true,
+    }).start();
+  };
+
+  useEffect(() => {
+    if (!fontsLoaded) {
+      // Start fade out at exactly 0.5 seconds
+      const fadeTimer = setTimeout(() => {
+        Animated.timing(loadingFadeAnim, {
+          toValue: 0,
+          duration: 500,
+          useNativeDriver: true,
+        }).start();
+      }, 500);
+
+      return () => clearTimeout(fadeTimer);
+    }
+  }, [fontsLoaded]);
 
   useEffect(() => {
     if (fontsLoaded && shouldAnimate) {
@@ -165,11 +199,20 @@ export default function HomeScreen() {
 
   if (!fontsLoaded) {
     return (
-      <LinearGradient colors={['#0f2c45ff','#324762']} style={{flex: 1, justifyContent: 'center', alignItems: 'center'}}>
-        <Image
-          source={require('../../assets/images/logo.png')}
-          style={{width: 100, height: 100, opacity: 0.8}}
-          resizeMode="contain"
+      <LinearGradient 
+        colors={['#0f2c45ff','#324762']} 
+        style={{flex: 1, justifyContent: 'center', alignItems: 'center'}}
+      >
+        <AnimatedLottieView
+          ref={lottieRef}
+          source={require('../../assets/animations/menu-loading.json')}
+          autoPlay
+          loop={false}
+          style={{ 
+            width: 200, 
+            height: 200,
+            opacity: loadingFadeAnim 
+          }}
         />
       </LinearGradient>
     );
@@ -180,7 +223,11 @@ export default function HomeScreen() {
       <SafeAreaView style={styles.container}>
         <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }, { scale: scaleAnim }] }}>
           <View style={styles.headerContainer}>
-            <Animated.View style={styles.logoContainer}>
+            <TouchableOpacity 
+              style={styles.logoContainer}
+              onPress={handleLogoPress}
+              activeOpacity={0.8}
+            >
               <Animated.Image
                 source={require('../../assets/images/logo.png')}
                 style={[
@@ -194,12 +241,18 @@ export default function HomeScreen() {
                           outputRange: ['180deg', '360deg'],
                         }),
                       },
+                      {
+                        rotate: logoSpinAnim.interpolate({
+                          inputRange: [0, 1],
+                          outputRange: ['0deg', '360deg'],
+                        }),
+                      },
                     ],
                   },
                 ]}
                 resizeMode="contain"
               />
-            </Animated.View>
+            </TouchableOpacity>
             {renderAnimatedText()}
           </View>
 
@@ -264,6 +317,7 @@ export default function HomeScreen() {
 const AnimatedModuleButton = ({ title, color, image, onPress, animValue, delay, disabled }: any) => {
   const scaleValue = useRef(new Animated.Value(1)).current;
   const floatAnim = useRef(new Animated.Value(0)).current;
+  const shimmerAnim = useRef(new Animated.Value(0)).current;
 
   // Subtle floating animation
   useEffect(() => {
@@ -290,7 +344,37 @@ const AnimatedModuleButton = ({ title, color, image, onPress, animValue, delay, 
     return () => clearTimeout(timer);
   }, []);
 
+  // Random shimmer effect
+  useEffect(() => {
+    const startShimmer = () => {
+      // Random delay between 3-8 seconds before next shimmer
+      const randomDelay = Math.random() * 5000 + 3000;
+      
+      setTimeout(() => {
+        Animated.sequence([
+          Animated.timing(shimmerAnim, {
+            toValue: 1,
+            duration: 1500,
+            useNativeDriver: true,
+          }),
+          Animated.timing(shimmerAnim, {
+            toValue: 0,
+            duration: 0,
+            useNativeDriver: true,
+          }),
+        ]).start(() => {
+          startShimmer(); // Recursively call for continuous random shimmers
+        });
+      }, randomDelay);
+    };
+
+    // Start shimmer after intro animations complete (around 2 seconds)
+    const initialTimer = setTimeout(startShimmer, 2000 + delay);
+    return () => clearTimeout(initialTimer);
+  }, []);
+
   const handlePressIn = () => {
+    if (disabled) return;
     Animated.spring(scaleValue, {
       toValue: 0.95,
       useNativeDriver: true,
@@ -308,6 +392,11 @@ const AnimatedModuleButton = ({ title, color, image, onPress, animValue, delay, 
   const translateY = floatAnim.interpolate({
     inputRange: [0, 1],
     outputRange: [0, -6], // Only 6px of movement
+  });
+
+  const shimmerTranslate = shimmerAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [-150, width * 0.38 + 150]
   });
 
   return (
@@ -338,6 +427,14 @@ const AnimatedModuleButton = ({ title, color, image, onPress, animValue, delay, 
         <LinearGradient colors={color} start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }} style={styles.moduleButton}>
           <Image source={image} style={styles.moduleImage} resizeMode="contain" />
           <Text style={styles.moduleText}>{title}</Text>
+          
+          {/* Shimmer Effect */}
+          <Animated.View 
+            style={[
+              styles.shimmer,
+              { transform: [{ translateX: shimmerTranslate }] }
+            ]}
+          />
         </LinearGradient>
       </TouchableOpacity>
     </Animated.View>
@@ -426,6 +523,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 8,
     elevation: 8,
+    overflow: 'hidden',
   },
   moduleText: {
     color: 'white',
@@ -438,5 +536,14 @@ const styles = StyleSheet.create({
     width: '60%',
     height: '50%',
     marginBottom: '4%',
+  },
+  shimmer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    width: 100,
+    backgroundColor: 'rgba(255, 255, 255, 0.25)',
   },
 });

@@ -51,7 +51,7 @@ export const FRIEND_CARD_THEMES: Record<string, FriendCardTheme> = {
     id: 'sunsetBlaze',
     name: 'Sunset Blaze',
     rarity: 'rare',
-    price: 150,
+    price: 25,
     description: 'Warm sunset gradient with flame particles',
     gradientColors: ['#FF6B35', '#F7931E', '#FF0080'],
     borderColor: 'rgba(255, 107, 53, 0.5)',

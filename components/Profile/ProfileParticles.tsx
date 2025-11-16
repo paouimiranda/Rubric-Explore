@@ -24,6 +24,7 @@ interface ProfileParticlesProps {
 
 export default function ProfileParticles({ type, color, count }: ProfileParticlesProps) {
   const particlesRef = useRef<Particle[]>([]);
+  const [isReady, setIsReady] = React.useState(false);
 
   useEffect(() => {
     // Initialize particles
@@ -42,16 +43,14 @@ export default function ProfileParticles({ type, color, count }: ProfileParticle
       };
     });
 
-    // Start animations for each particle
-    particlesRef.current.forEach((particle, index) => {
-      // Stagger start times
-      setTimeout(() => {
-        startAnimation(particle);
-      }, index * 100);
-    });
+    // Small delay to ensure component is fully mounted
+    const mountTimer = setTimeout(() => {
+      setIsReady(true);
+    }, 100);
 
     // Cleanup
     return () => {
+      clearTimeout(mountTimer);
       particlesRef.current.forEach((particle) => {
         particle.x.stopAnimation();
         particle.y.stopAnimation();
@@ -61,6 +60,18 @@ export default function ProfileParticles({ type, color, count }: ProfileParticle
       });
     };
   }, [type, count]);
+
+  useEffect(() => {
+    if (!isReady) return;
+
+    // Start animations for each particle after component is ready
+    particlesRef.current.forEach((particle, index) => {
+      // Stagger start times
+      setTimeout(() => {
+        startAnimation(particle);
+      }, index * 50); // Reduced from 100ms to 50ms for faster startup
+    });
+  }, [isReady, type]);
 
   const startAnimation = (particle: Particle) => {
     switch (type) {

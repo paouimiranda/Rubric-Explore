@@ -14,8 +14,24 @@ export default function AnimatedProfileBackground({
 }: AnimatedProfileBackgroundProps) {
   const animatedValue1 = useRef(new Animated.Value(0)).current;
   const animatedValue2 = useRef(new Animated.Value(0)).current;
+  const [isReady, setIsReady] = React.useState(false);
 
   useEffect(() => {
+    // Small delay to ensure component is fully mounted
+    const timer = setTimeout(() => {
+      setIsReady(true);
+    }, 100);
+
+    return () => {
+      clearTimeout(timer);
+      animatedValue1.stopAnimation();
+      animatedValue2.stopAnimation();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!isReady) return;
+
     if (themeId === 'aurora') {
       startAuroraAnimation();
     } else if (themeId === 'neon') {
@@ -26,7 +42,7 @@ export default function AnimatedProfileBackground({
       animatedValue1.stopAnimation();
       animatedValue2.stopAnimation();
     };
-  }, [themeId]);
+  }, [themeId, isReady]);
 
   const startAuroraAnimation = () => {
     Animated.loop(
