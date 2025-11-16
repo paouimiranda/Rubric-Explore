@@ -638,9 +638,7 @@ export default function NotesHome() {
                   <View style={styles.headerButtons}>
                     <View style={styles.actionButtonWrapper}>
                       <LinearGradient
-                        colors={['#8b5cf6', '#a78bfa']}
-                        start={{ x: 0, y: 0 }}
-                        end={{ x: 1, y: 1 }}
+                        colors={['#8b5cf6', '#7c3aed']}
                         style={styles.actionButton}
                       >
                         <JoinNoteIconButton 
@@ -656,9 +654,7 @@ export default function NotesHome() {
                       style={styles.actionButtonWrapper}
                     >
                       <LinearGradient
-                        colors={['#f59e0b', '#fb923c']}
-                        start={{ x: 0, y: 0 }}
-                        end={{ x: 1, y: 1 }}
+                        colors={['#f59e0b', '#d97706']}
                         style={styles.actionButton}
                       >
                         <Ionicons name={getViewIcon()} size={22} color="#ffffff" />
@@ -815,10 +811,10 @@ const styles = StyleSheet.create({
     marginLeft: 16,
   },
   actionButtonWrapper: {
-    borderRadius: 14,
+    borderRadius: 16,
     overflow: 'hidden',
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
+    shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.3,
     shadowRadius: 6,
     elevation: 6,
