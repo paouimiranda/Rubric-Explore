@@ -354,9 +354,7 @@ const LoginScreen = () => {
           toValue: 0,
           duration: 500,
           useNativeDriver: true,
-        }).start(() => {
-          router.replace('./screens/Misc/loading');
-        });
+        }).start();
       }, 500);
 
       addBacklogEvent(BACKLOG_EVENTS.LOGIN_SESSION, { email: email.toLowerCase() });

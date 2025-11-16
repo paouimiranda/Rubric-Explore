@@ -18,6 +18,8 @@ import { NotificationProvider } from "./contexts/NotificationContext";
 import Loading from "./screens/Misc/loading";
 
 function RootNavigator() {
+
+  
   const { loading, isAuthenticated } = useAuth();
   const colorScheme = useColorScheme();
   const { uploadBacklogs, logError } = useBacklogLogger();
@@ -41,23 +43,21 @@ function RootNavigator() {
   useEffect(() => {
   if (loading || !fontsLoaded) return;
 
-  try {
-    const protectedPath = "/screens"; // Your screens are here
-    const publicPath = "/";
+  const protectedPath = "/screens"; // your app's main protected screens
+  const publicPaths = ["/", "/screens/User/register", "/screens/User/forgot-password"]; // allow these
 
-    if (isAuthenticated) {
-      if (pathname === publicPath) {
-        router.replace("/screens/HomeScreen");  // Changed!
-      }
-    } else {
-      if (pathname?.startsWith(protectedPath)) {
-        router.replace(publicPath);
-      }
+  if (isAuthenticated) {
+    if (pathname === "/") {
+      router.replace("/screens/HomeScreen");
     }
-  } catch (err) {
-    console.warn("Navigation check failed:", err);
+  } else {
+    // Only redirect to login if trying to access a protected path AND not on a public path
+    if (pathname?.startsWith(protectedPath) && !publicPaths.includes(pathname)) {
+      router.replace("/");
+    }
   }
 }, [loading, fontsLoaded, isAuthenticated, pathname, router]);
+
   // -----------------------------------------------------------------
 
   // global error handling
@@ -89,6 +89,7 @@ function RootNavigator() {
     return () => subscription.remove();
   }, [uploadBacklogs]);
 
+
   // show loading screen until both fonts + auth finished
   if (!fontsLoaded || loading) {
     return <Loading />;
@@ -107,6 +108,8 @@ function RootNavigator() {
         <Stack.Screen name="index" />
         {/* this registers your protected route (app/(app)/home.tsx) */}
         <Stack.Screen name="screens/HomeScreen" />
+        <Stack.Screen name="screens/User/register" />
+        <Stack.Screen name="screens/User/forgot-password" />
       </Stack>
     </ThemeProvider>
   );
