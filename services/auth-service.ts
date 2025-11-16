@@ -1,4 +1,4 @@
-//services/auth-service.ts
+// services/auth-service.ts
 import {
   createUserWithEmailAndPassword,
   User as FirebaseUser,
@@ -22,17 +22,15 @@ import { auth, db } from '../firebase';
 // --- Types ---
 export interface UserData {
   uid: string;
-  firstName: string;
-  lastName: string;
+  displayName: string;
   email: string;
   username: string;
   dateOfBirth: string;
-  displayName: string;
   createdAt: any;
   updatedAt: any;
   profilePicture: string | null;
-  avatar: string | null; // New field for avatar URL
-  headerGradient: string[]; // New field for header gradient colors
+  avatar: string | null;
+  headerGradient: string[];
   bio: string;
   posts: number;
   isVerified: boolean;
@@ -40,8 +38,7 @@ export interface UserData {
 }
 
 export interface RegisterData {
-  firstName: string;
-  lastName: string;
+  displayName: string;
   email: string;
   username: string;
   password: string;
@@ -57,174 +54,96 @@ export interface UpdateProfileData {
 
 // --- Username Availability ---
 export const checkUsernameAvailability = async (username: string): Promise<boolean> => {
-  try {
-    const usernamesRef = collection(db, 'usernames');
-    const q = query(usernamesRef, where('username', '==', username.toLowerCase()));
-    const querySnapshot = await getDocs(q);
-    return querySnapshot.empty; // Returns true if username is available
-  } catch (error) {
-    console.error('Error checking username availability:', error);
-    throw new Error('Failed to check username availability');
-  }
+  const usernamesRef = collection(db, 'usernames');
+  const q = query(usernamesRef, where('username', '==', username.toLowerCase()));
+  const querySnapshot = await getDocs(q);
+  return querySnapshot.empty;
 };
 
 // --- Email Availability ---
 export const checkEmailAvailability = async (email: string): Promise<boolean> => {
-  try {
-    const usersRef = collection(db, 'users');
-    const q = query(usersRef, where('email', '==', email.toLowerCase()));
-    const querySnapshot = await getDocs(q);
-    return querySnapshot.empty;
-  } catch (error) {
-    console.error('Error checking email availability:', error);
-    throw new Error('Failed to check email availability');
-  }
+  const usersRef = collection(db, 'users');
+  const q = query(usersRef, where('email', '==', email.toLowerCase()));
+  const querySnapshot = await getDocs(q);
+  return querySnapshot.empty;
 };
 
 // --- Register User ---
 export const registerUser = async (userData: RegisterData): Promise<UserData> => {
-  try {
-    const { firstName, lastName, email, username, password, dateOfBirth } = userData;
+  const { displayName, email, username, password, dateOfBirth } = userData;
 
-    const emailAvailable = await checkEmailAvailability(email);
-    if (!emailAvailable) throw new Error('Email address is already registered');
+  if (!(await checkEmailAvailability(email))) throw new Error('Email address is already registered');
+  if (!(await checkUsernameAvailability(username))) throw new Error('Username is already taken');
 
-    const usernameAvailable = await checkUsernameAvailability(username);
-    if (!usernameAvailable) throw new Error('Username is already taken');
+  const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+  const user = userCredential.user;
 
-    const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-    const user = userCredential.user;
+  await updateProfile(user, { displayName });
 
-    await updateProfile(user, {
-      displayName: `${firstName} ${lastName}`,
-    });
+  const userDoc: Omit<UserData, 'uid'> = {
+    displayName,
+    email: email.toLowerCase(),
+    username: username.toLowerCase(),
+    dateOfBirth,
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+    profilePicture: null,
+    avatar: null,
+    headerGradient: ['#FF999A', '#EE007F'],
+    bio: '',
+    posts: 0,
+    isVerified: false,
+    isActive: true,
+  };
 
-    const userDoc: Omit<UserData, 'uid'> = {
-      firstName,
-      lastName,
-      email: email.toLowerCase(),
-      username: username.toLowerCase(),
-      dateOfBirth,
-      displayName: `${firstName} ${lastName}`,
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-      profilePicture: null,
-      avatar: null, // Default avatar
-      headerGradient: ['#FF999A', '#EE007F'], // Default header gradient
-      bio: '',
-      posts: 0,
-      isVerified: false,
-      isActive: true,
-    };
+  await setDoc(doc(db, 'users', user.uid), { uid: user.uid, ...userDoc });
 
-    await setDoc(doc(db, 'users', user.uid), { uid: user.uid, ...userDoc });
+  await setDoc(doc(db, 'usernames', username.toLowerCase()), {
+    uid: user.uid,
+    username: username.toLowerCase(),
+    createdAt: serverTimestamp(),
+  });
 
-    await setDoc(doc(db, 'usernames', username.toLowerCase()), {
-      uid: user.uid,
-      username: username.toLowerCase(),
-      createdAt: serverTimestamp(),
-    });
-
-    return { uid: user.uid, ...userDoc };
-  } catch (error: any) {
-    console.error('Registration error:', error);
-
-    switch (error.code) {
-      case 'auth/email-already-in-use':
-        throw new Error('Email address is already registered');
-      case 'auth/invalid-email':
-        throw new Error('Invalid email address');
-      case 'auth/weak-password':
-        throw new Error('Password should be at least 6 characters long');
-      case 'auth/network-request-failed':
-        throw new Error('Network error. Please check your connection');
-      default:
-        throw new Error(error.message || 'Registration failed');
-    }
-  }
+  return { uid: user.uid, ...userDoc };
 };
 
 // --- Login User ---
 export const loginUser = async (email: string, password: string): Promise<UserData> => {
-  try {
-    const userCredential = await signInWithEmailAndPassword(auth, email, password);
-    const user = userCredential.user;
+  const userCredential = await signInWithEmailAndPassword(auth, email, password);
+  const user = userCredential.user;
 
-    const userDoc = await getDoc(doc(db, 'users', user.uid));
-    if (!userDoc.exists()) throw new Error('User data not found');
+  const userDoc = await getDoc(doc(db, 'users', user.uid));
+  if (!userDoc.exists()) throw new Error('User data not found');
 
-    return userDoc.data() as UserData;
-  } catch (error: any) {
-    console.error('Login error:', error);
-    switch (error.code) {
-      case 'auth/user-not-found':
-        throw new Error('No account found with this email');
-      case 'auth/wrong-password':
-        throw new Error('Incorrect password');
-      case 'auth/invalid-email':
-        throw new Error('Invalid email address');
-      case 'auth/too-many-requests':
-        throw new Error('Too many failed attempts. Please try again later');
-      case 'auth/network-request-failed':
-        throw new Error('Network error. Please check your connection');
-      default:
-        throw new Error(error.message || 'Login failed');
-    }
-  }
+  return userDoc.data() as UserData;
 };
 
 // --- Logout User ---
 export const logoutUser = async (): Promise<void> => {
-  try {
-    await signOut(auth);
-  } catch (error) {
-    console.error('Logout error:', error);
-    throw new Error('Failed to logout');
-  }
+  await signOut(auth);
 };
 
 // --- Update User Profile ---
-export const updateUserProfile = async (
-  uid: string,
-  updates: UpdateProfileData
-): Promise<void> => {
-  try {
-    const userRef = doc(db, 'users', uid);
-    await updateDoc(userRef, {
-      ...updates,
-      updatedAt: serverTimestamp(),
-    });
-  } catch (error) {
-    console.error('Error updating user profile:', error);
-    throw new Error('Failed to update profile');
-  }
+export const updateUserProfile = async (uid: string, updates: UpdateProfileData): Promise<void> => {
+  const userRef = doc(db, 'users', uid);
+  await updateDoc(userRef, { ...updates, updatedAt: serverTimestamp() });
 };
 
 // --- Get User by Username ---
 export const getUserByUsername = async (username: string): Promise<UserData | null> => {
-  try {
-    const usernameDoc = await getDoc(doc(db, 'usernames', username.toLowerCase()));
-    if (!usernameDoc.exists()) return null;
+  const usernameDoc = await getDoc(doc(db, 'usernames', username.toLowerCase()));
+  if (!usernameDoc.exists()) return null;
 
-    const { uid } = usernameDoc.data() as { uid: string };
-    const userDoc = await getDoc(doc(db, 'users', uid));
-    return userDoc.exists() ? (userDoc.data() as UserData) : null;
-  } catch (error) {
-    console.error('Error getting user by username:', error);
-    throw new Error('Failed to get user data');
-  }
+  const { uid } = usernameDoc.data() as { uid: string };
+  const userDoc = await getDoc(doc(db, 'users', uid));
+  return userDoc.exists() ? (userDoc.data() as UserData) : null;
 };
 
 // --- Get Current User Data ---
 export const getCurrentUserData = async (): Promise<UserData | null> => {
-  try {
-    const user: FirebaseUser | null = auth.currentUser;
-    if (!user) return null;
+  const user: FirebaseUser | null = auth.currentUser;
+  if (!user) return null;
 
-    const userDoc = await getDoc(doc(db, 'users', user.uid));
-    return userDoc.exists() ? (userDoc.data() as UserData) : null;
-  } catch (error) {
-    console.error('Error getting current user data:', error);
-    throw new Error('Failed to get user data');
-  }
+  const userDoc = await getDoc(doc(db, 'users', user.uid));
+  return userDoc.exists() ? (userDoc.data() as UserData) : null;
 };

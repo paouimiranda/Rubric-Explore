@@ -41,8 +41,9 @@ interface ValidationState {
 
 const RegisterScreen = () => {
   // Form state
-  const [firstName, setFirstName] = useState('');
-  const [lastName, setLastName] = useState('');
+  // const [firstName, setFirstName] = useState('');
+  // const [lastName, setLastName] = useState('');
+  const [displayName, setDisplayName] = useState('');
   const [email, setEmail] = useState('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -78,6 +79,7 @@ const RegisterScreen = () => {
   const totalSteps = 4;
   
   // Focus states
+  const [displayNameFocused, setDisplayNameFocused] = useState(false);
   const [firstNameFocused, setFirstNameFocused] = useState(false);
   const [lastNameFocused, setLastNameFocused] = useState(false);
   const [emailFocused, setEmailFocused] = useState(false);
@@ -108,16 +110,18 @@ const RegisterScreen = () => {
   const modalScaleAnim = useRef(new Animated.Value(0.9)).current;
   
   // Floating label animations
-  const firstNameLabelAnim = useRef(new Animated.Value(0)).current;
-  const lastNameLabelAnim = useRef(new Animated.Value(0)).current;
+  const displayNameLabelAnim = useRef(new Animated.Value(0)).current;
+  // const firstNameLabelAnim = useRef(new Animated.Value(0)).current;
+  // const lastNameLabelAnim = useRef(new Animated.Value(0)).current;
   const emailLabelAnim = useRef(new Animated.Value(0)).current;
   const usernameLabelAnim = useRef(new Animated.Value(0)).current;
   const passwordLabelAnim = useRef(new Animated.Value(0)).current;
   const confirmPasswordLabelAnim = useRef(new Animated.Value(0)).current;
   
   // Border glow animations
-  const firstNameBorderAnim = useRef(new Animated.Value(0)).current;
-  const lastNameBorderAnim = useRef(new Animated.Value(0)).current;
+  const displayNameBorderAnim = useRef(new Animated.Value(0)).current;
+  // const firstNameBorderAnim = useRef(new Animated.Value(0)).current;
+  // const lastNameBorderAnim = useRef(new Animated.Value(0)).current;
   const emailBorderAnim = useRef(new Animated.Value(0)).current;
   const usernameBorderAnim = useRef(new Animated.Value(0)).current;
   const passwordBorderAnim = useRef(new Animated.Value(0)).current;
@@ -271,35 +275,19 @@ const RegisterScreen = () => {
   // Focus animations for all fields
   useEffect(() => {
     Animated.parallel([
-      Animated.spring(firstNameLabelAnim, {
-        toValue: firstNameFocused || firstName ? 1 : 0,
+      Animated.spring(displayNameLabelAnim, {
+        toValue: displayNameFocused || displayName ? 1 : 0,
         tension: 50,
         friction: 7,
         useNativeDriver: true,
       }),
-      Animated.timing(firstNameBorderAnim, {
-        toValue: firstNameFocused ? 1 : 0,
+      Animated.timing(displayNameBorderAnim, {
+        toValue: displayNameFocused ? 1 : 0,
         duration: 300,
         useNativeDriver: false,
       }),
     ]).start();
-  }, [firstNameFocused, firstName]);
-
-  useEffect(() => {
-    Animated.parallel([
-      Animated.spring(lastNameLabelAnim, {
-        toValue: lastNameFocused || lastName ? 1 : 0,
-        tension: 50,
-        friction: 7,
-        useNativeDriver: true,
-      }),
-      Animated.timing(lastNameBorderAnim, {
-        toValue: lastNameFocused ? 1 : 0,
-        duration: 300,
-        useNativeDriver: false,
-      }),
-    ]).start();
-  }, [lastNameFocused, lastName]);
+  }, [displayNameFocused, displayName]);
 
   useEffect(() => {
     Animated.parallel([
@@ -463,14 +451,14 @@ const RegisterScreen = () => {
 
   const validateStep = () => {
     if (currentStep === 1) {
-      if (!firstName.trim()) {
-        showError('validation', 'First Name Required', 'Please enter your first name to continue.');
+      if (!displayName.trim()) {
+        showError('validation', 'First Name Required', 'Please enter your display name to continue.');
         return false;
       }
-      if (!lastName.trim()) {
-        showError('validation', 'Last Name Required', 'Please enter your last name to continue.');
-        return false;
-      }
+      // if (!lastName.trim()) {
+      //   showError('validation', 'Last Name Required', 'Please enter your last name to continue.');
+      //   return false;
+      // }
     } else if (currentStep === 2) {
       if (!email.trim()) {
         showError('validation', 'Email Required', 'Please enter your email address to continue.');
@@ -566,8 +554,9 @@ const RegisterScreen = () => {
     try {
       const dateOfBirth = getDateOfBirth()!;
       const userData = {
-        firstName: firstName.trim(),
-        lastName: lastName.trim(),
+        // firstName: firstName.trim(),
+        // lastName: lastName.trim(),
+        displayName: displayName.trim(),
         email: email.trim().toLowerCase(),
         username: username.trim().toLowerCase(),
         password,
@@ -784,14 +773,15 @@ const RegisterScreen = () => {
           <Animated.View style={[styles.stepContainer, { transform: [{ translateX: slideAnim }] }]}>
             <Text style={styles.stepTitle}>Let's get started!</Text>
             <Text style={styles.stepSubtitle}>Tell us your name</Text>
+            <Text style={styles.stepSubtitle}>You can change this later</Text>
             
             {renderInputField(
-              firstName,
-              setFirstName,
-              'First Name',
+              displayName,
+              setDisplayName,
+              'Name',
               'person-outline',
-              firstNameLabelAnim,
-              firstNameBorderAnim,
+              displayNameLabelAnim, //displayNameLabelAnim
+              displayNameBorderAnim, //displayNameBorderAnim,
               null,
               firstNameFocused,
               setFirstNameFocused,
@@ -801,7 +791,7 @@ const RegisterScreen = () => {
               'words'
             )}
             
-            {renderInputField(
+            {/* {renderInputField(
               lastName,
               setLastName,
               'Last Name',
@@ -815,7 +805,7 @@ const RegisterScreen = () => {
               null,
               'default',
               'words'
-            )}
+            )} */}
           </Animated.View>
         );
       
