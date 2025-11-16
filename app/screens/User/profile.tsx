@@ -324,7 +324,7 @@ export default function ProfileScreen() {
         <View style={styles.emptyState}>
           <View style={styles.emptyIconContainer}>
             <LinearGradient
-              colors={currentTheme.gradient.accent}
+              colors={currentTheme.gradient.accent as any}
               style={styles.emptyIconGradient}
             >
               <Ionicons name="book-outline" size={32} color="#fff" />
@@ -342,7 +342,7 @@ export default function ProfileScreen() {
             activeOpacity={0.7}
           >
             <LinearGradient
-              colors={currentTheme.gradient.accent}
+              colors={currentTheme.gradient.accent as any}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 0 }}
               style={styles.contentCardAccent}
@@ -350,7 +350,7 @@ export default function ProfileScreen() {
             
             <View style={styles.cardIconWrapper}>
               <LinearGradient
-                colors={currentTheme.gradient.accent}
+                colors={currentTheme.gradient.accent as any}
                 style={styles.cardIconGradient}
               >
                 <Ionicons name="book" size={22} color="#fff" />
@@ -461,7 +461,7 @@ export default function ProfileScreen() {
         />
       ) : (
         <LinearGradient
-          colors={currentTheme.gradient.background}
+          colors={currentTheme.gradient.background as any}
           start={{ x: 0, y: 0 }}
           end={{ x: 0, y: 1 }}
           style={StyleSheet.absoluteFill}
@@ -499,7 +499,7 @@ export default function ProfileScreen() {
           {/* Profile Header Card */}
           <View style={styles.profileCard}>
             <LinearGradient
-              colors={currentTheme.gradient.decorativeBar}
+              colors={currentTheme.gradient.decorativeBar as any}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 0 }}
               style={styles.decorativeBar}
@@ -508,7 +508,7 @@ export default function ProfileScreen() {
             <View style={styles.profileHeader}>
               <View style={styles.avatarWrapper}>
                 <LinearGradient
-                  colors={currentTheme.gradient.accent}
+                  colors={currentTheme.gradient.accent as any}
                   style={styles.avatarBorder}
                 >
                   <View style={styles.avatarInner}>
@@ -545,7 +545,7 @@ export default function ProfileScreen() {
                   activeOpacity={0.8}
                 >
                   <LinearGradient
-                    colors={currentTheme.gradient.accent}
+                    colors={currentTheme.gradient.accent as any}
                     start={{ x: 0, y: 0 }}
                     end={{ x: 1, y: 0 }}
                     style={styles.editButtonBorder}
@@ -565,7 +565,7 @@ export default function ProfileScreen() {
                   activeOpacity={0.8}
                 >
                   <LinearGradient
-                    colors={currentTheme.gradient.decorativeBar}
+                    colors={currentTheme.gradient.decorativeBar as any}
                     style={styles.themeButtonGradient}
                   >
                     <Ionicons name="color-palette" size={18} color="#fff" />
@@ -599,7 +599,7 @@ export default function ProfileScreen() {
             >
               {activeTab === 'overview' && (
                 <LinearGradient
-                  colors={currentTheme.gradient.accent}
+                  colors={currentTheme.gradient.accent as any}
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 0 }}
                   style={styles.segmentGradient}
@@ -623,7 +623,7 @@ export default function ProfileScreen() {
             >
               {activeTab === 'notebooks' && (
                 <LinearGradient
-                  colors={currentTheme.gradient.accent}
+                  colors={currentTheme.gradient.accent as any}
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 0 }}
                   style={styles.segmentGradient}
@@ -647,7 +647,7 @@ export default function ProfileScreen() {
             >
               {activeTab === 'quizzes' && (
                 <LinearGradient
-                  colors={currentTheme.gradient.accent}
+                  colors={currentTheme.gradient.accent as any}
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 0 }}
                   style={styles.segmentGradient}
