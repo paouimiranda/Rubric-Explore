@@ -582,7 +582,7 @@ const RichTextToolbar: React.FC<RichTextToolbarProps> = ({ getEditor, onMetadata
                 [actions.insertOrderedList]: ({ tintColor }) => <Ionicons name="list-outline" size={20} color={tintColor} />,
               }}
               selectedButtonStyle={styles.selectedButton}
-              iconTint="#ffffff"
+              iconTint={colors.text}
               selectedIconTint="#60a5fa"
               disabledIconTint="#6b7280"
               style={styles.richToolbar}
@@ -608,7 +608,7 @@ const RichTextToolbar: React.FC<RichTextToolbarProps> = ({ getEditor, onMetadata
                 [actions.line]: ({ tintColor }) => <Ionicons name="remove" size={20} color={tintColor} />,
               }}
               selectedButtonStyle={styles.selectedButton}
-              iconTint="#ffffff"
+              iconTint={colors.text}
               selectedIconTint="#60a5fa"
               disabledIconTint="#6b7280"
               style={styles.richToolbar}
@@ -629,9 +629,9 @@ const RichTextToolbar: React.FC<RichTextToolbarProps> = ({ getEditor, onMetadata
               disabled={uploadingImage}
             >
               {uploadingImage ? (
-                <ActivityIndicator size="small" color="#ffffff" />
+                <ActivityIndicator size="small" color={colors.text} />
               ) : (
-                <Ionicons name="image" size={20} color="#ffffff" />
+                <Ionicons name="image" size={20} color={colors.text} />
               )}
             </TouchableOpacity>
 
@@ -640,7 +640,7 @@ const RichTextToolbar: React.FC<RichTextToolbarProps> = ({ getEditor, onMetadata
               style={styles.customButton}
               onPress={() => setDrawingScreenVisible(true)}
             >
-              <Ionicons name="brush-outline" size={20} color="#ffffff" />
+              <Ionicons name="brush-outline" size={20} color={colors.text} />
             </TouchableOpacity>
 
             {/* Table button */}
@@ -648,7 +648,7 @@ const RichTextToolbar: React.FC<RichTextToolbarProps> = ({ getEditor, onMetadata
               style={styles.customButton}
               onPress={() => setTableBuilderVisible(true)}
             >
-              <Ionicons name="grid-outline" size={20} color="#ffffff" />
+              <Ionicons name="grid-outline" size={20} color={colors.text} />
             </TouchableOpacity>
 
             {/* Math equation button */}
@@ -656,7 +656,7 @@ const RichTextToolbar: React.FC<RichTextToolbarProps> = ({ getEditor, onMetadata
               style={styles.customButton}
               onPress={() => setMathEquationVisible(true)}
             >
-              <Ionicons name="calculator-outline" size={20} color="#ffffff" />
+              <Ionicons name="calculator-outline" size={20} color={colors.text} />
             </TouchableOpacity>
 
             {/* Info button */}
@@ -664,7 +664,7 @@ const RichTextToolbar: React.FC<RichTextToolbarProps> = ({ getEditor, onMetadata
               style={styles.customButton}
               onPress={onMetadataPress}
             >
-              <Ionicons name="information-circle-outline" size={20} color="#ffffff" />
+              <Ionicons name="information-circle-outline" size={20} color={colors.text} />
             </TouchableOpacity>
 
             {/* Add padding at the end to prevent last items from being hidden by keyboard button */}
@@ -678,7 +678,7 @@ const RichTextToolbar: React.FC<RichTextToolbarProps> = ({ getEditor, onMetadata
               onPress={handleKeyboardPress}
               activeOpacity={0.7}
             >
-              <Ionicons name="keypad" size={22} color={colors.primary} />
+              <Ionicons name="keypad" size={22} color={colors.text} />
             </TouchableOpacity>
           </View>
         </View>
@@ -958,12 +958,12 @@ const createLocalStyles = (colors: ThemeColors, themeMode: ThemeMode) => StyleSh
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: colors.primaryLight,
+    backgroundColor: colors.surface,
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1.5,
-    borderColor: themeMode === 'light' ? colors.primary : 'rgba(96, 165, 250, 0.3)',
-    shadowColor: colors.primary,
+    borderColor: themeMode === 'light' ? colors.text : 'rgba(255, 255, 255, 0.3)',
+    shadowColor: colors.text,
     shadowOffset: {
       width: 0,
       height: 2,

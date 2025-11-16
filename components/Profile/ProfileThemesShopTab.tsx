@@ -1,27 +1,26 @@
-// File: components/Shop/ShopTab.tsx
+// File: components/Shop/ProfileThemesShopTab.tsx
 import { CustomAlertModal } from '@/components/Interface/custom-alert-modal';
-import ProfileThemesShopTab from '@/components/Profile/ProfileThemesShopTab';
-import { FRIEND_CARD_THEMES, FriendCardTheme, ThemeRarity } from '@/constants/friend-card-themes';
-import { ShopService } from '@/services/shop-service';
+import { PROFILE_THEMES, ProfileTheme } from '@/constants/profile-theme';
+import { ProfileThemeShopService } from '@/services/profile-theme-shop-service';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import React, { useEffect, useState } from 'react';
 import {
-  ActivityIndicator,
-  Animated,
-  Dimensions,
-  FlatList,
-  Modal,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Animated,
+    Dimensions,
+    FlatList,
+    Modal,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 
 const { width } = Dimensions.get('window');
 const CARD_WIDTH = (width - 56) / 2;
 
-type ShopCategory = 'themes' | 'avatars' | 'profiles' | 'effects';
+type ThemeRarity = 'common' | 'rare' | 'epic' | 'legendary';
 
 interface AlertState {
   visible: boolean;
@@ -35,14 +34,7 @@ interface AlertState {
   }>;
 }
 
-const CATEGORIES = [
-  { id: 'themes' as const, label: 'Themes', icon: 'color-palette' as const },
-  { id: 'avatars' as const, label: 'Avatars', icon: 'person-circle' as const },
-  { id: 'profiles' as const, label: 'Profiles', icon: 'person' as const },
-  { id: 'effects' as const, label: 'Effects', icon: 'sparkles' as const },
-];
-
-const RARITIES: (ThemeRarity | 'all')[] = ['all', 'common', 'rare', 'epic', 'legendary', 'mythic'];
+const RARITIES: (ThemeRarity | 'all')[] = ['all', 'common', 'rare', 'epic', 'legendary'];
 
 const RARITY_CONFIG = {
   all: { color: '#667eea', label: 'All' },
@@ -50,13 +42,11 @@ const RARITY_CONFIG = {
   rare: { color: '#3b82f6', label: 'Rare' },
   epic: { color: '#a855f7', label: 'Epic' },
   legendary: { color: '#fbbf24', label: 'Legendary' },
-  mythic: { color: '#f43f5e', label: 'Mythic' },
 };
 
-const ShopTab = () => {
-  const [category, setCategory] = useState<ShopCategory>('themes');
+const ProfileThemesShopTab = () => {
   const [rarity, setRarity] = useState<ThemeRarity | 'all'>('all');
-  const [selected, setSelected] = useState<FriendCardTheme | null>(null);
+  const [selected, setSelected] = useState<ProfileTheme | null>(null);
   const [shards, setShards] = useState(0);
   const [owned, setOwned] = useState<string[]>([]);
   const [active, setActive] = useState('default');
@@ -101,12 +91,12 @@ const ShopTab = () => {
     try {
       setLoading(true);
       const [userShards, inventory] = await Promise.all([
-        ShopService.getUserShards(),
-        ShopService.getUserInventory(),
+        ProfileThemeShopService.getUserShards(),
+        ProfileThemeShopService.getUserInventory(),
       ]);
       setShards(userShards);
-      setOwned(inventory.ownedThemes);
-      setActive(inventory.activeTheme);
+      setOwned(inventory.ownedProfileThemes);
+      setActive(inventory.selectedProfileTheme);
     } catch (error) {
       showAlert('error', 'Error', 'Failed to load shop data');
     } finally {
@@ -114,7 +104,7 @@ const ShopTab = () => {
     }
   };
 
-  const themes = Object.values(FRIEND_CARD_THEMES).filter(
+  const themes = Object.values(PROFILE_THEMES).filter(
     t => rarity === 'all' || t.rarity === rarity
   );
 
@@ -132,8 +122,8 @@ const ShopTab = () => {
       {/* Header */}
       <View style={styles.header}>
         <View>
-          <Text style={styles.title}>Cosmic Shop</Text>
-          <Text style={styles.subtitle}>Customize your journey</Text>
+          <Text style={styles.title}>Profile Themes</Text>
+          <Text style={styles.subtitle}>Customize your profile appearance</Text>
         </View>
         <View style={styles.shards}>
           <Ionicons name="diamond" size={18} color="#fbbf24" />
@@ -141,32 +131,32 @@ const ShopTab = () => {
         </View>
       </View>
 
-      {/* Categories */}
-      <View style={styles.categoriesContainer}>
+      {/* Rarity Filters */}
+      <View style={styles.filtersContainer}>
         <FlatList
           horizontal
-          data={CATEGORIES}
-          keyExtractor={c => c.id}
+          data={RARITIES}
+          keyExtractor={r => r}
           showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.categoriesContent}
+          contentContainerStyle={styles.filtersContent}
           renderItem={({ item }) => (
-            <TouchableOpacity onPress={() => setCategory(item.id)}>
-              <View style={[styles.category, category === item.id && styles.categoryActive]}>
-                {category === item.id && (
-                  <LinearGradient
-                    colors={['#667eea', '#764ba2']}
-                    style={StyleSheet.absoluteFill}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 1 }}
-                  />
-                )}
-                <Ionicons
-                  name={item.icon}
-                  size={16}
-                  color={category === item.id ? '#fff' : '#888'}
-                />
-                <Text style={[styles.categoryText, category === item.id && styles.categoryTextActive]}>
-                  {item.label}
+            <TouchableOpacity onPress={() => setRarity(item)}>
+              <View
+                style={[
+                  styles.filter,
+                  rarity === item && {
+                    backgroundColor: RARITY_CONFIG[item].color + '20',
+                    borderColor: RARITY_CONFIG[item].color,
+                  },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.filterText,
+                    rarity === item && { color: RARITY_CONFIG[item].color },
+                  ]}
+                >
+                  {RARITY_CONFIG[item].label}
                 </Text>
               </View>
             </TouchableOpacity>
@@ -174,73 +164,27 @@ const ShopTab = () => {
         />
       </View>
 
-      {/* Content */}
-      {category === 'themes' ? (
-        <>
-          {/* Rarity Filters */}
-          <View style={styles.filtersContainer}>
-            <FlatList
-              horizontal
-              data={RARITIES}
-              keyExtractor={r => r}
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.filtersContent}
-              renderItem={({ item }) => (
-                <TouchableOpacity onPress={() => setRarity(item)}>
-                  <View
-                    style={[
-                      styles.filter,
-                      rarity === item && {
-                        backgroundColor: RARITY_CONFIG[item].color + '20',
-                        borderColor: RARITY_CONFIG[item].color,
-                      },
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.filterText,
-                        rarity === item && { color: RARITY_CONFIG[item].color },
-                      ]}
-                    >
-                      {RARITY_CONFIG[item].label}
-                    </Text>
-                  </View>
-                </TouchableOpacity>
-              )}
-            />
-          </View>
-
-          {/* Themes Grid */}
-          <FlatList
-            data={themes}
-            keyExtractor={t => t.id}
-            numColumns={2}
-            contentContainerStyle={styles.grid}
-            columnWrapperStyle={styles.row}
-            showsVerticalScrollIndicator={false}
-            renderItem={({ item }) => (
-              <ThemeCard
-                theme={item}
-                owned={owned.includes(item.id)}
-                active={active === item.id}
-                onPress={() => setSelected(item)}
-              />
-            )}
+      {/* Themes Grid */}
+      <FlatList
+        data={themes}
+        keyExtractor={t => t.id}
+        numColumns={2}
+        contentContainerStyle={styles.grid}
+        columnWrapperStyle={styles.row}
+        showsVerticalScrollIndicator={false}
+        renderItem={({ item }) => (
+          <ProfileThemeCard
+            theme={item}
+            owned={owned.includes(item.id)}
+            active={active === item.id}
+            onPress={() => setSelected(item)}
           />
-        </>
-      ) : category === 'profiles' ? (
-          <ProfileThemesShopTab />
-        ) : (
-        <View style={styles.comingSoon}>
-          <Ionicons name={CATEGORIES.find(c => c.id === category)?.icon || 'cube'} size={64} color="#555" />
-          <Text style={styles.comingSoonTitle}>Coming Soon</Text>
-          <Text style={styles.comingSoonText}>This feature is under development</Text>
-        </View>
-      )}
+        )}
+      />
 
       {/* Modal */}
       {selected && (
-        <ThemeModal
+        <ProfileThemeModal
           theme={selected}
           owned={owned.includes(selected.id)}
           active={active === selected.id}
@@ -263,26 +207,35 @@ const ShopTab = () => {
   );
 };
 
-interface ThemeCardProps {
-  theme: FriendCardTheme;
+interface ProfileThemeCardProps {
+  theme: ProfileTheme;
   owned: boolean;
   active: boolean;
   onPress: () => void;
 }
 
-const ThemeCard: React.FC<ThemeCardProps> = ({ theme, owned, active, onPress }) => (
+const ProfileThemeCard: React.FC<ProfileThemeCardProps> = ({ theme, owned, active, onPress }) => (
   <TouchableOpacity onPress={onPress} activeOpacity={0.8} style={styles.cardWrapper}>
     <View style={styles.card}>
-      {theme.gradientColors ? (
+      <LinearGradient
+        colors={theme.gradient.background as any}
+        style={styles.cardPreview}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+      >
+        {/* Mini decorative bar */}
         <LinearGradient
-          colors={theme.gradientColors as any}
-          style={styles.cardPreview}
+          colors={theme.gradient.decorativeBar as any}
           start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
+          end={{ x: 1, y: 0 }}
+          style={styles.miniBar}
         />
-      ) : (
-        <View style={[styles.cardPreview, { backgroundColor: theme.backgroundColor }]} />
-      )}
+
+        {/* Icon */}
+        <View style={styles.iconContainer}>
+          <Ionicons name={theme.icon as any} size={24} color="#fff" />
+        </View>
+      </LinearGradient>
 
       {/* Badges */}
       {active && (
@@ -295,9 +248,9 @@ const ThemeCard: React.FC<ThemeCardProps> = ({ theme, owned, active, onPress }) 
           <Ionicons name="checkmark" size={14} color="#fff" />
         </View>
       )}
-      {theme.animated && !owned && (
+      {(theme.hasParticles || theme.hasAnimatedBackground) && !owned && (
         <View style={[styles.badge, { backgroundColor: '#fbbf24' }]}>
-          <Ionicons name="flash" size={12} color="#fff" />
+          <Ionicons name="sparkles" size={12} color="#fff" />
         </View>
       )}
 
@@ -323,8 +276,8 @@ const ThemeCard: React.FC<ThemeCardProps> = ({ theme, owned, active, onPress }) 
   </TouchableOpacity>
 );
 
-interface ThemeModalProps {
-  theme: FriendCardTheme;
+interface ProfileThemeModalProps {
+  theme: ProfileTheme;
   owned: boolean;
   active: boolean;
   shards: number;
@@ -332,7 +285,14 @@ interface ThemeModalProps {
   onSuccess: () => void;
 }
 
-const ThemeModal: React.FC<ThemeModalProps> = ({ theme, owned, active, shards, onClose, onSuccess }) => {
+const ProfileThemeModal: React.FC<ProfileThemeModalProps> = ({
+  theme,
+  owned,
+  active,
+  shards,
+  onClose,
+  onSuccess,
+}) => {
   const [loading, setLoading] = useState(false);
   const [fadeAnim] = useState(new Animated.Value(0));
   const [slideAnim] = useState(new Animated.Value(300));
@@ -408,24 +368,19 @@ const ThemeModal: React.FC<ThemeModalProps> = ({ theme, owned, active, shards, o
 
     try {
       setLoading(true);
-      const result = await ShopService.purchaseTheme(theme.id, theme.price);
+      const result = await ProfileThemeShopService.purchaseProfileTheme(theme.id, theme.price);
       if (result.success) {
-        showAlert(
-          'success',
-          'Success! ✨',
-          result.message,
-          [
-            {
-              text: 'OK',
-              onPress: () => {
-                closeAlert();
-                onSuccess();
-                handleClose();
-              },
-              style: 'primary',
+        showAlert('success', 'Success! ✨', result.message, [
+          {
+            text: 'OK',
+            onPress: () => {
+              closeAlert();
+              onSuccess();
+              handleClose();
             },
-          ]
-        );
+            style: 'primary',
+          },
+        ]);
       } else {
         showAlert('error', 'Failed', result.message);
       }
@@ -439,24 +394,19 @@ const ThemeModal: React.FC<ThemeModalProps> = ({ theme, owned, active, shards, o
   const handleActivate = async () => {
     try {
       setLoading(true);
-      const result = await ShopService.setActiveTheme(theme.id);
+      const result = await ProfileThemeShopService.setSelectedProfileTheme(theme.id);
       if (result.success) {
-        showAlert(
-          'success',
-          'Activated! ✨',
-          result.message,
-          [
-            {
-              text: 'OK',
-              onPress: () => {
-                closeAlert();
-                onSuccess();
-                handleClose();
-              },
-              style: 'primary',
+        showAlert('success', 'Activated! ✨', result.message, [
+          {
+            text: 'OK',
+            onPress: () => {
+              closeAlert();
+              onSuccess();
+              handleClose();
             },
-          ]
-        );
+            style: 'primary',
+          },
+        ]);
       } else {
         showAlert('error', 'Error', result.message);
       }
@@ -475,26 +425,32 @@ const ThemeModal: React.FC<ThemeModalProps> = ({ theme, owned, active, shards, o
       <Modal visible animationType="none" transparent onRequestClose={handleClose}>
         <Animated.View style={[styles.modalOverlay, { opacity: fadeAnim }]}>
           <TouchableOpacity style={StyleSheet.absoluteFill} onPress={handleClose} activeOpacity={1} />
-          
+
           <Animated.View style={[styles.modal, { transform: [{ translateY: slideAnim }] }]}>
             <View style={styles.modalHandle} />
-            
+
             <TouchableOpacity style={styles.closeBtn} onPress={handleClose}>
               <Ionicons name="close" size={24} color="#fff" />
             </TouchableOpacity>
 
             {/* Preview */}
             <View style={styles.modalPreview}>
-              {theme.gradientColors ? (
+              <LinearGradient
+                colors={theme.gradient.background as any}
+                style={styles.modalPreviewInner}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+              >
                 <LinearGradient
-                  colors={theme.gradientColors as any}
-                  style={styles.modalPreviewInner}
+                  colors={theme.gradient.decorativeBar as any}
                   start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
+                  end={{ x: 1, y: 0 }}
+                  style={styles.modalMiniBar}
                 />
-              ) : (
-                <View style={[styles.modalPreviewInner, { backgroundColor: theme.backgroundColor }]} />
-              )}
+                <View style={styles.modalIconContainer}>
+                  <Ionicons name={theme.icon as any} size={48} color="#fff" />
+                </View>
+              </LinearGradient>
               {active && (
                 <View style={styles.modalActiveBadge}>
                   <Ionicons name="checkmark-circle" size={20} color="#10b981" />
@@ -516,22 +472,18 @@ const ThemeModal: React.FC<ThemeModalProps> = ({ theme, owned, active, shards, o
 
               {/* Features */}
               <View style={styles.features}>
-                {theme.animated && (
+                {theme.hasParticles && (
+                  <View style={styles.feature}>
+                    <Ionicons name="water" size={14} color="#3b82f6" />
+                    <Text style={styles.featureText}>
+                      {theme.particleConfig?.type || 'Particles'}
+                    </Text>
+                  </View>
+                )}
+                {theme.hasAnimatedBackground && (
                   <View style={styles.feature}>
                     <Ionicons name="flash" size={14} color="#fbbf24" />
                     <Text style={styles.featureText}>Animated</Text>
-                  </View>
-                )}
-                {theme.borderGlow && (
-                  <View style={styles.feature}>
-                    <Ionicons name="sparkles" size={14} color="#a855f7" />
-                    <Text style={styles.featureText}>Glow</Text>
-                  </View>
-                )}
-                {theme.particles && (
-                  <View style={styles.feature}>
-                    <Ionicons name="water" size={14} color="#3b82f6" />
-                    <Text style={styles.featureText}>Particles</Text>
                   </View>
                 )}
               </View>
@@ -643,38 +595,6 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#fbbf24',
   },
-  categoriesContainer: {
-    marginBottom: 12,
-  },
-  categoriesContent: {
-    paddingHorizontal: 20,
-    gap: 8,
-  },
-  category: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 16,
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
-    overflow: 'hidden',
-  },
-  categoryActive: {
-    borderColor: 'rgba(102, 126, 234, 0.5)',
-  },
-  categoryText: {
-    fontFamily: 'Montserrat',
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#888',
-  },
-  categoryTextActive: {
-    color: '#fff',
-    fontWeight: '700',
-  },
   filtersContainer: {
     marginBottom: 8,
   },
@@ -718,6 +638,23 @@ const styles = StyleSheet.create({
   },
   cardPreview: {
     flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  miniBar: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 3,
+  },
+  iconContainer: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   activeBadge: {
     position: 'absolute',
@@ -782,25 +719,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#3b82f6',
   },
-  comingSoon: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingBottom: 80,
-  },
-  comingSoonTitle: {
-    fontFamily: 'Montserrat',
-    fontSize: 22,
-    fontWeight: '700',
-    color: '#fff',
-    marginTop: 16,
-  },
-  comingSoonText: {
-    fontFamily: 'Montserrat',
-    fontSize: 14,
-    color: '#888',
-    marginTop: 4,
-  },
   modalOverlay: {
     flex: 1,
     justifyContent: 'flex-end',
@@ -844,6 +762,23 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     borderWidth: 2,
     borderColor: 'rgba(255, 255, 255, 0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalMiniBar: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 4,
+  },
+  modalIconContainer: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   modalActiveBadge: {
     position: 'absolute',
@@ -921,6 +856,7 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '600',
     color: '#fff',
+    textTransform: 'capitalize',
   },
   modalPrice: {
     flexDirection: 'row',
@@ -985,4 +921,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default ShopTab;
+export default ProfileThemesShopTab;

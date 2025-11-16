@@ -592,108 +592,108 @@ export default function NoteEditor({
         </View>
 
         <KeyboardAvoidingView 
-          style={styles.content} 
-          behavior={Platform.OS === "ios" ? "padding" : undefined}
-          keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 0}
-        >
-          {/* Animated Collapsible Header */}
-          <Animated.View
-            style={[
-              styles.headerContainer,
-              {
-                maxHeight: headerHeight.interpolate({
-                  inputRange: [0, 1],
-                  outputRange: [0, 500], // 0 when collapsed, 500 when expanded
-                }),
-                opacity: headerHeight.interpolate({
-                  inputRange: [0, 0.5, 1],
-                  outputRange: [0, 0.5, 1],
-                }),
-                overflow: 'hidden',
-              }
-            ]}
-          >
-            <ScrollView
-              showsVerticalScrollIndicator={false}
-              bounces={false}
-              scrollEnabled={!headerCollapsed}
+  style={styles.content} 
+  behavior={Platform.OS === "ios" ? "padding" : "height"}
+  keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 0}
+>
+  {/* Animated Collapsible Header */}
+  <Animated.View
+    style={[
+      styles.headerContainer,
+      {
+        maxHeight: headerHeight.interpolate({
+          inputRange: [0, 1],
+          outputRange: [0, 500],
+        }),
+        opacity: headerHeight.interpolate({
+          inputRange: [0, 0.5, 1],
+          outputRange: [0, 0.5, 1],
+        }),
+        overflow: 'hidden',
+      }
+    ]}
+  >
+    <ScrollView
+      showsVerticalScrollIndicator={false}
+      bounces={false}
+      scrollEnabled={!headerCollapsed}
+    >
+      <TextInput
+        ref={collaborative.titleInputRef}
+        style={styles.titleInput}
+        value={title}
+        onChangeText={(text) => handleTitleChange(text)}
+        onSelectionChange={handleTitleSelectionChange}
+        editable={!(effectiveIsSharedAccess && effectiveSharedPermission === "view") && !headerCollapsed}
+        placeholder="Untitled"
+        placeholderTextColor="#6b7280"
+        multiline
+        textAlignVertical="top"
+        autoCapitalize="sentences"
+        autoCorrect={true}
+        spellCheck={true}
+      />
+
+      {properties.length > 0 && (
+        <View style={styles.propertiesSection}>
+          {properties.map((property, index) => (
+            <TouchableOpacity
+              key={index}
+              style={styles.propertyRow}
+              onPress={() => !effectiveIsSharedAccess && setPropertiesModalVisible(true)}
+              activeOpacity={0.7}
+              disabled={effectiveIsSharedAccess || headerCollapsed}
             >
-              <TextInput
-                ref={collaborative.titleInputRef}
-                style={styles.titleInput}
-                value={title}
-                onChangeText={(text) => handleTitleChange(text)}
-                onSelectionChange={handleTitleSelectionChange}
-                editable={!(effectiveIsSharedAccess && effectiveSharedPermission === "view") && !headerCollapsed}
-                placeholder="Untitled"
-                placeholderTextColor="#6b7280"
-                multiline
-                textAlignVertical="top"
-                autoCapitalize="sentences"
-                autoCorrect={true}
-                spellCheck={true}
-              />
-
-              {properties.length > 0 && (
-                <View style={styles.propertiesSection}>
-                  {properties.map((property, index) => (
-                    <TouchableOpacity
-                      key={index}
-                      style={styles.propertyRow}
-                      onPress={() => !effectiveIsSharedAccess && setPropertiesModalVisible(true)}
-                      activeOpacity={0.7}
-                      disabled={effectiveIsSharedAccess || headerCollapsed}
-                    >
-                      {property.icon && (
-                        <Ionicons 
-                          name={property.icon as any} 
-                          size={18} 
-                          color={property.iconColor || '#6b7280'} 
-                          style={{ marginRight: 8 }}
-                        />
-                      )}
-                      
-                      <Text style={styles.propertyKey}>
-                        {truncateText(property.key, 20)}
-                      </Text>
-                      <Text style={styles.propertyValue}>
-                        {property.value}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                  
-                  {!effectiveIsSharedAccess && (
-                    <TouchableOpacity
-                      style={styles.addPropertyButton}
-                      onPress={() => setPropertiesModalVisible(true)}
-                      activeOpacity={0.7}
-                      disabled={headerCollapsed}
-                    >
-                      <Ionicons name="add" size={16} color="#6b7280" />
-                      <Text style={styles.addPropertyText}>Add property</Text>
-                    </TouchableOpacity>
-                  )}
-                </View>
+              {property.icon && (
+                <Ionicons 
+                  name={property.icon as any} 
+                  size={18} 
+                  color={property.iconColor || '#6b7280'} 
+                  style={{ marginRight: 8 }}
+                />
               )}
+              
+              <Text style={styles.propertyKey}>
+                {truncateText(property.key, 20)}
+              </Text>
+              <Text style={styles.propertyValue}>
+                {property.value}
+              </Text>
+            </TouchableOpacity>
+          ))}
+          
+          {!effectiveIsSharedAccess && (
+            <TouchableOpacity
+              style={styles.addPropertyButton}
+              onPress={() => setPropertiesModalVisible(true)}
+              activeOpacity={0.7}
+              disabled={headerCollapsed}
+            >
+              <Ionicons name="add" size={16} color="#6b7280" />
+              <Text style={styles.addPropertyText}>Add property</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      )}
 
-              {properties.length === 0 && !effectiveIsSharedAccess && (
-                <View style={styles.propertiesSection}>
-                  <TouchableOpacity
-                    style={styles.addPropertyButton}
-                    onPress={() => setPropertiesModalVisible(true)}
-                    activeOpacity={0.7}
-                    disabled={headerCollapsed}
-                  >
-                    <Ionicons name="add" size={16} color="#6b7280" />
-                    <Text style={styles.addPropertyText}>Add property</Text>
-                  </TouchableOpacity>
-                </View>
-              )}
-            </ScrollView>
-          </Animated.View>
+      {properties.length === 0 && !effectiveIsSharedAccess && (
+        <View style={styles.propertiesSection}>
+          <TouchableOpacity
+            style={styles.addPropertyButton}
+            onPress={() => setPropertiesModalVisible(true)}
+            activeOpacity={0.7}
+            disabled={headerCollapsed}
+          >
+            <Ionicons name="add" size={16} color="#6b7280" />
+            <Text style={styles.addPropertyText}>Add property</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+    </ScrollView>
+  </Animated.View>
 
-  {/* Editor - takes remaining space */}
-  <View style={styles.editorWrapper}>
+  {/* Editor - takes remaining space and scrolls above toolbar */}
+  <View style={{ flex: 1, paddingHorizontal: 20, }}>
     <RichTextEditor
       key={`editor-${themeMode}`}
       ref={richEditorRef}
@@ -709,19 +709,22 @@ export default function NoteEditor({
     />
   </View>
 
+  {/* Toolbar pinned to bottom, above keyboard */}
   {!(effectiveIsSharedAccess && effectiveSharedPermission === "view") && (
-    <RichTextToolbar
-      key={`toolbar-${themeMode}`}
-      getEditor={() => richEditorRef.current?.getEditor()}
-      onMetadataPress={() => setMetadataModalVisible(true)}
-      noteId={routeNoteId as string}
-      userId={uid!}
-      onUndo={collaborative.undo}
-      onRedo={collaborative.redo}
-      canUndo={collaborative.canUndo}
-      canRedo={collaborative.canRedo}     
-      style={styles.toolbar}         
-    />
+    <View style={{ paddingBottom: Platform.OS === 'ios' ? 0 : 8 }}>
+      <RichTextToolbar
+        key={`toolbar-${themeMode}`}
+        getEditor={() => richEditorRef.current?.getEditor()}
+        onMetadataPress={() => setMetadataModalVisible(true)}
+        noteId={routeNoteId as string}
+        userId={uid!}
+        onUndo={collaborative.undo}
+        onRedo={collaborative.redo}
+        canUndo={collaborative.canUndo}
+        canRedo={collaborative.canRedo}     
+        style={styles.toolbar}         
+      />
+    </View>
   )}
 </KeyboardAvoidingView>
 

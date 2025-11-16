@@ -631,7 +631,7 @@ export default function NotesHome() {
               <View style={styles.titleSection}>
                 <View style={styles.titleRow}>
                   <View style={styles.titleTextContainer}>
-                    <Text style={styles.mainTitle}>My Notebooks</Text>
+                    <Text style={styles.mainTitle} adjustsFontSizeToFit numberOfLines={1}>My Notebooks</Text>
                     <Text style={styles.subtitle} adjustsFontSizeToFit numberOfLines={1}>Organize your thoughts and ideas</Text>
                   </View>
                   
@@ -868,18 +868,17 @@ const styles = StyleSheet.create({
 
   // ========== LOADING & EMPTY STATES ==========
   loadingContainer: {
-    flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
   },
   lottieContainer: {
     width: 220,
     height: 220,
-    marginBottom: 24,
   },
   lottieAnimation: {
-    width: '100%',
-    height: '100%',
+    width: 100,
+    height: 100,
+    margin: 'auto',
   },
   loadingText: {
     color: '#94a3b8',

@@ -978,7 +978,7 @@ const QuizMaker = () => {
           transparent={true}
           animationType="fade"
           onRequestClose={() => setShowEllipsisMenu(false)}
-        >
+        > 
           <TouchableOpacity 
             style={styles.ellipsisOverlay}
             activeOpacity={1}
@@ -1471,25 +1471,26 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     fontSize: 13,
   },
-  ellipsisOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.4)',
-    justifyContent: 'flex-start',
-    alignItems: 'flex-end',
-    paddingTop: 60,
-    paddingRight: 16,
-  },
-  ellipsisMenu: {
-    backgroundColor: '#1e293b',
-    borderRadius: 12,
-    minWidth: 200,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 5,
-    overflow: 'hidden',
-  },
+   ellipsisOverlay: {
+  flex: 1,
+  backgroundColor: 'rgba(0, 0, 0, 0.4)',
+  justifyContent: 'center',
+  alignItems: 'center',
+  paddingHorizontal: 20,
+},
+ellipsisMenu: {
+  backgroundColor: '#1e293b',
+  borderRadius: 12,
+  minWidth: 200,
+  width: '80%',
+  maxWidth: 300,
+  shadowColor: '#000',
+  shadowOffset: { width: 0, height: 4 },
+  shadowOpacity: 0.3,
+  shadowRadius: 8,
+  elevation: 5,
+  overflow: 'hidden',
+},
   ellipsisMenuItem: {
     flexDirection: 'row',
     alignItems: 'center',
