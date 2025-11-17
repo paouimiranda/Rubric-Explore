@@ -116,7 +116,7 @@ export default function CheckEmailScreen() {
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 0 }}
             >
-              <Ionicons name="home" size={20} color="#ffffff" style={{ marginRight: 8 }} />
+              {/* <Ionicons name="home" size={20} color="#ffffff" style={{ alignItems: 'center'}} /> */}
               <Text style={styles.buttonText}>Back to Home</Text>
             </LinearGradient>
           </TouchableOpacity>
@@ -246,6 +246,7 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 16,
     fontFamily: 'Montserrat_700Bold',
+    margin: 'auto',
   },
   linkButton: {
     flexDirection: 'row',

@@ -1,4 +1,4 @@
-// Enhanced friendlist.tsx with Theme Support and Avatars - KEY CHANGES
+// Enhanced friendlist.tsx with Theme Support, Avatars, and Real-time Presence
 
 import { useNotifications } from '@/app/contexts/NotificationContext';
 import ChatList from '@/components/Interface/chat-list';
@@ -25,6 +25,7 @@ import {
   togglePinFriend,
   User,
 } from '@/services/friends-service';
+import { presenceService } from '@/services/presence-service';
 import { clearUserThemeCache, getUserThemesBatch } from '@/services/theme-service';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -47,17 +48,15 @@ import {
 import { auth } from '../../../firebase';
 
 type TabType = 'friends' | 'requests' | 'chat';
-type Status = 'online' | 'busy' | 'offline';
 
 interface Friend extends User {
-  status?: Status;
   themeId?: string;
-  avatarIndex?: number; // NEW: Avatar index from Firestore
+  avatarIndex?: number;
 }
 
 interface FriendRequest extends ServiceFriendRequest {}
 interface SearchResult extends SearchUser {
-  avatarIndex?: number; // NEW: Avatar index for search results
+  avatarIndex?: number;
 }
 
 export default function Friendlist() {
@@ -80,6 +79,7 @@ export default function Friendlist() {
   const [selectedFriend, setSelectedFriend] = useState<Friend | null>(null);
   const [mutedFriends, setMutedFriends] = useState<Set<string>>(new Set());
   const [pinnedFriends, setPinnedFriends] = useState<Set<string>>(new Set());
+  const [onlineFriends, setOnlineFriends] = useState<Set<string>>(new Set());
 
   const [alertConfig, setAlertConfig] = useState<{
     visible: boolean;
@@ -122,6 +122,37 @@ export default function Friendlist() {
     };
     loadPreferences();
   }, [currentUser, muteFriend]);
+
+  // NEW: Subscribe to all friends' presence
+  useEffect(() => {
+    if (friends.length === 0) return;
+
+    const unsubscribers: (() => void)[] = [];
+    const onlineSet = new Set<string>();
+
+    // Subscribe to each friend's presence
+    friends.forEach((friend) => {
+      const unsubscribe = presenceService.getUserPresence(friend.uid, (presence) => {
+        const isOnline = presenceService.isUserOnline(presence);
+        
+        if (isOnline) {
+          onlineSet.add(friend.uid);
+        } else {
+          onlineSet.delete(friend.uid);
+        }
+        
+        // Update state with a new Set to trigger re-render
+        setOnlineFriends(new Set(onlineSet));
+      });
+      
+      unsubscribers.push(unsubscribe);
+    });
+
+    // Cleanup subscriptions when friends change
+    return () => {
+      unsubscribers.forEach(unsub => unsub());
+    };
+  }, [friends]);
 
   const showAlert = (
     type: 'info' | 'success' | 'error' | 'warning',
@@ -342,14 +373,13 @@ export default function Friendlist() {
       const themeMap = await getUserThemesBatch(friendIds);
       console.log('✅ Themes fetched:', Object.fromEntries(themeMap));
       
-      // NEW: Map friends with themes AND avatarIndex
       const friendsWithThemes = userFriends.map(friend => {
         const themeId = themeMap.get(friend.uid) || 'default';
         console.log(`👤 ${friend.displayName}: theme = ${themeId}, avatar = ${friend.avatarIndex || 0}`);
         return {
           ...friend,
           themeId,
-          avatarIndex: friend.avatarIndex ?? 0 // NEW: Include avatarIndex from user data
+          avatarIndex: friend.avatarIndex ?? 0
         };
       });
       
@@ -548,7 +578,8 @@ export default function Friendlist() {
     );
   };
 
-  const onlineCount = friends.filter(friend => friend.isOnline).length;
+  // UPDATED: Use real presence data for online count
+  const onlineCount = onlineFriends.size;
 
   const renderTabContent = () => {
     switch (activeTab) {
@@ -637,17 +668,17 @@ export default function Friendlist() {
                   console.log(`🎨 Rendering friend ${friend.displayName} with theme: ${friend.themeId || 'undefined'}, avatar: ${friend.avatarIndex ?? 0}`);
                   return (
                     <FriendCard 
-                      key={friend.uid} 
+                      key={friend.uid}
+                      userId={friend.uid}
                       name={friend.displayName} 
                       username={friend.username}
-                      status={friend.isOnline ? 'online' : 'offline'}
                       onChatPress={() => startChatWithFriend(friend)}
                       onProfilePress={() => navigateToProfile(friend.uid)}
                       onMenuPress={() => openMenu(friend)}
                       isMuted={isFriendMuted(friend.uid)}
                       isPinned={pinnedFriends.has(friend.uid)}
                       themeId={friend.themeId || 'default'}
-                      avatarIndex={friend.avatarIndex ?? 0} // NEW: Pass avatar index
+                      avatarIndex={friend.avatarIndex ?? 0}
                     />
                   );
                 })
@@ -979,7 +1010,7 @@ export default function Friendlist() {
   );
 }
 
-// Search Result Card Component - NEW: With Avatar
+// Search Result Card Component
 const SearchResultCard = ({ user, onSendRequest, onViewProfile }: { 
   user: SearchResult; 
   onSendRequest: (userId: string, username: string) => void;
@@ -1035,7 +1066,7 @@ const SearchResultCard = ({ user, onSendRequest, onViewProfile }: {
   );
 };
 
-// Friend Request Card Component - NEW: With Avatar
+// Friend Request Card Component
 const FriendRequestCard = ({ request, onAccept, onReject, onViewProfile }: {
   request: FriendRequest;
   onAccept: (request: FriendRequest) => void;

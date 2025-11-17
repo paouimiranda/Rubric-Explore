@@ -12,7 +12,9 @@ import "react-native-get-random-values";
 import "react-native-reanimated";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 
+import { auth } from '@/firebase';
 import { useBacklogLogger } from "@/hooks/useBackLogLogger";
+import { presenceService } from '@/services/presence-service';
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import { NotificationProvider } from "./contexts/NotificationContext";
 import { PushNotificationProvider } from "./contexts/PushNotificationContext"; // ADD THIS IMPORT
@@ -55,6 +57,22 @@ function RootNavigator() {
       }
     }
   }, [loading, fontsLoaded, isAuthenticated, pathname, router]);
+  
+  //online presence
+  useEffect(() => {
+  const unsubscribe = auth.onAuthStateChanged((user) => {
+    if (user) {
+      presenceService.initializePresence(user.uid);
+    } else {
+      presenceService.cleanup();
+    }
+  });
+
+  return () => {
+    unsubscribe();
+    presenceService.cleanup();
+  };
+}, []);
 
   // global error handling
   useEffect(() => {

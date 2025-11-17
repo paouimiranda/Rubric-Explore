@@ -1,17 +1,17 @@
 import { Plan, PlannerService } from '@/services/planner-service';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import LottieView from 'lottie-react-native';
 import moment from 'moment';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
   Alert,
   Animated,
   ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
-  View,
+  View
 } from 'react-native';
 import Svg, { Circle, Defs, Stop, RadialGradient as SvgRadialGradient } from 'react-native-svg';
 
@@ -495,7 +495,12 @@ export default function TodayTab({
   if (loading) {
     return (
       <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" color="#4facfe" />
+        <LottieView
+          source={require('@/assets/animations/quiz-loading.json')}
+          autoPlay
+          loop
+          style={styles.lottieAnimation}
+        />
         <Text style={styles.loadingText}>Loading today's plans...</Text>
       </View>
     );
@@ -994,5 +999,10 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 15,
     fontWeight: '600',
+  },
+  lottieAnimation: {
+    width: 100,
+    height: 100,
+    marginBottom: 3,
   },
 });

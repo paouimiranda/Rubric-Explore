@@ -1,6 +1,7 @@
-// components/Interface/friend-card.tsx (With Avatar Support)
+// components/Interface/friend-card.tsx (Fixed Presence Integration)
 import { getAvatarUrl } from '@/constants/avatars';
 import { getTheme } from '@/constants/friend-card-themes';
+import { PresenceData, presenceService } from '@/services/presence-service';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import React, { useEffect, useRef, useState } from 'react';
@@ -9,7 +10,7 @@ import ThemeAnimations from './theme-animations';
 
 interface FriendCardProps {
   name: string;
-  status: 'online' | 'offline' | 'busy';
+  userId: string;
   onChatPress?: () => void;
   username?: string;
   onProfilePress?: () => void;
@@ -17,12 +18,12 @@ interface FriendCardProps {
   isMuted?: boolean;
   isPinned?: boolean;
   themeId?: string;
-  avatarIndex?: number; // NEW: Avatar index from Firestore
+  avatarIndex?: number;
 }
 
 export default function FriendCard({ 
-  name, 
-  status, 
+  name,
+  userId,
   onChatPress, 
   username, 
   onProfilePress, 
@@ -30,17 +31,48 @@ export default function FriendCard({
   isMuted = false,
   isPinned = false,
   themeId = 'default',
-  avatarIndex = 0, // NEW: Default to first avatar
+  avatarIndex = 0,
 }: FriendCardProps) {
   const theme = getTheme(themeId);
   const glowAnim = useRef(new Animated.Value(0)).current;
   const pulseAnim = useRef(new Animated.Value(1)).current;
+  const statusPulseAnim = useRef(new Animated.Value(1)).current;
   const [isMounted, setIsMounted] = useState(false);
+  
+  // Presence state
+  const [presence, setPresence] = useState<PresenceData | null>(null);
+  const [isOnline, setIsOnline] = useState(false);
 
   useEffect(() => {
     setIsMounted(true);
   }, []);
 
+  // Subscribe to user's presence with proper cleanup
+  useEffect(() => {
+    console.log(`🔔 Setting up presence listener for ${name} (${userId})`);
+    
+    const unsubscribe = presenceService.getUserPresence(userId, (presenceData) => {
+      console.log(`📊 ${name} presence update:`, presenceData?.status || 'null');
+      setPresence(presenceData);
+      setIsOnline(presenceService.isUserOnline(presenceData));
+    });
+
+    // Also fetch initial presence immediately
+    presenceService.getUserPresenceOnce(userId).then((initialPresence) => {
+      console.log(`📍 ${name} initial presence:`, initialPresence?.status || 'null');
+      if (initialPresence) {
+        setPresence(initialPresence);
+        setIsOnline(presenceService.isUserOnline(initialPresence));
+      }
+    });
+
+    return () => {
+      console.log(`🔕 Cleaning up presence listener for ${name} (${userId})`);
+      unsubscribe();
+    };
+  }, [userId, name]);
+
+  // Theme animations
   useEffect(() => {
     if (theme.animated && isMounted) {
       if (theme.animationType === 'glow' || theme.borderGlow) {
@@ -79,36 +111,65 @@ export default function FriendCard({
     }
   }, [theme.animated, theme.animationType, theme.borderGlow, isMounted, glowAnim, pulseAnim]);
 
+  // Status pulse animation for online users
+  useEffect(() => {
+    if (isOnline) {
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(statusPulseAnim, {
+            toValue: 1.8,
+            duration: 1500,
+            useNativeDriver: true,
+          }),
+          Animated.timing(statusPulseAnim, {
+            toValue: 1,
+            duration: 1500,
+            useNativeDriver: true,
+          }),
+        ])
+      ).start();
+    } else {
+      statusPulseAnim.setValue(1);
+    }
+  }, [isOnline, statusPulseAnim]);
+
   const getStatusColor = () => {
-    switch (status) {
+    if (!presence) return '#6B7280'; // Gray if no presence data
+
+    switch (presence.status) {
       case 'online':
-        return '#22C55E';
-      case 'busy':
-        return '#EF4444';
+        return '#22C55E'; // Green
+      case 'away':
+        return '#F59E0B'; // Yellow/Orange
       case 'offline':
       default:
-        return '#6B7280';
+        return '#6B7280'; // Gray
     }
   };
 
   const getStatusText = () => {
-    switch (status) {
+    if (!presence) return 'Offline';
+
+    switch (presence.status) {
       case 'online':
         return 'Online';
-      case 'busy':
-        return 'Busy';
+      case 'away':
+        return 'Away';
       case 'offline':
+        return presenceService.getLastSeenText(presence);
       default:
         return 'Offline';
     }
   };
 
   const getStatusIcon = () => {
-    switch (status) {
+    if (!presence) return 'ellipse';
+
+    switch (presence.status) {
       case 'online':
         return 'checkmark-circle';
-      case 'busy':
-        return 'remove-circle';
+      case 'away':
+        return 'time-outline';
       case 'offline':
       default:
         return 'ellipse';
@@ -149,7 +210,11 @@ export default function FriendCard({
     outputRange: [0.3, 0.8],
   });
 
-  // NEW: Get avatar URL
+  const pulseOpacity = statusPulseAnim.interpolate({
+    inputRange: [1, 1.8],
+    outputRange: [0.6, 0],
+  });
+
   const avatarUrl = getAvatarUrl(avatarIndex);
 
   return (
@@ -197,7 +262,6 @@ export default function FriendCard({
         >
           <View style={styles.leftSection}>
             <View style={styles.avatarContainer}>
-              {/* NEW: Display avatar image with gradient border */}
               <LinearGradient
                 colors={getAvatarGradient()} 
                 style={styles.avatarBorder}
@@ -210,8 +274,21 @@ export default function FriendCard({
                   />
                 </View>
               </LinearGradient>
+              
+              {/* Status indicator with pulse animation */}
               <View style={[styles.statusIndicator, { backgroundColor: getStatusColor() }]}>
-                <View style={styles.statusPulse} />
+                {isOnline && (
+                  <Animated.View 
+                    style={[
+                      styles.statusPulse,
+                      { 
+                        backgroundColor: getStatusColor(),
+                        opacity: pulseOpacity,
+                        transform: [{ scale: statusPulseAnim }]
+                      }
+                    ]} 
+                  />
+                )}
               </View>
             </View>
             
@@ -337,7 +414,6 @@ const styles = StyleSheet.create({
     width: 14,
     height: 14,
     borderRadius: 7,
-    backgroundColor: 'inherit',
   },
   userInfo: {
     flex: 1,

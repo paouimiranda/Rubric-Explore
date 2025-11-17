@@ -1,8 +1,8 @@
 // firebase.ts
-// Import the functions you need from the SDKs you need
-import AsyncStorage from '@react-native-async-storage/async-storage'; // Keep for Firebase persistence
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { initializeApp } from "firebase/app";
-import { getReactNativePersistence, initializeAuth } from "firebase/auth"; // Updated: Import getReactNativePersistence
+import { getReactNativePersistence, initializeAuth } from "firebase/auth";
+import { getDatabase } from 'firebase/database';
 import { getFirestore } from "firebase/firestore";
 import { getFunctions } from 'firebase/functions';
 import { getStorage } from "firebase/storage";
@@ -15,25 +15,26 @@ const firebaseConfig = {
   storageBucket: "rubric-app-8f65c.firebasestorage.app",
   messagingSenderId: "383859518826",
   appId: "1:383859518826:web:de8fce781ecd0a887c0913",
-  measurementId: "G-SJQ5HCRDX3"
+  measurementId: "G-SJQ5HCRDX3",
+  // FIXED: Removed trailing slash
+  databaseURL: "https://rubric-app-8f65c-default-rtdb.asia-southeast1.firebasedatabase.app",
 };
 
 // Initialize Firebase
 export const app = initializeApp(firebaseConfig);
 
-// Initialize Auth with React Native persistence (enables offline auth state)
+// Initialize Auth with React Native persistence
 export const auth = initializeAuth(app, {
-  persistence: getReactNativePersistence(AsyncStorage) // Enabled: Persists auth state across app restarts
+  persistence: getReactNativePersistence(AsyncStorage)
 });
 
-// Initialize Firestore and Storage
+// Initialize services
 export const db = getFirestore(app);
 export const storage = getStorage(app);
 export const functions = getFunctions(app);
+export const rtdb = getDatabase(app);
 
-// Optional: Add basic error handling for initialization (logs if something goes wrong)
-try {
-  console.log('🔥 Firebase initialized successfully');
-} catch (error) {
-  console.error('❌ Firebase initialization failed:', error);
-}
+// Log initialization status
+console.log('🔥 Firebase initialized successfully');
+console.log('📡 RTDB URL:', firebaseConfig.databaseURL);
+console.log('✅ RTDB instance created:', !!rtdb);
