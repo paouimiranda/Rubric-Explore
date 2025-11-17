@@ -725,7 +725,7 @@ const RegisterScreen = () => {
                 {
                   translateY: labelAnim.interpolate({
                     inputRange: [0, 1],
-                    outputRange: [12, -10]
+                    outputRange: [12, -24]
                   })
                 },
                 {
@@ -876,7 +876,7 @@ const RegisterScreen = () => {
                       {
                         translateY: passwordLabelAnim.interpolate({
                           inputRange: [0, 1],
-                          outputRange: [12, -10]
+                          outputRange: [12, -24]
                         })
                       },
                       {
@@ -939,7 +939,7 @@ const RegisterScreen = () => {
                       {
                         translateY: confirmPasswordLabelAnim.interpolate({
                           inputRange: [0, 1],
-                          outputRange: [12, -10]
+                          outputRange: [12,24]
                         })
                       },
                       {

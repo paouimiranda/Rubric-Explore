@@ -355,7 +355,7 @@ const LoginScreen = () => {
           duration: 500,
           useNativeDriver: true,
         }).start();
-      }, 500);
+      }, 1200);
 
       addBacklogEvent(BACKLOG_EVENTS.LOGIN_SESSION, { email: email.toLowerCase() });
     } catch (error: any) {
@@ -485,7 +485,7 @@ const LoginScreen = () => {
                     {
                       translateY: emailLabelAnim.interpolate({
                         inputRange: [0, 1],
-                        outputRange: [12, -10]
+                        outputRange: [12, -24]
                       })
                     },
                     {
@@ -540,7 +540,7 @@ const LoginScreen = () => {
                     {
                       translateY: passwordLabelAnim.interpolate({
                         inputRange: [0, 1],
-                        outputRange: [12, -10]
+                        outputRange: [12, -24]
                       })
                     },
                     {
