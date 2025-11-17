@@ -1,6 +1,5 @@
 // services/chat-service.ts
 import {
-  addDoc,
   collection,
   deleteDoc,
   doc,
@@ -78,8 +77,9 @@ export interface ConversationPreview {
 }
 
 // Create or get existing conversation between two users
+
 export const createOrGetConversation = async (
-  user1Id: string,
+  user1Id: string,  // This is the current/logged-in user
   user2Id: string
 ): Promise<string> => {
   try {
@@ -92,13 +92,17 @@ export const createOrGetConversation = async (
     const snapshot: QuerySnapshot<DocumentData> = await getDocs(conversationsQuery1);
     
     // Check if any conversation contains both users
-    for (const doc of snapshot.docs) {
-      const data = doc.data();
+    for (const convDoc of snapshot.docs) {  // RENAMED: 'doc' -> 'convDoc' to avoid shadowing
+      const data = convDoc.data();
       if (data.participants.includes(user2Id)) {
-        return doc.id;
+        // FOUND EXISTING CONVERSATION: Reset isDeleted for user1Id (current user) so it shows in their chat list
+        const userConvRef = doc(db, 'userConversations', user1Id, 'conversations', convDoc.id);  // UPDATED: Use convDoc.id
+        await updateDoc(userConvRef, { isDeleted: false });  // Un-delete for this user only
+        return convDoc.id;  // UPDATED: Return convDoc.id
       }
     }
     
+    // NO EXISTING CONVERSATION: Create new one (with userConversations docs)
     // Get user information for both participants
     const [user1Doc, user2Doc]: [DocumentSnapshot<DocumentData>, DocumentSnapshot<DocumentData>] = await Promise.all([
       getDoc(doc(db, 'users', user1Id)),
@@ -112,7 +116,9 @@ export const createOrGetConversation = async (
     const user1Data = user1Doc.data();
     const user2Data = user2Doc.data();
     
-    // Create new conversation
+    // Create new conversation and userConversations in a batch
+    const batch = writeBatch(db);
+    
     const conversationData = {
       participants: [user1Id, user2Id],
       participantInfo: {
@@ -135,8 +141,22 @@ export const createOrGetConversation = async (
       }
     };
     
-    const docRef = await addDoc(collection(db, 'conversations'), conversationData);
-    return docRef.id;
+    // Create main conversation document
+    const conversationRef = doc(collection(db, 'conversations'));
+    batch.set(conversationRef, conversationData);
+    
+    // Create userConversations documents for both users
+    const userConvData = {
+      conversationId: conversationRef.id,
+      lastMessageTime: serverTimestamp(),
+      unreadCount: 0,
+      isDeleted: false  // New conversations start as not deleted
+    };
+    batch.set(doc(db, 'userConversations', user1Id, 'conversations', conversationRef.id), userConvData);
+    batch.set(doc(db, 'userConversations', user2Id, 'conversations', conversationRef.id), userConvData);
+    
+    await batch.commit();
+    return conversationRef.id;
   } catch (error) {
     console.error('Error creating/getting conversation:', error);
     throw new Error('Failed to create or get conversation');
@@ -166,7 +186,7 @@ export const sendMessage = async (
     };
     const batch = writeBatch(db);
     // Add message to subcollection
-    const messageRef = doc(collection(db, 'conversations', conversationId, 'messages'));  // UPDATED: Subcollection
+    const messageRef = doc(collection(db, 'conversations', conversationId, 'messages'));
     batch.set(messageRef, messageData);
     // Update conversation's last message
     const conversationRef = doc(db, 'conversations', conversationId);
@@ -184,13 +204,13 @@ export const sendMessage = async (
         lastMessageTime: serverTimestamp(),
         [`unreadCount.${otherParticipantId}`]: (conversationData.unreadCount?.[otherParticipantId] || 0) + 1
       });
-      // UPDATED: Also update userConversations for both users
+      // UPDATED: Use set with merge for userConversations (creates if missing)
       const userConvRefs = [
         doc(db, 'userConversations', senderId, 'conversations', conversationId),
         doc(db, 'userConversations', otherParticipantId, 'conversations', conversationId)
       ];
       userConvRefs.forEach(ref => {
-        batch.update(ref, {
+        batch.set(ref, {
           lastMessage: {
             text: text.trim(),
             senderId,
@@ -199,7 +219,7 @@ export const sendMessage = async (
           },
           lastMessageTime: serverTimestamp(),
           unreadCount: otherParticipantId === senderId ? 0 : (conversationData.unreadCount?.[otherParticipantId] || 0) + 1
-        });
+        }, { merge: true });  // KEY: merge=true creates the doc if it doesn't exist
       });
     }
     
@@ -369,15 +389,15 @@ export const markMessagesAsRead = async (
       [`unreadCount.${userId}`]: 0
     });
     
-    // UPDATED: Update userConversations
+    // UPDATED: Use set with merge for userConversations
     const userConvRef = doc(db, 'userConversations', userId, 'conversations', conversationId);
-    batch.update(userConvRef, {
+    batch.set(userConvRef, {
       unreadCount: 0
-    });
+    }, { merge: true });  // Creates if missing
     
     // Mark messages as read in subcollection
     const messagesQuery = query(
-      collection(db, 'conversations', conversationId, 'messages'),  // UPDATED: Subcollection
+      collection(db, 'conversations', conversationId, 'messages'),
       where('senderId', '!=', userId),
       orderBy('timestamp', 'desc'),
       limit(20)
