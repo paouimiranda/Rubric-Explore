@@ -13,6 +13,7 @@ import {
   where,
 } from 'firebase/firestore';
 import { auth, db } from '../firebase';
+import { NotificationService } from './notification-service';
 
 export interface Plan {
   id?: string;
@@ -35,6 +36,10 @@ export interface Plan {
   
   // Social
   isPublic: boolean;
+  
+  // Notification
+  notificationId?: string;
+  reminderMinutes?: number; // Minutes before plan to send notification (default: 15)
   
   // Metadata
   createdAt?: any;
@@ -67,9 +72,30 @@ export class PlannerService {
   }
 
   /**
-   * Create a new plan
+   * Remove undefined values from an object to prevent Firebase errors
+   * Firebase doesn't accept undefined values - they must be null or omitted
    */
-  static async createPlan(plan: Omit<Plan, 'id' | 'createdAt' | 'updatedAt' | 'uid'>): Promise<string> {
+  private static cleanUndefinedFields<T extends Record<string, any>>(obj: T): Partial<T> {
+    const cleaned: any = {};
+    
+    Object.keys(obj).forEach((key) => {
+      const value = obj[key];
+      
+      // Skip undefined values entirely (don't include them in the update)
+      if (value !== undefined) {
+        cleaned[key] = value;
+      }
+    });
+    
+    return cleaned;
+  }
+
+  /**
+   * Create a new plan with notification
+   */
+  static async createPlan(
+    plan: Omit<Plan, 'id' | 'createdAt' | 'updatedAt' | 'uid' | 'notificationId'>
+  ): Promise<string> {
     try {
       const uid = this.getCurrentUserId();
       
@@ -79,12 +105,26 @@ export class PlannerService {
         status: plan.status || 'pending',
         tags: plan.tags || [],
         isPublic: plan.isPublic ?? false,
+        reminderMinutes: plan.reminderMinutes ?? 15,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       };
 
       const docRef = await addDoc(collection(db, this.COLLECTION_NAME), planData);
-      return docRef.id;
+      const planId = docRef.id;
+
+      // Schedule notification
+      const notificationId = await this.scheduleNotificationForPlan({
+        ...planData,
+        id: planId,
+      } as Plan);
+
+      // Update plan with notification ID if scheduled
+      if (notificationId) {
+        await updateDoc(docRef, { notificationId });
+      }
+
+      return planId;
     } catch (error) {
       console.error('Error creating plan:', error);
       throw new Error('Failed to create plan.');
@@ -186,9 +226,73 @@ export class PlannerService {
   }
 
   /**
-   * Update an existing plan
+   * Update an existing plan with notification rescheduling
    */
-  static async updatePlan(planId: string, updates: Partial<Omit<Plan, 'id' | 'uid' | 'createdAt'>>): Promise<void> {
+  static async updatePlan(
+    planId: string,
+    updates: Partial<Omit<Plan, 'id' | 'uid' | 'createdAt'>>
+  ): Promise<void> {
+    try {
+      const uid = this.getCurrentUserId();
+      const docRef = doc(db, this.COLLECTION_NAME, planId);
+      
+      // Check ownership
+      const docSnap = await getDoc(docRef);
+      if (!docSnap.exists()) {
+        throw new Error('Plan not found.');
+      }
+      
+      const planData = docSnap.data();
+      if (planData.uid !== uid) {
+        throw new Error('You do not have permission to update this plan.');
+      }
+
+      // Clean undefined fields FIRST before processing
+      const cleanedUpdates = this.cleanUndefinedFields(updates);
+
+      // If date, time, or reminder settings changed, reschedule notification
+      const shouldReschedule = 
+        cleanedUpdates.date !== undefined || 
+        cleanedUpdates.time !== undefined || 
+        cleanedUpdates.reminderMinutes !== undefined ||
+        cleanedUpdates.status !== undefined;
+
+      if (shouldReschedule) {
+        // Get updated plan data
+        const updatedPlan = {
+          ...planData,
+          ...cleanedUpdates,
+          id: planId,
+        } as Plan;
+
+        // Cancel old notification
+        await NotificationService.cancelPlanNotification(planId);
+
+        // Schedule new notification if plan is pending
+        if (updatedPlan.status === 'pending' || cleanedUpdates.status === 'pending') {
+          const notificationId = await this.scheduleNotificationForPlan(updatedPlan);
+          if (notificationId) {
+            cleanedUpdates.notificationId = notificationId;
+          }
+          // If scheduling failed, notificationId simply won't be in cleanedUpdates
+        }
+        // If not pending, notificationId won't be added to update
+      }
+
+      await updateDoc(docRef, {
+        ...cleanedUpdates,
+        updatedAt: serverTimestamp(),
+      });
+    } catch (error) {
+      console.error('Error updating plan:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Mark a plan as completed (cancels notification)
+   */
+  static async completePlan(planId: string): Promise<void> {
     try {
       const uid = this.getCurrentUserId();
       const docRef = doc(db, this.COLLECTION_NAME, planId);
@@ -204,24 +308,14 @@ export class PlannerService {
         throw new Error('You do not have permission to update this plan.');
       }
       
+      // Cancel notification when completing
+      await NotificationService.cancelPlanNotification(planId);
+      
+      // Only update status and completedAt - don't touch notificationId
       await updateDoc(docRef, {
-        ...updates,
-        updatedAt: serverTimestamp(),
-      });
-    } catch (error) {
-      console.error('Error updating plan:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * Mark a plan as completed
-   */
-  static async completePlan(planId: string): Promise<void> {
-    try {
-      await this.updatePlan(planId, {
         status: 'completed',
         completedAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
       });
     } catch (error) {
       console.error('Error completing plan:', error);
@@ -230,14 +324,100 @@ export class PlannerService {
   }
 
   /**
-   * Mark a plan as pending (undo completion)
+   * Toggle plan status between pending and completed
+   */
+  static async togglePlanStatus(planId: string): Promise<void> {
+    try {
+      const uid = this.getCurrentUserId();
+      const docRef = doc(db, this.COLLECTION_NAME, planId);
+      
+      // Check ownership and get current status
+      const docSnap = await getDoc(docRef);
+      if (!docSnap.exists()) {
+        throw new Error('Plan not found.');
+      }
+      
+      const planData = docSnap.data();
+      if (planData.uid !== uid) {
+        throw new Error('You do not have permission to update this plan.');
+      }
+
+      const currentPlan = { ...planData, id: planId } as Plan;
+      const isCurrentlyCompleted = currentPlan.status === 'completed';
+
+      if (isCurrentlyCompleted) {
+        // Uncomplete: change to pending and reschedule notification
+        const notificationId = await this.scheduleNotificationForPlan(currentPlan);
+        
+        const updateData: Record<string, any> = {
+          status: 'pending',
+          completedAt: null,
+          updatedAt: serverTimestamp(),
+        };
+
+        // Only add notificationId if successfully scheduled
+        if (notificationId) {
+          updateData.notificationId = notificationId;
+        }
+
+        await updateDoc(docRef, updateData);
+      } else {
+        // Complete: change to completed and cancel notification
+        await NotificationService.cancelPlanNotification(planId);
+        
+        await updateDoc(docRef, {
+          status: 'completed',
+          completedAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        });
+      }
+    } catch (error) {
+      console.error('Error toggling plan status:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Mark a plan as pending (reschedules notification)
    */
   static async uncompletePlan(planId: string): Promise<void> {
     try {
-      await this.updatePlan(planId, {
+      const uid = this.getCurrentUserId();
+      const docRef = doc(db, this.COLLECTION_NAME, planId);
+      
+      // Check ownership
+      const docSnap = await getDoc(docRef);
+      if (!docSnap.exists()) {
+        throw new Error('Plan not found.');
+      }
+      
+      const planData = docSnap.data();
+      if (planData.uid !== uid) {
+        throw new Error('You do not have permission to update this plan.');
+      }
+
+      // Get current plan data to reschedule notification
+      const currentPlan = {
+        ...planData,
+        id: planId,
+      } as Plan;
+
+      // Schedule notification for the plan
+      const notificationId = await this.scheduleNotificationForPlan(currentPlan);
+
+      // Update plan status and notification ID
+      const updateData: any = {
         status: 'pending',
         completedAt: null,
-      });
+        updatedAt: serverTimestamp(),
+      };
+
+      // Only add notificationId if it was successfully scheduled
+      if (notificationId) {
+        updateData.notificationId = notificationId;
+      }
+
+      await updateDoc(docRef, updateData);
     } catch (error) {
       console.error('Error uncompleting plan:', error);
       throw error;
@@ -245,7 +425,7 @@ export class PlannerService {
   }
 
   /**
-   * Delete a plan
+   * Delete a plan (cancels notification)
    */
   static async deletePlan(planId: string): Promise<void> {
     try {
@@ -262,11 +442,53 @@ export class PlannerService {
       if (planData.uid !== uid) {
         throw new Error('You do not have permission to delete this plan.');
       }
+
+      // Cancel notification before deleting
+      await NotificationService.cancelPlanNotification(planId);
       
       await deleteDoc(docRef);
     } catch (error) {
       console.error('Error deleting plan:', error);
       throw error;
+    }
+  }
+
+  /**
+   * Schedule notification for a plan
+   * @private
+   */
+  private static async scheduleNotificationForPlan(plan: Plan): Promise<string | null> {
+    try {
+      // Don't schedule if plan is completed or cancelled
+      if (plan.status !== 'pending') {
+        return null;
+      }
+
+      // Parse plan date and time
+      const [hours, minutes] = plan.time.split(':').map(Number);
+      const planDateTime = new Date(plan.date);
+      planDateTime.setHours(hours, minutes, 0, 0);
+
+      // Don't schedule if time has already passed
+      if (planDateTime <= new Date()) {
+        return null;
+      }
+
+      // Schedule with reminder offset
+      const reminderMinutes = plan.reminderMinutes ?? 15;
+      const notificationId = await NotificationService.schedulePlanNotificationWithReminder(
+        plan.id!,
+        plan.title,
+        plan.description,
+        planDateTime,
+        reminderMinutes,
+        plan.category
+      );
+
+      return notificationId;
+    } catch (error) {
+      console.error('Error scheduling notification for plan:', error);
+      return null;
     }
   }
 

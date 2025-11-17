@@ -3,28 +3,28 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import React, { useEffect, useMemo } from 'react';
 import {
-    Animated,
-    Modal,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  Animated,
+  Modal,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 
-interface AnalyticsModalProps {
+interface PlansOverviewModalProps {
   visible: boolean;
   plans: Plan[];
   onClose: () => void;
 }
 
-export default function AnalyticsModal({
+export default function PlansOverviewModal({
   visible,
   plans,
   onClose,
-}: AnalyticsModalProps) {
+}: PlansOverviewModalProps) {
   const fadeAnim = React.useRef(new Animated.Value(0)).current;
-  const scaleAnim = React.useRef(new Animated.Value(0.8)).current;
+  const slideAnim = React.useRef(new Animated.Value(50)).current;
 
   useEffect(() => {
     if (visible) {
@@ -34,20 +34,20 @@ export default function AnalyticsModal({
           duration: 300,
           useNativeDriver: true,
         }),
-        Animated.spring(scaleAnim, {
-          toValue: 1,
+        Animated.spring(slideAnim, {
+          toValue: 0,
           tension: 50,
-          friction: 7,
+          friction: 8,
           useNativeDriver: true,
         }),
       ]).start();
     } else {
       fadeAnim.setValue(0);
-      scaleAnim.setValue(0.8);
+      slideAnim.setValue(50);
     }
   }, [visible]);
 
-  const analytics = useMemo(() => {
+  const overview = useMemo(() => {
     const totalPlans = plans.length;
     const completedPlans = plans.filter(p => p.status === 'completed').length;
     const pendingPlans = totalPlans - completedPlans;
@@ -81,164 +81,213 @@ export default function AnalyticsModal({
         <Animated.View
           style={[
             styles.modalContent,
-            { opacity: fadeAnim, transform: [{ scale: scaleAnim }] },
+            { 
+              opacity: fadeAnim, 
+              transform: [{ translateY: slideAnim }] 
+            },
           ]}
         >
-          <LinearGradient
-            colors={['#fa709a', '#fee140']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.modalHeader}
-          >
-            <Ionicons name="stats-chart" size={32} color="#fff" />
-            <Text style={styles.modalTitle}>Analytics</Text>
-          </LinearGradient>
-
-          <ScrollView style={styles.modalBody}>
-            <View style={styles.analyticsSection}>
-              <Text style={styles.analyticsSectionTitle}>Overview</Text>
-              
-              <View style={styles.analyticsGrid}>
-                <View style={styles.analyticsCard}>
-                  <LinearGradient
-                    colors={['#4facfe', '#00f2fe']}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 1 }}
-                    style={styles.analyticsIconBadge}
-                  >
-                    <Ionicons name="calendar" size={24} color="#fff" />
-                  </LinearGradient>
-                  <Text style={styles.analyticsValue}>{analytics.totalPlans}</Text>
-                  <Text style={styles.analyticsLabel}>Total Plans</Text>
-                </View>
-
-                <View style={styles.analyticsCard}>
-                  <LinearGradient
-                    colors={['#667eea', '#764ba2']}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 1 }}
-                    style={styles.analyticsIconBadge}
-                  >
-                    <Ionicons name="trending-up" size={24} color="#fff" />
-                  </LinearGradient>
-                  <Text style={styles.analyticsValue}>{analytics.completionRate.toFixed(0)}%</Text>
-                  <Text style={styles.analyticsLabel}>Completion Rate</Text>
-                </View>
+          {/* Header */}
+          <View style={styles.header}>
+            <View style={styles.headerTop}>
+              <View style={styles.headerTitleRow}>
+                <LinearGradient
+                  colors={['#4facfe', '#00f2fe']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.headerIcon}
+                >
+                  <Ionicons name="pie-chart" size={24} color="#fff" />
+                </LinearGradient>
+                <Text style={styles.headerTitle}>Plans Overview</Text>
               </View>
+              <TouchableOpacity
+                onPress={onClose}
+                style={styles.closeIconButton}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="close" size={24} color="#aaa" />
+              </TouchableOpacity>
+            </View>
+            <Text style={styles.headerSubtitle}>
+              Summary of your {overview.totalPlans} plan{overview.totalPlans !== 1 ? 's' : ''}
+            </Text>
+          </View>
 
-              <View style={styles.analyticsGrid}>
-                <View style={styles.analyticsCard}>
+          <ScrollView style={styles.scrollContent} showsVerticalScrollIndicator={false}>
+            {/* Quick Stats */}
+            <View style={styles.section}>
+              <View style={styles.statsRow}>
+                <View style={styles.statCard}>
                   <LinearGradient
                     colors={['#43e97b', '#38f9d7']}
                     start={{ x: 0, y: 0 }}
                     end={{ x: 1, y: 1 }}
-                    style={styles.analyticsIconBadge}
+                    style={styles.statIconContainer}
                   >
-                    <Ionicons name="checkmark-done" size={24} color="#fff" />
+                    <Ionicons name="checkmark-circle" size={28} color="#fff" />
                   </LinearGradient>
-                  <Text style={styles.analyticsValue}>{analytics.completedPlans}</Text>
-                  <Text style={styles.analyticsLabel}>Completed</Text>
+                  <View style={styles.statInfo}>
+                    <Text style={styles.statValue}>{overview.completedPlans}</Text>
+                    <Text style={styles.statLabel}>Completed</Text>
+                  </View>
                 </View>
 
-                <View style={styles.analyticsCard}>
+                <View style={styles.statCard}>
                   <LinearGradient
-                    colors={['#f093fb', '#f5576c']}
+                    colors={['#fa709a', '#fee140']}
                     start={{ x: 0, y: 0 }}
                     end={{ x: 1, y: 1 }}
-                    style={styles.analyticsIconBadge}
+                    style={styles.statIconContainer}
                   >
-                    <Ionicons name="hourglass" size={24} color="#fff" />
+                    <Ionicons name="time" size={28} color="#fff" />
                   </LinearGradient>
-                  <Text style={styles.analyticsValue}>{analytics.pendingPlans}</Text>
-                  <Text style={styles.analyticsLabel}>Pending</Text>
+                  <View style={styles.statInfo}>
+                    <Text style={styles.statValue}>{overview.pendingPlans}</Text>
+                    <Text style={styles.statLabel}>Pending</Text>
+                  </View>
                 </View>
+              </View>
+
+              {/* Completion Progress */}
+              <View style={styles.progressCard}>
+                <View style={styles.progressHeader}>
+                  <Text style={styles.progressLabel}>Completion Progress</Text>
+                  <Text style={styles.progressPercentage}>
+                    {overview.completionRate.toFixed(0)}%
+                  </Text>
+                </View>
+                <View style={styles.progressBarTrack}>
+                  <LinearGradient
+                    colors={['#667eea', '#764ba2']}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 0 }}
+                    style={[
+                      styles.progressBarFill,
+                      { width: `${overview.completionRate}%` }
+                    ]}
+                  />
+                </View>
+                <Text style={styles.progressSubtext}>
+                  {overview.completedPlans} of {overview.totalPlans} plans completed
+                </Text>
               </View>
             </View>
 
-            <View style={styles.analyticsSection}>
-              <Text style={styles.analyticsSectionTitle}>By Category</Text>
-              {Object.keys(analytics.plansByCategory).length > 0 ? (
-                Object.entries(analytics.plansByCategory).map(([category, count]) => {
-                  const percentage = (count / analytics.totalPlans) * 100;
-                  const colors = PlannerService.getCategoryColor(category);
-                  
-                  return (
-                    <View key={category} style={styles.analyticsBarContainer}>
-                      <View style={styles.analyticsBarHeader}>
-                        <View style={styles.analyticsBarLabelRow}>
-                          <LinearGradient
-                            colors={colors as any}
-                            start={{ x: 0, y: 0 }}
-                            end={{ x: 1, y: 1 }}
-                            style={styles.categoryIcon}
-                          >
-                            <Ionicons name="folder" size={12} color="#fff" />
-                          </LinearGradient>
-                          <Text style={styles.analyticsBarLabel}>
-                            {category.charAt(0).toUpperCase() + category.slice(1)}
-                          </Text>
+            {/* Category Breakdown */}
+            <View style={styles.section}>
+              <View style={styles.sectionHeader}>
+                <Ionicons name="albums" size={20} color="#4facfe" />
+                <Text style={styles.sectionTitle}>By Category</Text>
+              </View>
+              
+              {Object.keys(overview.plansByCategory).length > 0 ? (
+                <View style={styles.breakdownList}>
+                  {Object.entries(overview.plansByCategory)
+                    .sort(([, a], [, b]) => b - a)
+                    .map(([category, count]) => {
+                      const percentage = (count / overview.totalPlans) * 100;
+                      const colors = PlannerService.getCategoryColor(category);
+                      
+                      return (
+                        <View key={category} style={styles.breakdownItem}>
+                          <View style={styles.breakdownHeader}>
+                            <View style={styles.breakdownLabelRow}>
+                              <LinearGradient
+                                colors={colors as any}
+                                start={{ x: 0, y: 0 }}
+                                end={{ x: 1, y: 1 }}
+                                style={styles.breakdownIcon}
+                              >
+                                <Ionicons name="folder" size={14} color="#fff" />
+                              </LinearGradient>
+                              <Text style={styles.breakdownLabel}>
+                                {category.charAt(0).toUpperCase() + category.slice(1)}
+                              </Text>
+                            </View>
+                            <View style={styles.breakdownStats}>
+                              <Text style={styles.breakdownCount}>{count}</Text>
+                              <Text style={styles.breakdownPercentage}>
+                                {percentage.toFixed(0)}%
+                              </Text>
+                            </View>
+                          </View>
+                          <View style={styles.breakdownBar}>
+                            <LinearGradient
+                              colors={colors as any}
+                              start={{ x: 0, y: 0 }}
+                              end={{ x: 1, y: 0 }}
+                              style={[
+                                styles.breakdownBarFill,
+                                { width: `${percentage}%` }
+                              ]}
+                            />
+                          </View>
                         </View>
-                        <Text style={styles.analyticsBarValue}>{count}</Text>
-                      </View>
-                      <View style={styles.analyticsBarTrack}>
-                        <LinearGradient
-                          colors={colors as any}
-                          start={{ x: 0, y: 0 }}
-                          end={{ x: 1, y: 0 }}
-                          style={[styles.analyticsBarFill, { width: `${percentage}%` }]}
-                        />
-                      </View>
-                    </View>
-                  );
-                })
+                      );
+                    })}
+                </View>
               ) : (
-                <Text style={styles.emptyAnalytics}>No category data available</Text>
+                <View style={styles.emptyState}>
+                  <Ionicons name="folder-open-outline" size={32} color="#555" />
+                  <Text style={styles.emptyText}>No categories yet</Text>
+                </View>
               )}
             </View>
 
-            <View style={styles.analyticsSection}>
-              <Text style={styles.analyticsSectionTitle}>By Priority</Text>
-              {Object.keys(analytics.plansByPriority).length > 0 ? (
-                Object.entries(analytics.plansByPriority).map(([priority, count]) => {
-                  const percentage = (count / analytics.totalPlans) * 100;
-                  const color = PlannerService.getPriorityColor(priority);
-                  
-                  return (
-                    <View key={priority} style={styles.analyticsBarContainer}>
-                      <View style={styles.analyticsBarHeader}>
-                        <View style={styles.analyticsBarLabelRow}>
-                          <View 
-                            style={[styles.priorityDot, { backgroundColor: color }]} 
-                          />
-                          <Text style={styles.analyticsBarLabel}>
-                            {priority.charAt(0).toUpperCase() + priority.slice(1)}
-                          </Text>
+            {/* Priority Breakdown */}
+            <View style={styles.section}>
+              <View style={styles.sectionHeader}>
+                <Ionicons name="flag" size={20} color="#f5576c" />
+                <Text style={styles.sectionTitle}>By Priority</Text>
+              </View>
+              
+              {Object.keys(overview.plansByPriority).length > 0 ? (
+                <View style={styles.breakdownList}>
+                  {(['high', 'medium', 'low'] as const)
+                    .filter(priority => overview.plansByPriority[priority])
+                    .map(priority => {
+                      const count = overview.plansByPriority[priority];
+                      const percentage = (count / overview.totalPlans) * 100;
+                      const color = PlannerService.getPriorityColor(priority);
+                      
+                      return (
+                        <View key={priority} style={styles.breakdownItem}>
+                          <View style={styles.breakdownHeader}>
+                            <View style={styles.breakdownLabelRow}>
+                              <View 
+                                style={[styles.priorityIndicator, { backgroundColor: color }]} 
+                              />
+                              <Text style={styles.breakdownLabel}>
+                                {priority.charAt(0).toUpperCase() + priority.slice(1)} Priority
+                              </Text>
+                            </View>
+                            <View style={styles.breakdownStats}>
+                              <Text style={styles.breakdownCount}>{count}</Text>
+                              <Text style={styles.breakdownPercentage}>
+                                {percentage.toFixed(0)}%
+                              </Text>
+                            </View>
+                          </View>
+                          <View style={styles.breakdownBar}>
+                            <View
+                              style={[
+                                styles.breakdownBarFill,
+                                { width: `${percentage}%`, backgroundColor: color }
+                              ]}
+                            />
+                          </View>
                         </View>
-                        <Text style={styles.analyticsBarValue}>{count}</Text>
-                      </View>
-                      <View style={styles.analyticsBarTrack}>
-                        <View
-                          style={[
-                            styles.analyticsBarFill,
-                            { width: `${percentage}%`, backgroundColor: color },
-                          ]}
-                        />
-                      </View>
-                    </View>
-                  );
-                })
+                      );
+                    })}
+                </View>
               ) : (
-                <Text style={styles.emptyAnalytics}>No priority data available</Text>
+                <View style={styles.emptyState}>
+                  <Ionicons name="flag-outline" size={32} color="#555" />
+                  <Text style={styles.emptyText}>No priority data yet</Text>
+                </View>
               )}
             </View>
-
-            <TouchableOpacity
-              onPress={onClose}
-              style={styles.closeButton}
-              activeOpacity={0.7}
-            >
-              <Text style={styles.closeButtonText}>Close</Text>
-            </TouchableOpacity>
           </ScrollView>
         </Animated.View>
       </View>
@@ -251,135 +300,226 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
-    paddingHorizontal: 20,
+    backgroundColor: 'rgba(0, 0, 0, 0.75)',
+    paddingHorizontal: 16,
   },
   modalContent: {
     width: '100%',
-    maxWidth: 400,
-    maxHeight: '90%',
+    maxWidth: 420,
+    height: '85%',
     backgroundColor: '#1a2744',
-    borderRadius: 20,
-    overflow: 'hidden',
+    borderRadius: 24,
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.1)',
   },
-  modalHeader: {
-    padding: 24,
+  header: {
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.08)',
+  },
+  headerTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 8,
+  },
+  headerTitleRow: {
+    flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
+    flex: 1,
   },
-  modalTitle: {
-    fontSize: 24,
+  headerIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  headerTitle: {
+    fontSize: 22,
     fontWeight: '700',
     color: '#fff',
   },
-  modalBody: {
+  closeIconButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+  },
+  headerSubtitle: {
+    fontSize: 14,
+    color: '#aaa',
+    marginLeft: 52,
+  },
+  scrollContent: {
+    flex: 1,
+  },
+  section: {
     padding: 20,
+    gap: 16,
   },
-  analyticsSection: {
-    marginBottom: 24,
-  },
-  analyticsSectionTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#fff',
-    marginBottom: 16,
-  },
-  analyticsGrid: {
+  statsRow: {
     flexDirection: 'row',
     gap: 12,
-    marginBottom: 12,
   },
-  analyticsCard: {
+  statCard: {
     flex: 1,
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    flexDirection: 'row',
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
     borderRadius: 16,
     padding: 16,
     alignItems: 'center',
+    gap: 12,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
+    borderColor: 'rgba(255, 255, 255, 0.08)',
   },
-  analyticsIconBadge: {
+  statIconContainer: {
     width: 48,
     height: 48,
     borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 12,
   },
-  analyticsValue: {
-    fontSize: 24,
+  statInfo: {
+    flex: 1,
+  },
+  statValue: {
+    fontSize: 26,
     fontWeight: '700',
     color: '#fff',
-    marginBottom: 4,
+    marginBottom: 2,
   },
-  analyticsLabel: {
-    fontSize: 12,
+  statLabel: {
+    fontSize: 13,
     color: '#aaa',
     fontWeight: '500',
-    textAlign: 'center',
   },
-  analyticsBarContainer: {
-    marginBottom: 16,
+  progressCard: {
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
   },
-  analyticsBarHeader: {
+  progressHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  progressLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#fff',
+  },
+  progressPercentage: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#667eea',
+  },
+  progressBarTrack: {
+    height: 10,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: 5,
+    overflow: 'hidden',
     marginBottom: 8,
+  },
+  progressBarFill: {
+    height: '100%',
+    borderRadius: 5,
+  },
+  progressSubtext: {
+    fontSize: 12,
+    color: '#888',
+    textAlign: 'center',
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 4,
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#fff',
+  },
+  breakdownList: {
+    gap: 12,
+  },
+  breakdownItem: {
+    backgroundColor: 'rgba(255, 255, 255, 0.03)',
+    borderRadius: 12,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.06)',
+  },
+  breakdownHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  breakdownLabelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  breakdownIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 8,
+    justifyContent: 'center',
     alignItems: 'center',
   },
-  analyticsBarLabelRow: {
+  priorityIndicator: {
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+  },
+  breakdownLabel: {
+    fontSize: 15,
+    color: '#fff',
+    fontWeight: '600',
+  },
+  breakdownStats: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
   },
-  categoryIcon: {
-    width: 24,
-    height: 24,
-    borderRadius: 6,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  priorityDot: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-  },
-  analyticsBarLabel: {
-    fontSize: 14,
+  breakdownCount: {
+    fontSize: 16,
     color: '#fff',
-    fontWeight: '500',
+    fontWeight: '700',
   },
-  analyticsBarValue: {
-    fontSize: 14,
+  breakdownPercentage: {
+    fontSize: 13,
     color: '#4facfe',
     fontWeight: '600',
   },
-  analyticsBarTrack: {
-    height: 8,
+  breakdownBar: {
+    height: 6,
     backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    borderRadius: 4,
+    borderRadius: 3,
     overflow: 'hidden',
   },
-  analyticsBarFill: {
+  breakdownBarFill: {
     height: '100%',
-    borderRadius: 4,
+    borderRadius: 3,
   },
-  emptyAnalytics: {
-    fontSize: 14,
-    color: '#aaa',
-    textAlign: 'center',
-    paddingVertical: 20,
-  },
-  closeButton: {
+  emptyState: {
     alignItems: 'center',
-    paddingVertical: 16,
-    marginTop: 8,
+    paddingVertical: 32,
+    gap: 8,
   },
-  closeButtonText: {
-    color: '#4facfe',
-    fontSize: 16,
-    fontWeight: '600',
+  emptyText: {
+    fontSize: 14,
+    color: '#666',
+    fontWeight: '500',
   },
 });

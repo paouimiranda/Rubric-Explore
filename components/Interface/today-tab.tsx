@@ -4,13 +4,14 @@ import { LinearGradient } from 'expo-linear-gradient';
 import moment from 'moment';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
-    ActivityIndicator,
-    Animated,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Alert,
+  Animated,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import Svg, { Circle, Defs, Stop, RadialGradient as SvgRadialGradient } from 'react-native-svg';
 
@@ -40,14 +41,11 @@ export default function TodayTab({
   const [exitingPlanId, setExitingPlanId] = useState<string | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   
-  // Animated values for progress bar
   const progressWidthAnim = useRef(new Animated.Value(0)).current;
-  
-  // Animated values for empty state
   const emptyStateScale = useRef(new Animated.Value(0)).current;
   const emptyStateOpacity = useRef(new Animated.Value(0)).current;
 
-  const COMPLETION_TIMER = 800; // Slightly faster for better UX
+  const COMPLETION_TIMER = 800;
 
   const todayPlans = useMemo(() => {
     const filtered = plans.filter(p => p.date === today);
@@ -85,7 +83,6 @@ export default function TodayTab({
     return { completed, total, remaining: total - completed, percentage };
   }, [todayPlans]);
 
-  // Animate progress bar when stats change
   useEffect(() => {
     Animated.spring(progressWidthAnim, {
       toValue: stats.percentage,
@@ -95,10 +92,8 @@ export default function TodayTab({
     }).start();
   }, [stats.percentage]);
 
-  // Animate empty state when pending plans become empty
   useEffect(() => {
     if (pendingPlans.length === 0 && todayPlans.length > 0) {
-      // Show empty state with animation
       Animated.parallel([
         Animated.spring(emptyStateScale, {
           toValue: 1,
@@ -113,16 +108,22 @@ export default function TodayTab({
         }),
       ]).start();
     } else {
-      // Reset animation
       emptyStateScale.setValue(0);
       emptyStateOpacity.setValue(0);
     }
   }, [pendingPlans.length, todayPlans.length]);
 
-  const handleCheckboxPress = (plan: Plan) => {
+  const handleCheckboxPress = async (plan: Plan) => {
     if (plan.status === 'completed') {
-      // Undo completion immediately
-      onToggleStatus(plan);
+      // Undo completion - use the service method directly
+      try {
+        await PlannerService.togglePlanStatus(plan.id!);
+        // Call the original toggle handler to refresh UI
+        onToggleStatus(plan);
+      } catch (error) {
+        console.error('Error uncompleting plan:', error);
+        Alert.alert('Error', 'Failed to update plan status');
+      }
       return;
     }
 
@@ -155,19 +156,24 @@ export default function TodayTab({
           timerRef.current = null;
         }
         
-        // Start exit animation
         setExitingPlanId(plan.id!);
         
-        // Wait for exit animation, then complete the plan
-        setTimeout(() => {
-          onToggleStatus(plan);
-          // Reset states immediately after toggling
-          setExitingPlanId(null);
-          setCompletingPlanId(null);
-          setCompletionProgress(0);
-        }, 400); // Match exit animation duration exactly
+        setTimeout(async () => {
+          try {
+            await PlannerService.togglePlanStatus(plan.id!);
+            // Call the original toggle handler to refresh UI
+            onToggleStatus(plan);
+          } catch (error) {
+            console.error('Error completing plan:', error);
+            Alert.alert('Error', 'Failed to complete plan');
+          } finally {
+            setExitingPlanId(null);
+            setCompletingPlanId(null);
+            setCompletionProgress(0);
+          }
+        }, 400);
       }
-    }, 16); // ~60fps
+    }, 16);
   };
 
   useEffect(() => {
@@ -184,7 +190,6 @@ export default function TodayTab({
     const isCompleting = completingPlanId === plan.id;
     const isExiting = exitingPlanId === plan.id;
     
-    // Multiple animated values for sophisticated animation
     const scaleAnim = useRef(new Animated.Value(1)).current;
     const fadeAnim = useRef(new Animated.Value(1)).current;
     const translateYAnim = useRef(new Animated.Value(0)).current;
@@ -195,14 +200,12 @@ export default function TodayTab({
 
     useEffect(() => {
       if (isCompleting) {
-        // Start glow animation
         Animated.timing(glowOpacity, {
           toValue: 1,
           duration: 300,
           useNativeDriver: true,
         }).start();
 
-        // Scale up checkmark as progress increases
         const progressValue = completionProgress / 100;
         Animated.spring(checkmarkScale, {
           toValue: progressValue,
@@ -211,9 +214,7 @@ export default function TodayTab({
           useNativeDriver: true,
         }).start();
 
-        // Completion animation
         if (completionProgress >= 100) {
-          // Success ripple effect
           Animated.sequence([
             Animated.parallel([
               Animated.timing(rippleScale, {
@@ -229,7 +230,6 @@ export default function TodayTab({
             ]),
           ]).start();
 
-          // Subtle bounce
           Animated.sequence([
             Animated.spring(scaleAnim, {
               toValue: 1.03,
@@ -246,7 +246,6 @@ export default function TodayTab({
           ]).start();
         }
       } else {
-        // Reset animations
         checkmarkScale.setValue(0);
         glowOpacity.setValue(0);
         rippleScale.setValue(0);
@@ -254,7 +253,6 @@ export default function TodayTab({
       }
     }, [isCompleting, completionProgress]);
 
-    // Exit animation when task is completed
     useEffect(() => {
       if (isExiting) {
         Animated.parallel([
@@ -277,9 +275,13 @@ export default function TodayTab({
       }
     }, [isExiting]);
 
-    // Circular progress for the checkbox
-    const circumference = 2 * Math.PI * 12; // radius = 12
+    const circumference = 2 * Math.PI * 12;
     const progressStrokeDashoffset = circumference - (completionProgress / 100) * circumference;
+
+    // Check if notification is scheduled
+    const hasReminder = plan.reminderMinutes !== undefined && plan.reminderMinutes >= 0;
+    const planDateTime = moment(`${plan.date} ${plan.time}`, 'YYYY-MM-DD HH:mm');
+    const isPastTime = planDateTime.isBefore(moment());
 
     return (
       <Animated.View style={{ 
@@ -298,177 +300,193 @@ export default function TodayTab({
           ]}
           activeOpacity={0.7}
         >
-          <View style={styles.planCardContent}>
-            <TouchableOpacity
-              onPress={() => handleCheckboxPress(plan)}
-              style={styles.checkboxContainer}
-              activeOpacity={0.7}
-            >
-              <View style={{ position: 'relative' }}>
-                {/* Glow effect when completing */}
-                {isCompleting && (
-                  <Animated.View 
-                    style={[
-                      styles.checkboxGlow,
-                      { opacity: glowOpacity }
-                    ]}
-                  >
-                    <LinearGradient
-                      colors={['rgba(74, 222, 128, 0.4)', 'rgba(34, 197, 94, 0.4)']}
-                      start={{ x: 0, y: 0 }}
-                      end={{ x: 1, y: 1 }}
-                      style={StyleSheet.absoluteFill}
-                    />
-                  </Animated.View>
-                )}
-
-                {/* Ripple effect on completion */}
-                {isCompleting && completionProgress >= 100 && (
-                  <Animated.View
-                    style={[
-                      styles.rippleEffect,
-                      {
-                        opacity: rippleOpacity,
-                        transform: [{ scale: rippleScale }],
-                      }
-                    ]}
-                  >
-                    <LinearGradient
-                      colors={['rgba(74, 222, 128, 0.6)', 'rgba(34, 197, 94, 0.3)']}
-                      start={{ x: 0, y: 0 }}
-                      end={{ x: 1, y: 1 }}
-                      style={StyleSheet.absoluteFill}
-                    />
-                  </Animated.View>
-                )}
-
-                {/* Checkbox with progress ring */}
-                {plan.status === 'completed' ? (
-                  <LinearGradient
-                    colors={['#4ade80', '#22c55e']}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 1 }}
-                    style={styles.checkbox}
-                  >
-                    <Ionicons name="checkmark" size={20} color="#fff" />
-                  </LinearGradient>
-                ) : isCompleting ? (
-                  <View style={styles.checkbox}>
-                    {/* Background circle */}
-                    <View style={[styles.checkboxEmpty, { borderColor: 'rgba(255, 255, 255, 0.15)' }]} />
-                    
-                    {/* Progress ring */}
-                    <Svg 
-                      width={28} 
-                      height={28} 
-                      style={StyleSheet.absoluteFill}
-                      viewBox="0 0 28 28"
-                    >
-                      <Defs>
-                        <SvgRadialGradient id="progressGrad">
-                          <Stop offset="0" stopColor="#4ade80" stopOpacity="1" />
-                          <Stop offset="1" stopColor="#22c55e" stopOpacity="1" />
-                        </SvgRadialGradient>
-                      </Defs>
-                      <Circle
-                        cx="14"
-                        cy="14"
-                        r="12"
-                        stroke="url(#progressGrad)"
-                        strokeWidth="3"
-                        fill="none"
-                        strokeDasharray={circumference}
-                        strokeDashoffset={progressStrokeDashoffset}
-                        strokeLinecap="round"
-                        transform="rotate(-90 14 14)"
-                      />
-                    </Svg>
-
-                    {/* Animated checkmark that scales in */}
-                    <Animated.View
-                      style={{
-                        position: 'absolute',
-                        transform: [{ scale: checkmarkScale }],
-                      }}
+          <LinearGradient
+            colors={
+              plan.status === 'completed' 
+                ? ['rgba(74, 222, 128, 0.05)', 'rgba(34, 197, 94, 0.05)']
+                : isOverdue 
+                ? ['rgba(249, 115, 22, 0.08)', 'rgba(234, 88, 12, 0.08)']
+                : ['rgba(79, 172, 254, 0.05)', 'rgba(0, 242, 254, 0.05)']
+            }
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.planCardGradient}
+          >
+            <View style={styles.planCardContent}>
+              <TouchableOpacity
+                onPress={() => handleCheckboxPress(plan)}
+                style={styles.checkboxContainer}
+                activeOpacity={0.7}
+              >
+                <View style={{ position: 'relative' }}>
+                  {isCompleting && (
+                    <Animated.View 
+                      style={[
+                        styles.checkboxGlow,
+                        { opacity: glowOpacity }
+                      ]}
                     >
                       <LinearGradient
-                        colors={['#4ade80', '#22c55e']}
+                        colors={['rgba(74, 222, 128, 0.4)', 'rgba(34, 197, 94, 0.4)']}
                         start={{ x: 0, y: 0 }}
                         end={{ x: 1, y: 1 }}
-                        style={styles.checkboxInner}
-                      >
-                        <Ionicons name="checkmark" size={16} color="#fff" />
-                      </LinearGradient>
+                        style={StyleSheet.absoluteFill}
+                      />
                     </Animated.View>
-                  </View>
-                ) : (
-                  <View style={[
-                    styles.checkboxEmpty,
-                    isOverdue && styles.checkboxOverdue
-                  ]} />
-                )}
-              </View>
-            </TouchableOpacity>
+                  )}
 
-            <View style={styles.planTextContainer}>
-              <View style={styles.planHeader}>
-                <Text style={[
-                  styles.planTitle,
-                  plan.status === 'completed' && styles.completedText,
-                ]}>
-                  {plan.title}
-                </Text>
-                <View style={styles.badges}>
-                  <View style={[styles.priorityBadge, { backgroundColor: priorityColor }]}>
-                    <Text style={styles.priorityText}>{plan.priority[0].toUpperCase()}</Text>
-                  </View>
-                  <LinearGradient
-                    colors={categoryColors as any}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 1 }}
-                    style={styles.categoryBadge}
-                  >
-                    <Ionicons name="folder" size={12} color="#fff" />
-                  </LinearGradient>
-                </View>
-              </View>
-              
-              <View style={styles.planMeta}>
-                <Ionicons name="time-outline" size={14} color={isOverdue ? '#f97316' : '#4facfe'} />
-                <Text style={[styles.planTime, isOverdue && styles.overdueText]}>
-                  {plan.time}
-                  {isOverdue && ` • ${moment(plan.date).fromNow()}`}
-                </Text>
-              </View>
-              
-              {plan.description && (
-                <Text style={styles.planDescription} numberOfLines={2}>
-                  {plan.description}
-                </Text>
-              )}
-              
-              {plan.tags && plan.tags.length > 0 && (
-                <View style={styles.tagsContainer}>
-                  {plan.tags.slice(0, 3).map((tag, idx) => (
-                    <View key={idx} style={styles.tag}>
-                      <Text style={styles.tagText}>#{tag}</Text>
+                  {isCompleting && completionProgress >= 100 && (
+                    <Animated.View
+                      style={[
+                        styles.rippleEffect,
+                        {
+                          opacity: rippleOpacity,
+                          transform: [{ scale: rippleScale }],
+                        }
+                      ]}
+                    >
+                      <LinearGradient
+                        colors={['rgba(74, 222, 128, 0.6)', 'rgba(34, 197, 94, 0.3)']}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 1 }}
+                        style={StyleSheet.absoluteFill}
+                      />
+                    </Animated.View>
+                  )}
+
+                  {plan.status === 'completed' ? (
+                    <LinearGradient
+                      colors={['#4ade80', '#22c55e']}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 1 }}
+                      style={styles.checkbox}
+                    >
+                      <Ionicons name="checkmark" size={20} color="#fff" />
+                    </LinearGradient>
+                  ) : isCompleting ? (
+                    <View style={styles.checkbox}>
+                      <View style={[styles.checkboxEmpty, { borderColor: 'rgba(255, 255, 255, 0.15)' }]} />
+                      
+                      <Svg 
+                        width={28} 
+                        height={28} 
+                        style={StyleSheet.absoluteFill}
+                        viewBox="0 0 28 28"
+                      >
+                        <Defs>
+                          <SvgRadialGradient id="progressGrad">
+                            <Stop offset="0" stopColor="#4ade80" stopOpacity="1" />
+                            <Stop offset="1" stopColor="#22c55e" stopOpacity="1" />
+                          </SvgRadialGradient>
+                        </Defs>
+                        <Circle
+                          cx="14"
+                          cy="14"
+                          r="12"
+                          stroke="url(#progressGrad)"
+                          strokeWidth="3"
+                          fill="none"
+                          strokeDasharray={circumference}
+                          strokeDashoffset={progressStrokeDashoffset}
+                          strokeLinecap="round"
+                          transform="rotate(-90 14 14)"
+                        />
+                      </Svg>
+
+                      <Animated.View
+                        style={{
+                          position: 'absolute',
+                          transform: [{ scale: checkmarkScale }],
+                        }}
+                      >
+                        <LinearGradient
+                          colors={['#4ade80', '#22c55e']}
+                          start={{ x: 0, y: 0 }}
+                          end={{ x: 1, y: 1 }}
+                          style={styles.checkboxInner}
+                        >
+                          <Ionicons name="checkmark" size={16} color="#fff" />
+                        </LinearGradient>
+                      </Animated.View>
                     </View>
-                  ))}
-                  {plan.tags.length > 3 && (
-                    <Text style={styles.moreTagsText}>+{plan.tags.length - 3}</Text>
+                  ) : (
+                    <View style={[
+                      styles.checkboxEmpty,
+                      isOverdue && styles.checkboxOverdue
+                    ]} />
                   )}
                 </View>
-              )}
-            </View>
+              </TouchableOpacity>
 
-            <TouchableOpacity
-              onPress={() => onDeletePlan(plan.id!)}
-              style={styles.deleteButton}
-              activeOpacity={0.7}
-            >
-              <Ionicons name="trash-outline" size={20} color="#ff6b6b" />
-            </TouchableOpacity>
-          </View>
+              <View style={styles.planTextContainer}>
+                <View style={styles.planHeader}>
+                  <Text style={[
+                    styles.planTitle,
+                    plan.status === 'completed' && styles.completedText,
+                  ]}>
+                    {plan.title}
+                  </Text>
+                  <View style={styles.badges}>
+                    <View style={[styles.priorityBadge, { backgroundColor: priorityColor }]}>
+                      <Text style={styles.priorityText}>{plan.priority[0].toUpperCase()}</Text>
+                    </View>
+                    <LinearGradient
+                      colors={categoryColors as any}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 1 }}
+                      style={styles.categoryBadge}
+                    >
+                      <Ionicons name="folder" size={12} color="#fff" />
+                    </LinearGradient>
+                  </View>
+                </View>
+                
+                <View style={styles.planMeta}>
+                  <Ionicons name="time-outline" size={14} color={isOverdue ? '#f97316' : '#4facfe'} />
+                  <Text style={[styles.planTime, isOverdue && styles.overdueText]}>
+                    {plan.time}
+                    {isOverdue && ` • ${moment(plan.date).fromNow()}`}
+                  </Text>
+                  {hasReminder && !isPastTime && plan.status !== 'completed' && (
+                    <>
+                      <View style={styles.metaDivider} />
+                      <Ionicons name="notifications" size={14} color="#fbbf24" />
+                      <Text style={styles.reminderText}>
+                        {plan.reminderMinutes === 0 ? 'On time' : `${plan.reminderMinutes}m`}
+                      </Text>
+                    </>
+                  )}
+                </View>
+                
+                {plan.description && (
+                  <Text style={styles.planDescription} numberOfLines={2}>
+                    {plan.description}
+                  </Text>
+                )}
+                
+                {plan.tags && plan.tags.length > 0 && (
+                  <View style={styles.tagsContainer}>
+                    {plan.tags.slice(0, 3).map((tag, idx) => (
+                      <View key={idx} style={styles.tag}>
+                        <Text style={styles.tagText}>#{tag}</Text>
+                      </View>
+                    ))}
+                    {plan.tags.length > 3 && (
+                      <Text style={styles.moreTagsText}>+{plan.tags.length - 3}</Text>
+                    )}
+                  </View>
+                )}
+              </View>
+
+              <TouchableOpacity
+                onPress={() => onDeletePlan(plan.id!)}
+                style={styles.deleteButton}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="trash-outline" size={20} color="#ff6b6b" />
+              </TouchableOpacity>
+            </View>
+          </LinearGradient>
         </TouchableOpacity>
       </Animated.View>
     );
@@ -485,7 +503,6 @@ export default function TodayTab({
 
   return (
     <View style={styles.container}>
-      {/* Header */}
       <View style={styles.headerContainer}>
         <View style={styles.topRow}>
           <View style={styles.dateSection}>
@@ -549,7 +566,6 @@ export default function TodayTab({
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {/* Overdue Plans */}
         {overduePlans.length > 0 && (
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
@@ -563,7 +579,6 @@ export default function TodayTab({
           </View>
         )}
 
-        {/* Today's Plans */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Ionicons name="today" size={20} color="#4facfe" />
@@ -617,7 +632,6 @@ export default function TodayTab({
           )}
         </View>
 
-        {/* Completed Plans (Collapsible) */}
         {completedPlans.length > 0 && (
           <View style={styles.section}>
             <TouchableOpacity
@@ -775,19 +789,21 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   planCard: {
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
     borderRadius: 16,
-    padding: 16,
     marginBottom: 12,
+    overflow: 'hidden',
+  },
+  planCardGradient: {
+    padding: 16,
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: 16,
   },
   completedCard: {
     opacity: 0.6,
   },
   overdueCard: {
     borderColor: 'rgba(249, 115, 22, 0.3)',
-    backgroundColor: 'rgba(249, 115, 22, 0.05)',
   },
   planCardContent: {
     flexDirection: 'row',
@@ -886,6 +902,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 6,
     marginBottom: 6,
+    flexWrap: 'wrap',
   },
   planTime: {
     color: '#4facfe',
@@ -895,10 +912,22 @@ const styles = StyleSheet.create({
   overdueText: {
     color: '#f97316',
   },
+  metaDivider: {
+    width: 3,
+    height: 3,
+    borderRadius: 1.5,
+    backgroundColor: '#666',
+  },
+  reminderText: {
+    color: '#fbbf24',
+    fontSize: 12,
+    fontWeight: '600',
+  },
   planDescription: {
     color: '#ccc',
     fontSize: 14,
     marginBottom: 8,
+    lineHeight: 20,
   },
   tagsContainer: {
     flexDirection: 'row',

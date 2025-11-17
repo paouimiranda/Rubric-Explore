@@ -1,3 +1,4 @@
+import { usePushNotification } from '@/app/contexts/PushNotificationContext';
 import { Plan, PlannerService } from '@/services/planner-service';
 import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
@@ -43,12 +44,14 @@ export default function PlanModal({
   const [planTime, setPlanTime] = useState('');
   const [planCategory, setPlanCategory] = useState<Plan['category']>('personal');
   const [planPriority, setPlanPriority] = useState<Plan['priority']>('medium');
+  const [reminderMinutes, setReminderMinutes] = useState(15);
   
   // Picker states
   const [timePickerVisible, setTimePickerVisible] = useState(false);
   const [datePickerVisible, setDatePickerVisible] = useState(false);
   const [categoryPickerVisible, setCategoryPickerVisible] = useState(false);
   const [priorityPickerVisible, setPriorityPickerVisible] = useState(false);
+  const [reminderPickerVisible, setReminderPickerVisible] = useState(false);
   
   // Validation states
   const [errors, setErrors] = useState({ title: false, time: false });
@@ -56,6 +59,8 @@ export default function PlanModal({
   
   const slideAnim = React.useRef(new Animated.Value(SCREEN_HEIGHT)).current;
   const backdropAnim = React.useRef(new Animated.Value(0)).current;
+
+  const { hasPermission, requestPermission, isRequestingPermission } = usePushNotification();
 
   useEffect(() => {
     if (visible) {
@@ -80,6 +85,7 @@ export default function PlanModal({
         setPlanTime(editingPlan.time);
         setPlanCategory(editingPlan.category);
         setPlanPriority(editingPlan.priority);
+        setReminderMinutes(editingPlan.reminderMinutes ?? 15);
       } else {
         resetForm();
         // If initialDate is provided, set it as the default date
@@ -117,6 +123,7 @@ export default function PlanModal({
     setPlanTime('');
     setPlanCategory('personal');
     setPlanPriority('medium');
+    setReminderMinutes(15);
   };
 
   const validateForm = () => {
@@ -128,12 +135,7 @@ export default function PlanModal({
     return !newErrors.title && !newErrors.time;
   };
 
-  const savePlan = async () => {
-    if (!validateForm()) {
-      Alert.alert('Missing Information', 'Please fill out all required fields (*)');
-      return;
-    }
-
+  const savePlanWithoutPermission = async () => {
     setIsSaving(true);
     try {
       const planData = {
@@ -146,6 +148,7 @@ export default function PlanModal({
         tags: [],
         status: 'pending' as const,
         isPublic: false,
+        reminderMinutes,
       };
 
       if (editingPlan) {
@@ -162,6 +165,33 @@ export default function PlanModal({
     } finally {
       setIsSaving(false);
     }
+  };
+
+  const savePlan = async () => {
+    if (!validateForm()) {
+      Alert.alert('Missing Information', 'Please fill out all required fields (*)');
+      return;
+    }
+
+    // Check notification permission before saving
+    if (!hasPermission && !isRequestingPermission) {
+      Alert.alert(
+        'Enable Notifications?',
+        'Would you like to receive reminders for your plans?',
+        [
+          { text: 'Not Now', style: 'cancel', onPress: () => savePlanWithoutPermission() },
+          { text: 'Enable', onPress: async () => {
+            const granted = await requestPermission();
+            if (granted) {
+              savePlanWithoutPermission();
+            }
+          }},
+        ]
+      );
+      return;
+    }
+
+    savePlanWithoutPermission();
   };
 
   const getCategoryIcon = (category: string) => {
@@ -182,6 +212,20 @@ export default function PlanModal({
       high: 'flame',
     };
     return icons[priority] || 'flag';
+  };
+
+  const getReminderIcon = (minutes: number) => {
+    if (minutes === 0) return 'notifications-off';
+    if (minutes <= 5) return 'alarm';
+    if (minutes <= 15) return 'notifications';
+    return 'notifications-circle';
+  };
+
+  const getReminderLabel = (minutes: number) => {
+    if (minutes === 0) return 'At plan time';
+    if (minutes < 60) return `${minutes} min before`;
+    const hours = Math.floor(minutes / 60);
+    return hours === 1 ? '1 hour before' : `${hours} hours before`;
   };
 
   if (!visible) return null;
@@ -535,6 +579,123 @@ export default function PlanModal({
               </View>
             )}
 
+            {/* Reminder Settings Section */}
+            <View style={styles.section}>
+              <View style={styles.labelContainer}>
+                <Ionicons name="notifications" size={16} color="#4facfe" />
+                <Text style={styles.sectionLabel}>Reminder</Text>
+                {!hasPermission && (
+                  <View style={styles.permissionBadge}>
+                    <Ionicons name="alert-circle" size={12} color="#fbbf24" />
+                    <Text style={styles.permissionBadgeText}>Disabled</Text>
+                  </View>
+                )}
+              </View>
+              
+              <TouchableOpacity
+                style={[
+                  styles.inputContainer,
+                  !hasPermission && styles.inputDisabled
+                ]}
+                onPress={() => {
+                  if (!hasPermission) {
+                    Alert.alert(
+                      'Notifications Disabled',
+                      'Enable notifications to receive reminders for your plans.',
+                      [
+                        { text: 'Cancel', style: 'cancel' },
+                        { 
+                          text: 'Enable', 
+                          onPress: async () => {
+                            await requestPermission();
+                          }
+                        },
+                      ]
+                    );
+                  } else {
+                    setReminderPickerVisible(!reminderPickerVisible);
+                  }
+                }}
+                activeOpacity={0.7}
+              >
+                <View style={[
+                  styles.reminderIconContainer,
+                  { backgroundColor: hasPermission ? '#4facfe15' : '#66666615' }
+                ]}>
+                  <Ionicons 
+                    name={getReminderIcon(reminderMinutes) as any} 
+                    size={18} 
+                    color={hasPermission ? '#4facfe' : '#666'} 
+                  />
+                </View>
+                <Text style={[
+                  styles.inputText,
+                  !hasPermission && styles.inputTextDisabled
+                ]}>
+                  {getReminderLabel(reminderMinutes)}
+                </Text>
+                <Ionicons 
+                  name={reminderPickerVisible ? "chevron-up" : "chevron-down"} 
+                  size={18} 
+                  color="#aaa" 
+                />
+              </TouchableOpacity>
+              
+              {!hasPermission && (
+                <TouchableOpacity 
+                  style={styles.enableNotificationsButton}
+                  onPress={requestPermission}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name="notifications-outline" size={16} color="#4facfe" />
+                  <Text style={styles.enableNotificationsText}>
+                    Enable Notifications
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </View>
+
+            {/* Reminder Picker */}
+            {reminderPickerVisible && hasPermission && (
+              <View style={[styles.pickerContainer, styles.fullWidth]}>
+                {[
+                  { minutes: 0, label: 'At plan time', icon: 'notifications-off' },
+                  { minutes: 5, label: '5 minutes before', icon: 'alarm' },
+                  { minutes: 15, label: '15 minutes before', icon: 'notifications' },
+                  { minutes: 30, label: '30 minutes before', icon: 'notifications' },
+                  { minutes: 60, label: '1 hour before', icon: 'notifications-circle' },
+                  { minutes: 120, label: '2 hours before', icon: 'notifications-circle' },
+                ].map((option) => (
+                  <TouchableOpacity
+                    key={option.minutes}
+                    style={[
+                      styles.pickerOption,
+                      reminderMinutes === option.minutes && styles.pickerOptionSelected
+                    ]}
+                    onPress={() => {
+                      setReminderMinutes(option.minutes);
+                      setReminderPickerVisible(false);
+                    }}
+                    activeOpacity={0.7}
+                  >
+                    <View style={styles.reminderOptionIcon}>
+                      <Ionicons 
+                        name={option.icon as any} 
+                        size={18} 
+                        color={reminderMinutes === option.minutes ? '#4facfe' : '#aaa'} 
+                      />
+                    </View>
+                    <Text style={styles.pickerText}>
+                      {option.label}
+                    </Text>
+                    {reminderMinutes === option.minutes && (
+                      <Ionicons name="checkmark-circle" size={20} color="#4facfe" />
+                    )}
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
+
             {/* Bottom Spacing for Safe Area */}
             <View style={{ height: 100 }} />
           </ScrollView>
@@ -850,6 +1011,61 @@ const styles = StyleSheet.create({
   cancelText: { 
     color: '#aaa', 
     fontSize: 15, 
+    fontWeight: '600',
+  },
+  permissionBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(251, 191, 36, 0.1)',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    marginLeft: 'auto',
+  },
+  permissionBadgeText: {
+    fontSize: 10,
+    color: '#fbbf24',
+    fontWeight: '600',
+    textTransform: 'uppercase',
+  },
+  inputDisabled: {
+    opacity: 0.5,
+  },
+  inputTextDisabled: {
+    color: '#666',
+  },
+  reminderIconContainer: {
+    width: 36,
+    height: 36,
+    borderRadius: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  reminderOptionIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 8,
+    backgroundColor: 'rgba(79, 172, 254, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  enableNotificationsButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    marginTop: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    backgroundColor: 'rgba(79, 172, 254, 0.1)',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(79, 172, 254, 0.3)',
+  },
+  enableNotificationsText: {
+    fontSize: 13,
+    color: '#4facfe',
     fontWeight: '600',
   },
 });

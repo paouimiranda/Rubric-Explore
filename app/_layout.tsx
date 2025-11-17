@@ -15,11 +15,10 @@ import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import { useBacklogLogger } from "@/hooks/useBackLogLogger";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import { NotificationProvider } from "./contexts/NotificationContext";
+import { PushNotificationProvider } from "./contexts/PushNotificationContext"; // ADD THIS IMPORT
 import Loading from "./screens/Misc/loading";
 
 function RootNavigator() {
-
-  
   const { loading, isAuthenticated } = useAuth();
   const colorScheme = useColorScheme();
   const { uploadBacklogs, logError } = useBacklogLogger();
@@ -41,24 +40,21 @@ function RootNavigator() {
 
   // --- NEW: navigate to correct route once auth + fonts ready ---
   useEffect(() => {
-  if (loading || !fontsLoaded) return;
+    if (loading || !fontsLoaded) return;
 
-  const protectedPath = "/screens"; // your app's main protected screens
-  const publicPaths = ["/", "/screens/User/register", "/screens/User/forgot-password"]; // allow these
+    const protectedPath = "/screens";
+    const publicPaths = ["/", "/screens/User/register", "/screens/User/forgot-password"];
 
-  if (isAuthenticated) {
-    if (pathname === "/") {
-      router.replace("/screens/HomeScreen");
+    if (isAuthenticated) {
+      if (pathname === "/") {
+        router.replace("/screens/HomeScreen");
+      }
+    } else {
+      if (pathname?.startsWith(protectedPath) && !publicPaths.includes(pathname)) {
+        router.replace("/");
+      }
     }
-  } else {
-    // Only redirect to login if trying to access a protected path AND not on a public path
-    if (pathname?.startsWith(protectedPath) && !publicPaths.includes(pathname)) {
-      router.replace("/");
-    }
-  }
-}, [loading, fontsLoaded, isAuthenticated, pathname, router]);
-
-  // -----------------------------------------------------------------
+  }, [loading, fontsLoaded, isAuthenticated, pathname, router]);
 
   // global error handling
   useEffect(() => {
@@ -89,7 +85,6 @@ function RootNavigator() {
     return () => subscription.remove();
   }, [uploadBacklogs]);
 
-
   // show loading screen until both fonts + auth finished
   if (!fontsLoaded || loading) {
     return <Loading />;
@@ -104,9 +99,7 @@ function RootNavigator() {
           gestureEnabled: false,
         }}
       >
-        {/* register both screens so router knows about them */}
         <Stack.Screen name="index" />
-        {/* this registers your protected route (app/(app)/home.tsx) */}
         <Stack.Screen name="screens/HomeScreen" />
         <Stack.Screen name="screens/User/register" />
         <Stack.Screen name="screens/User/forgot-password" />
@@ -119,19 +112,21 @@ export default function RootLayout() {
   return (
     <AuthProvider>
       <NotificationProvider>
-        <LinearGradient
-          colors={["#324762", "#0F2245"]}
-          start={{ x: 1, y: 0.5 }}
-          end={{ x: 1, y: 0 }}
-          style={{ flex: 1 }}
-        >
-          <SafeAreaProvider>
-            <SafeAreaView style={{ flex: 1 }}>
-              <RootNavigator />
-              <StatusBar style="auto" />
-            </SafeAreaView>
-          </SafeAreaProvider>
-        </LinearGradient>
+        <PushNotificationProvider> 
+          <LinearGradient
+            colors={["#324762", "#0F2245"]}
+            start={{ x: 1, y: 0.5 }}
+            end={{ x: 1, y: 0 }}
+            style={{ flex: 1 }}
+          >
+            <SafeAreaProvider>
+              <SafeAreaView style={{ flex: 1 }}>
+                <RootNavigator />
+                <StatusBar style="auto" />
+              </SafeAreaView>
+            </SafeAreaProvider>
+          </LinearGradient>
+        </PushNotificationProvider>
       </NotificationProvider>
     </AuthProvider>
   );

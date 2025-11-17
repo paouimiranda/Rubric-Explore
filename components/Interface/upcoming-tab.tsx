@@ -5,6 +5,7 @@ import moment from 'moment';
 import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   Dimensions,
   NativeScrollEvent,
   NativeSyntheticEvent,
@@ -25,6 +26,7 @@ interface UpcomingTabProps {
   onEditPlan: (plan: Plan) => void;
   onDeletePlan: (planId: string) => void;
   onCreatePlan: (date?: string) => void;
+  onRefresh?: () => void;
 }
 
 export default function UpcomingTab({
@@ -34,13 +36,11 @@ export default function UpcomingTab({
   onEditPlan,
   onDeletePlan,
   onCreatePlan,
+  onRefresh,
 }: UpcomingTabProps) {
   const [selectedDate, setSelectedDate] = useState<string>(moment().format('YYYY-MM-DD'));
   const [showFullCalendar, setShowFullCalendar] = useState(false);
-  
-  // Infinite scroll state - start with 2 weeks in horizontal scroll
   const [visibleWeeks, setVisibleWeeks] = useState(2);
-  // Start with 30 days in vertical scroll
   const [visibleDays, setVisibleDays] = useState(30);
   
   const scrollViewRef = useRef<ScrollView>(null);
@@ -50,23 +50,18 @@ export default function UpcomingTab({
   const isLoadingMore = useRef(false);
 
   const today = moment().format('YYYY-MM-DD');
-  
-  // Get the month name for the selected date
   const selectedMonth = moment(selectedDate).format('MMMM YYYY');
   
-  // Calculate responsive dimensions
   const HORIZONTAL_PADDING = 20;
   const ITEM_GAP = 6;
   const AVAILABLE_WIDTH = SCREEN_WIDTH - (HORIZONTAL_PADDING * 2);
   const DATE_ITEM_WIDTH = (AVAILABLE_WIDTH - (ITEM_GAP * 6)) / 7;
   const WEEK_WIDTH = AVAILABLE_WIDTH;
   
-  // Calculate week starting from Sunday
   const getWeekStart = (date: moment.Moment) => {
     return date.clone().startOf('week');
   };
 
-  // Generate weeks dynamically based on visibleWeeks
   const weekGroups = useMemo(() => {
     const weeks: Array<Array<{
       dateString: string;
@@ -78,7 +73,6 @@ export default function UpcomingTab({
     
     let currentWeekStart = getWeekStart(moment());
     
-    // Generate only the visible weeks
     for (let weekIndex = 0; weekIndex < visibleWeeks; weekIndex++) {
       const week = [];
       for (let dayIndex = 0; dayIndex < 7; dayIndex++) {
@@ -99,7 +93,6 @@ export default function UpcomingTab({
     return weeks;
   }, [today, visibleWeeks]);
 
-  // Group plans by date
   const plansByDate = useMemo(() => {
     const map = new Map<string, Plan[]>();
     plans.forEach(plan => {
@@ -111,7 +104,6 @@ export default function UpcomingTab({
       }
     });
     
-    // Sort plans within each date
     map.forEach((datePlans) => {
       datePlans.sort((a, b) => {
         if (a.status !== b.status) {
@@ -124,7 +116,6 @@ export default function UpcomingTab({
     return map;
   }, [plans, today]);
 
-  // Create chronological list of dates - only generate visible days
   const chronologicalDates = useMemo(() => {
     const dates: Array<{
       dateString: string;
@@ -134,19 +125,15 @@ export default function UpcomingTab({
       isTomorrow: boolean;
     }> = [];
 
-    // Get all dates with plans
     const sortedDates = Array.from(plansByDate.keys()).sort();
-    
-    // Generate future dates up to visibleDays
     const futureDates = [];
     for (let i = 0; i < visibleDays; i++) {
       futureDates.push(moment().add(i, 'days').format('YYYY-MM-DD'));
     }
     
-    // Combine and deduplicate
     const allDates = Array.from(new Set([...futureDates, ...sortedDates]))
       .sort()
-      .slice(0, visibleDays); // Limit to visible days
+      .slice(0, visibleDays);
     
     allDates.forEach(dateString => {
       const date = moment(dateString);
@@ -166,16 +153,12 @@ export default function UpcomingTab({
     return dates;
   }, [plansByDate, today, visibleDays]);
 
-  // Handle horizontal scroll - load more weeks when near the end
   const handleHorizontalScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
     const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
-    
-    // Check if user is near the end (within last 2 weeks)
     const scrollPercentage = contentOffset.x / (contentSize.width - layoutMeasurement.width);
     
     if (scrollPercentage > 0.7 && !isLoadingMore.current) {
       isLoadingMore.current = true;
-      // Add 2 more weeks
       setVisibleWeeks(prev => prev + 2);
       setTimeout(() => {
         isLoadingMore.current = false;
@@ -183,30 +166,23 @@ export default function UpcomingTab({
     }
   }, []);
 
-  // Handle vertical scroll - load more days and update selected date
   const handleVerticalScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
     const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
-    
-    // Load more days when near the bottom
     const scrollPercentage = contentOffset.y / (contentSize.height - layoutMeasurement.height);
     
     if (scrollPercentage > 0.7 && !isLoadingMore.current) {
       isLoadingMore.current = true;
-      // Add 30 more days
       setVisibleDays(prev => prev + 30);
       setTimeout(() => {
         isLoadingMore.current = false;
       }, 300);
     }
 
-    // Update selected date based on scroll position
     if (isScrollingFromHorizontal.current) {
       return;
     }
 
     const scrollY = contentOffset.y;
-    
-    // Find which date section is currently most visible
     let closestDate = chronologicalDates[0]?.dateString;
     let minDistance = Infinity;
 
@@ -224,11 +200,9 @@ export default function UpcomingTab({
     }
   }, [chronologicalDates, selectedDate]);
 
-  // Helper function to scroll to date in horizontal scroll
   const scrollToDateInWeekView = useCallback((targetDate: string) => {
     setSelectedDate(targetDate);
     
-    // Check if the date is in the currently loaded weeks
     const weekIndex = weekGroups.findIndex(week => 
       week.some(day => day.dateString === targetDate)
     );
@@ -239,14 +213,12 @@ export default function UpcomingTab({
         animated: true,
       });
     } else {
-      // Date is not loaded yet, calculate and load more weeks
       const targetMoment = moment(targetDate);
       const startMoment = moment();
       const weeksNeeded = Math.ceil(targetMoment.diff(startMoment, 'weeks', true)) + 2;
       
       if (weeksNeeded > visibleWeeks) {
         setVisibleWeeks(weeksNeeded);
-        // Wait for state to update, then scroll
         setTimeout(() => {
           const newWeekIndex = weekGroups.findIndex(week => 
             week.some(day => day.dateString === targetDate)
@@ -262,11 +234,9 @@ export default function UpcomingTab({
     }
   }, [weekGroups, WEEK_WIDTH, visibleWeeks]);
 
-  // Handle date selection from horizontal scroll
   const handleDateSelect = useCallback((dateString: string) => {
     setSelectedDate(dateString);
     
-    // Scroll to the corresponding section in vertical scroll
     const yPosition = dateSectionRefs.current.get(dateString);
     if (yPosition !== undefined && verticalScrollRef.current) {
       isScrollingFromHorizontal.current = true;
@@ -279,7 +249,6 @@ export default function UpcomingTab({
         isScrollingFromHorizontal.current = false;
       }, 500);
     } else {
-      // Date section not loaded yet, load more days
       const targetMoment = moment(dateString);
       const daysNeeded = targetMoment.diff(moment(), 'days') + 5;
       
@@ -289,17 +258,14 @@ export default function UpcomingTab({
     }
   }, [visibleDays]);
 
-  // Measure date section positions
   const onDateSectionLayout = useCallback((dateString: string, y: number) => {
     dateSectionRefs.current.set(dateString, y);
   }, []);
 
-  // Marked dates for calendar - only mark dates within visible range
   const markedDates = useMemo(() => {
     const marked: any = {};
     
     plansByDate.forEach((datePlans, date) => {
-      // Only mark dates within the next 90 days for performance
       if (moment(date).diff(moment(), 'days') <= 90) {
         const hasCompleted = datePlans.some(p => p.status === 'completed');
         const hasPending = datePlans.some(p => p.status === 'pending');
@@ -323,9 +289,25 @@ export default function UpcomingTab({
     return marked;
   }, [plansByDate, selectedDate]);
 
+  const handleToggleStatus = async (plan: Plan) => {
+    try {
+      await PlannerService.togglePlanStatus(plan.id!);
+      // Call the original toggle handler to refresh UI
+      onToggleStatus(plan);
+    } catch (error) {
+      console.error('Error toggling plan status:', error);
+      Alert.alert('Error', 'Failed to update plan status');
+    }
+  };
+
   const PlanCard = React.memo(({ plan }: { plan: Plan }) => {
     const categoryColors = PlannerService.getCategoryColor(plan.category);
     const priorityColor = PlannerService.getPriorityColor(plan.priority);
+    
+    // Check if notification is scheduled
+    const hasReminder = plan.reminderMinutes !== undefined && plan.reminderMinutes >= 0;
+    const planDateTime = moment(`${plan.date} ${plan.time}`, 'YYYY-MM-DD HH:mm');
+    const isPastTime = planDateTime.isBefore(moment());
     
     return (
       <TouchableOpacity
@@ -336,82 +318,102 @@ export default function UpcomingTab({
         ]}
         activeOpacity={0.7}
       >
-        <View style={styles.planCardContent}>
-          <TouchableOpacity
-            onPress={() => onToggleStatus(plan)}
-            style={styles.checkboxContainer}
-            activeOpacity={0.7}
-          >
-            {plan.status === 'completed' ? (
-              <LinearGradient
-                colors={['#4ade80', '#22c55e']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={styles.checkbox}
-              >
-                <Ionicons name="checkmark" size={20} color="#fff" />
-              </LinearGradient>
-            ) : (
-              <View style={styles.checkboxEmpty} />
-            )}
-          </TouchableOpacity>
-
-          <View style={styles.planTextContainer}>
-            <View style={styles.planHeader}>
-              <Text style={[
-                styles.planTitle,
-                plan.status === 'completed' && styles.completedText,
-              ]}>
-                {plan.title}
-              </Text>
-              <View style={styles.badges}>
-                <View style={[styles.priorityBadge, { backgroundColor: priorityColor }]}>
-                  <Text style={styles.priorityText}>{plan.priority[0].toUpperCase()}</Text>
-                </View>
+        <LinearGradient
+          colors={
+            plan.status === 'completed' 
+              ? ['rgba(74, 222, 128, 0.05)', 'rgba(34, 197, 94, 0.05)']
+              : ['rgba(79, 172, 254, 0.05)', 'rgba(0, 242, 254, 0.05)']
+          }
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.planCardGradient}
+        >
+          <View style={styles.planCardContent}>
+            <TouchableOpacity
+              onPress={() => handleToggleStatus(plan)}
+              style={styles.checkboxContainer}
+              activeOpacity={0.7}
+            >
+              {plan.status === 'completed' ? (
                 <LinearGradient
-                  colors={categoryColors as any}
+                  colors={['#4ade80', '#22c55e']}
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 1 }}
-                  style={styles.categoryBadge}
+                  style={styles.checkbox}
                 >
-                  <Ionicons name="folder" size={12} color="#fff" />
+                  <Ionicons name="checkmark" size={20} color="#fff" />
                 </LinearGradient>
-              </View>
-            </View>
-            
-            <View style={styles.planMeta}>
-              <Ionicons name="time-outline" size={14} color="#4facfe" />
-              <Text style={styles.planTime}>{plan.time}</Text>
-            </View>
-            
-            {plan.description && (
-              <Text style={styles.planDescription} numberOfLines={2}>
-                {plan.description}
-              </Text>
-            )}
-            
-            {plan.tags && plan.tags.length > 0 && (
-              <View style={styles.tagsContainer}>
-                {plan.tags.slice(0, 3).map((tag, idx) => (
-                  <View key={idx} style={styles.tag}>
-                    <Text style={styles.tagText}>#{tag}</Text>
+              ) : (
+                <View style={styles.checkboxEmpty} />
+              )}
+            </TouchableOpacity>
+
+            <View style={styles.planTextContainer}>
+              <View style={styles.planHeader}>
+                <Text style={[
+                  styles.planTitle,
+                  plan.status === 'completed' && styles.completedText,
+                ]}>
+                  {plan.title}
+                </Text>
+                <View style={styles.badges}>
+                  <View style={[styles.priorityBadge, { backgroundColor: priorityColor }]}>
+                    <Text style={styles.priorityText}>{plan.priority[0].toUpperCase()}</Text>
                   </View>
-                ))}
-                {plan.tags.length > 3 && (
-                  <Text style={styles.moreTagsText}>+{plan.tags.length - 3}</Text>
+                  <LinearGradient
+                    colors={categoryColors as any}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={styles.categoryBadge}
+                  >
+                    <Ionicons name="folder" size={12} color="#fff" />
+                  </LinearGradient>
+                </View>
+              </View>
+              
+              <View style={styles.planMeta}>
+                <Ionicons name="time-outline" size={14} color="#4facfe" />
+                <Text style={styles.planTime}>{plan.time}</Text>
+                {hasReminder && !isPastTime && plan.status !== 'completed' && (
+                  <>
+                    <View style={styles.metaDivider} />
+                    <Ionicons name="notifications" size={14} color="#fbbf24" />
+                    <Text style={styles.reminderText}>
+                      {plan.reminderMinutes === 0 ? 'On time' : `${plan.reminderMinutes}m`}
+                    </Text>
+                  </>
                 )}
               </View>
-            )}
-          </View>
+              
+              {plan.description && (
+                <Text style={styles.planDescription} numberOfLines={2}>
+                  {plan.description}
+                </Text>
+              )}
+              
+              {plan.tags && plan.tags.length > 0 && (
+                <View style={styles.tagsContainer}>
+                  {plan.tags.slice(0, 3).map((tag, idx) => (
+                    <View key={idx} style={styles.tag}>
+                      <Text style={styles.tagText}>#{tag}</Text>
+                    </View>
+                  ))}
+                  {plan.tags.length > 3 && (
+                    <Text style={styles.moreTagsText}>+{plan.tags.length - 3}</Text>
+                  )}
+                </View>
+              )}
+            </View>
 
-          <TouchableOpacity
-            onPress={() => onDeletePlan(plan.id!)}
-            style={styles.deleteButton}
-            activeOpacity={0.7}
-          >
-            <Ionicons name="trash-outline" size={20} color="#ff6b6b" />
-          </TouchableOpacity>
-        </View>
+            <TouchableOpacity
+              onPress={() => onDeletePlan(plan.id!)}
+              style={styles.deleteButton}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="trash-outline" size={20} color="#ff6b6b" />
+            </TouchableOpacity>
+          </View>
+        </LinearGradient>
       </TouchableOpacity>
     );
   });
@@ -427,7 +429,6 @@ export default function UpcomingTab({
 
   return (
     <View style={styles.container}>
-      {/* Header with Calendar Toggle */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>{selectedMonth}</Text>
         <TouchableOpacity
@@ -443,7 +444,6 @@ export default function UpcomingTab({
         </TouchableOpacity>
       </View>
 
-      {/* Full Calendar View (Expanded) */}
       {showFullCalendar && (
         <View style={styles.calendarContainer}>
           <Calendar
@@ -469,7 +469,6 @@ export default function UpcomingTab({
         </View>
       )}
 
-      {/* Horizontal Date Scroll (Week View) */}
       {!showFullCalendar && (
         <View style={styles.dateScrollContainer}>
           <ScrollView
@@ -541,7 +540,6 @@ export default function UpcomingTab({
         </View>
       )}
 
-      {/* Chronological Plans List (Todoist-style) */}
       <ScrollView 
         ref={verticalScrollRef}
         style={styles.scrollView}
@@ -559,7 +557,6 @@ export default function UpcomingTab({
               onDateSectionLayout(dateGroup.dateString, layout.y);
             }}
           >
-            {/* Date Header - Tappable */}
             <TouchableOpacity
               onPress={() => scrollToDateInWeekView(dateGroup.dateString)}
               activeOpacity={0.7}
@@ -586,21 +583,18 @@ export default function UpcomingTab({
               </View>
             </TouchableOpacity>
 
-            {/* Plans for this date */}
             {dateGroup.plans.map((plan) => (
               <PlanCard key={plan.id} plan={plan} />
             ))}
           </View>
         ))}
 
-        {/* Loading indicator at the bottom */}
         {chronologicalDates.length > 0 && visibleDays < 365 && (
           <View style={styles.loadingMoreContainer}>
             <Text style={styles.loadingMoreText}>Scroll for more dates...</Text>
           </View>
         )}
 
-        {/* Overall Empty State */}
         {chronologicalDates.every(d => d.plans.length === 0) && (
           <View style={styles.overallEmptyState}>
             <LinearGradient
@@ -803,12 +797,15 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   planCard: {
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
     borderRadius: 16,
-    padding: 16,
     marginBottom: 12,
+    overflow: 'hidden',
+  },
+  planCardGradient: {
+    padding: 16,
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: 16,
   },
   completedCard: {
     opacity: 0.6,
@@ -883,16 +880,29 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 6,
     marginBottom: 6,
+    flexWrap: 'wrap',
   },
   planTime: {
     color: '#4facfe',
     fontSize: 13,
     fontWeight: '600',
   },
+  metaDivider: {
+    width: 3,
+    height: 3,
+    borderRadius: 1.5,
+    backgroundColor: '#666',
+  },
+  reminderText: {
+    color: '#fbbf24',
+    fontSize: 12,
+    fontWeight: '600',
+  },
   planDescription: {
     color: '#ccc',
     fontSize: 14,
     marginBottom: 8,
+    lineHeight: 20,
   },
   tagsContainer: {
     flexDirection: 'row',
