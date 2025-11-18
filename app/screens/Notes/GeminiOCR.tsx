@@ -4,7 +4,7 @@ import { useBacklogLogger } from "@/hooks/useBackLogLogger";
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { LinearGradient } from 'expo-linear-gradient';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Clipboard,
@@ -14,9 +14,14 @@ import {
   StyleSheet,
   Text,
   TouchableOpacity,
-
   View
 } from 'react-native';
+// NEW: Add Firebase imports (adjust the path to your firebase.ts file)
+import { auth, firestore } from '@/firebase'; // Import the initialized instances
+import { doc, getDoc, increment, setDoc, updateDoc } from 'firebase/firestore';
+
+// NEW: Define the daily limit constant
+const DAILY_LIMIT = 3;
 
 interface OCRState {
   isProcessing: boolean;
@@ -49,6 +54,9 @@ interface GeminiOCRTabProps {
 
 export function GeminiOCRTab({ onInsertText, onClose }: GeminiOCRTabProps) {
   const { addBacklogEvent } = useBacklogLogger();
+  // NEW: State for usage count and loading
+  const [usageCount, setUsageCount] = useState<number>(0);
+  const [isLoadingCount, setIsLoadingCount] = useState<boolean>(true);
   const [ocrState, setOcrState] = useState<OCRState>({
     isProcessing: false,
     extractedText: "",
@@ -56,7 +64,7 @@ export function GeminiOCRTab({ onInsertText, onClose }: GeminiOCRTabProps) {
     selectedImage: null,
     error: null,
   });
-  
+
   const [alertState, setAlertState] = useState<AlertState>({
     visible: false,
     type: 'info',
@@ -66,6 +74,54 @@ export function GeminiOCRTab({ onInsertText, onClose }: GeminiOCRTabProps) {
   });
 
   const [imagePickerAlert, setImagePickerAlert] = useState(false);
+  // NEW: Helper to get today's date as YYYY-MM-DD
+  const getTodayDate = () => new Date().toISOString().split('T')[0];
+  
+   // NEW: Fetch and reset usage count on mount
+  useEffect(() => {
+    const fetchAndResetUsageCount = async () => {
+      const user = auth.currentUser;
+      if (!user) {
+        setIsLoadingCount(false);
+        showAlert('error', 'Authentication Required', 'Please log in to use OCR.', [{ text: 'OK', onPress: () => {}, style: 'primary' }]);
+        return;
+      }
+      
+      try {
+        // MODIFIED: Use modular collection and doc functions
+        const docRef = doc(firestore, 'OCRLimits', user.uid);
+        // MODIFIED: Use modular getDoc function
+        const docSnap = await getDoc(docRef);
+        const today = getTodayDate();
+        
+        if (docSnap.exists()) { // MODIFIED: Check exists() property
+          const data = docSnap.data();
+          const lastReset = data?.lastResetDate;
+          if (lastReset !== today) {
+            // Reset count for new day
+            // MODIFIED: Use modular updateDoc function
+            await updateDoc(docRef, { ocrUsageCount: 0, lastResetDate: today });
+            setUsageCount(0);
+          } else {
+            setUsageCount(data?.ocrUsageCount || 0);
+          }
+        } else {
+          // New user: Create document with initial values
+          // MODIFIED: Use modular setDoc function
+          await setDoc(docRef, { ocrUsageCount: 0, lastResetDate: today });
+          setUsageCount(0);
+        }
+      } catch (error) {
+        console.error('Error fetching/resetting usage count:', error);
+        showAlert('error', 'Error', 'Failed to load usage data. Please check your connection.', [{ text: 'OK', onPress: () => {}, style: 'primary' }]);
+      } finally {
+        setIsLoadingCount(false);
+      }
+    };
+    
+    fetchAndResetUsageCount();
+  }, []); // Runs once on mount
+
 
   const showAlert = (
     type: AlertState['type'],
@@ -103,6 +159,20 @@ export function GeminiOCRTab({ onInsertText, onClose }: GeminiOCRTabProps) {
   };
 
   const pickImage = async (source: 'camera' | 'library') => {
+    // MODIFIED: Use DAILY_LIMIT constant
+    if (isLoadingCount) {
+      showAlert('info', 'Loading', 'Please wait while we load your data.', [{ text: 'OK', onPress: () => {}, style: 'primary' }]);
+      return;
+    }
+    if (usageCount >= DAILY_LIMIT) {
+      showAlert(
+        'warning',
+        'Daily Limit Reached',
+        `You have used the OCR feature ${DAILY_LIMIT} times today. Please try again tomorrow.`,
+        [{ text: 'OK', onPress: () => {}, style: 'primary' }]
+      );
+      return;
+    }
     setImagePickerAlert(false);
     
     const hasPermission = await requestPermission();
@@ -172,6 +242,21 @@ export function GeminiOCRTab({ onInsertText, onClose }: GeminiOCRTabProps) {
         error: 'Image data is missing. Please try again.',
       }));
       return;
+    }
+    // MODIFIED: Increment usage count (adjusted for web SDK)
+    const user = auth.currentUser;
+    if (user) {
+      try {
+        // MODIFIED: Use modular doc and updateDoc functions
+        const docRef = doc(firestore, 'OCRLimits', user.uid); 
+        await updateDoc(docRef, { ocrUsageCount: increment(1) }); // Use increment(1)
+        setUsageCount(prev => prev + 1); // Update local state
+      } catch (error) {
+        console.error('Error updating usage count:', error);
+        showAlert('error', 'Error', 'Failed to update usage. Please check your connection.', [{ text: 'OK', onPress: () => {}, style: 'primary' }]);
+        // NOTE: The request will still proceed, as the image was picked. 
+        // We log the error but allow processing to attempt.
+      }
     }
 
     setOcrState(prev => ({
@@ -258,18 +343,43 @@ export function GeminiOCRTab({ onInsertText, onClose }: GeminiOCRTabProps) {
     }
   };
 
+  // NEW: Determine if the component is in a disabled state
+  const isButtonDisabled = ocrState.isProcessing || isLoadingCount || usageCount >= DAILY_LIMIT;
+  const isLimitReached = usageCount >= DAILY_LIMIT;
+
   return (
     <>
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
+        {/* Usage Count and Loading Indicator */}
+        <View style={styles.usageContainer}>
+            {isLoadingCount ? (
+                <View style={styles.usageLoading}>
+                    <ActivityIndicator size="small" color="#667eea" />
+                    <Text style={styles.usageText}>Loading daily limit...</Text>
+                </View>
+            ) : (
+                <View style={[styles.usageBadge, isLimitReached && styles.usageLimitReachedBadge]}>
+                    <Ionicons 
+                        name={isLimitReached ? "warning" : "bar-chart-outline"} 
+                        size={14} 
+                        color={isLimitReached ? "#ef4444" : "#10b981"} 
+                    />
+                    <Text style={[styles.usageText, isLimitReached && styles.usageLimitReachedText]}>
+                        Usage: {usageCount} / {DAILY_LIMIT} (Daily Limit)
+                    </Text>
+                </View>
+            )}
+        </View>
+
         {/* Image Selection Card */}
         <View style={styles.card}>
           <TouchableOpacity
             onPress={() => setImagePickerAlert(true)}
-            disabled={ocrState.isProcessing}
+            disabled={isButtonDisabled} // MODIFIED: Use combined check
             activeOpacity={0.8}
           >
             <LinearGradient
-              colors={ocrState.isProcessing ? ['#475569', '#64748b'] : ['#667eea', '#764ba2']}
+              colors={isButtonDisabled ? ['#475569', '#64748b'] : ['#667eea', '#764ba2']} // MODIFIED: Gray out when disabled
               style={styles.uploadButton}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 0 }}
@@ -483,6 +593,41 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 16,
   },
+  // NEW STYLES for Usage Indicator
+  usageContainer: {
+    marginBottom: 16,
+    alignItems: 'center',
+  },
+  usageBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    backgroundColor: 'rgba(16, 185, 129, 0.15)', // Tailwind green-500 with opacity
+    gap: 6,
+    borderWidth: 1,
+    borderColor: 'rgba(16, 185, 129, 0.3)',
+  },
+  usageLimitReachedBadge: {
+    backgroundColor: 'rgba(239, 68, 68, 0.15)', // Tailwind red-500 with opacity
+    borderColor: 'rgba(239, 68, 68, 0.3)',
+  },
+  usageText: {
+    color: "#10b981", // Green
+    fontSize: 12,
+    fontFamily: 'Montserrat_600SemiBold',
+  },
+  usageLimitReachedText: {
+    color: "#ef4444", // Red
+  },
+  usageLoading: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 8,
+  },
+  // END NEW STYLES
   card: {
     backgroundColor: 'rgba(255, 255, 255, 0.08)',
     borderRadius: 16,
