@@ -9,6 +9,7 @@ import {
   FlatList,
   Modal,
   SafeAreaView,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -83,7 +84,7 @@ export const TopicSelectionModal: React.FC<TopicSelectionModalProps> = ({
   const [loading, setLoading] = useState(false);
   const [notesLoading, setNotesLoading] = useState(false);
   const [notePreviews, setNotePreviews] = useState<Record<string, string>>({});
-  
+  const [showQuestionCountDropdown, setShowQuestionCountDropdown] = useState(false);
   const [selectedQuestionType, setSelectedQuestionType] = useState('multiple_choice');
   const [questionCount, setQuestionCount] = useState(10);
   const [showQuestionTypeDropdown, setShowQuestionTypeDropdown] = useState(false);
@@ -564,31 +565,62 @@ const checkUsageAndProceed = async (
             )}
           </View>
 
-          {selectedQuestionType !== 'matching' && (
-            <View style={styles.selectorContainer}>
-              <Text style={styles.selectorLabel}>Number of Questions</Text>
-              <View style={styles.questionCountContainer}>
-                {countOptions.map((count) => (
-                  <TouchableOpacity
-                    key={count}
-                    style={[
-                      styles.countButton,
-                      questionCount === count && styles.countButtonActive
-                    ]}
-                    onPress={() => setQuestionCount(count)}
-                    activeOpacity={0.7}
-                  >
-                    <Text style={[
-                      styles.countButtonText,
-                      questionCount === count && styles.countButtonTextActive
-                    ]}>
-                      {count}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
+          {/* NEW: Replace the old questionCountContainer with this dropdown */}
+          <View style={styles.selectorContainer}>
+            <Text style={styles.selectorLabel}>Number of Questions</Text>
+            <TouchableOpacity
+              style={[
+                styles.dropdownButton,
+                selectedQuestionType === 'matching' && styles.dropdownButtonDisabled  // NEW: Grey out for matching
+              ]}
+              onPress={() => setShowQuestionCountDropdown(!showQuestionCountDropdown)}
+              disabled={selectedQuestionType === 'matching'}  // NEW: Disable for matching
+              activeOpacity={0.7}
+            >
+              <Text style={[
+                styles.dropdownButtonText,
+                selectedQuestionType === 'matching' && styles.dropdownButtonTextDisabled  // NEW: Grey text for matching
+              ]}>
+                {questionCount}
+              </Text>
+              <Ionicons 
+                name={showQuestionCountDropdown ? "chevron-up" : "chevron-down"} 
+                size={20} 
+                color={selectedQuestionType === 'matching' ? "#64748b" : "#64748b"}  // Grey chevron for matching
+              />
+            </TouchableOpacity>
+            
+            {showQuestionCountDropdown && selectedQuestionType !== 'matching' && (  // NEW: Only show menu if not matching
+              <View style={styles.dropdownMenu}>
+                <ScrollView style={styles.dropdownScrollView} showsVerticalScrollIndicator={false}>
+                  {Array.from({length: 15}, (_, i) => i + 1).map((count) => (
+                    <TouchableOpacity
+                      key={count}
+                      style={[
+                        styles.dropdownItem,
+                        questionCount === count && styles.dropdownItemActive
+                      ]}
+                      onPress={() => {
+                        setQuestionCount(count);
+                        setShowQuestionCountDropdown(false);
+                      }}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={[
+                        styles.dropdownItemText,
+                        questionCount === count && styles.dropdownItemTextActive
+                      ]}>
+                        {count}
+                      </Text>
+                      {questionCount === count && (
+                        <Ionicons name="checkmark" size={20} color="#10b981" />
+                      )}
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
               </View>
-            </View>
-          )}
+            )}
+          </View>
 
           {selectedQuestionType === 'matching' && (
             <View style={styles.infoContainer}>
@@ -1132,14 +1164,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '500',
   },
-  dropdownMenu: {
-    backgroundColor: '#1e293b',
-    borderRadius: 12,
-    marginTop: 8,
-    borderWidth: 1,
-    borderColor: '#334155',
-    overflow: 'hidden',
-  },
   dropdownItem: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1335,5 +1359,25 @@ usageLoading: {
   alignItems: 'center',
   gap: 8,
   paddingVertical: 8,
+},
+// Add these to your styles object
+dropdownButtonDisabled: {
+  backgroundColor: '#334155',  // Darker grey background
+  borderColor: '#475569',
+},
+dropdownButtonTextDisabled: {
+  color: '#64748b',  // Grey text
+},
+dropdownMenu: {
+  backgroundColor: '#1e293b',
+  borderRadius: 12,
+  marginTop: 8,
+  borderWidth: 1,
+  borderColor: '#334155',
+  overflow: 'hidden',  // Ensures rounded corners clip the scroll
+  maxHeight: 150,  // NEW: Limits height to ~5-6 items visible at once (adjust as needed)
+},
+dropdownScrollView: {
+  maxHeight: 150,  // Matches the menu height for smooth scrolling
 },
 });
