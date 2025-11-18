@@ -1,10 +1,10 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Rubric — Home</title>
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Rubric - Your Multimodal Study Buddy</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
   <style>
     * {
       margin: 0;
@@ -14,412 +14,201 @@
 
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      background: linear-gradient(180deg, #0A1C3C 0%, #324762 100%);
       min-height: 100vh;
       display: flex;
-      flex-direction: column;
       align-items: center;
       justify-content: center;
-      background: linear-gradient(135deg, #0A1C3C 0%, #1a2942 50%, #324762 100%);
-      color: #ffffff;
       padding: 24px;
-      overflow: hidden;
-      position: relative;
     }
 
-    /* Animated background particles */
-    body::before {
-      content: '';
-      position: absolute;
-      width: 200%;
-      height: 200%;
-      background-image: 
-        radial-gradient(circle at 20% 50%, rgba(102, 126, 234, 0.1) 0%, transparent 50%),
-        radial-gradient(circle at 80% 80%, rgba(118, 75, 162, 0.1) 0%, transparent 50%),
-        radial-gradient(circle at 40% 20%, rgba(79, 172, 254, 0.1) 0%, transparent 50%);
-      animation: float 20s ease-in-out infinite;
-    }
-
-    @keyframes float {
-      0%, 100% { transform: translate(0, 0) rotate(0deg); }
-      33% { transform: translate(-5%, 5%) rotate(5deg); }
-      66% { transform: translate(5%, -5%) rotate(-5deg); }
-    }
-
-    .container {
-      position: relative;
-      z-index: 1;
-      max-width: 600px;
-      width: 100%;
-      animation: fadeIn 600ms ease-out;
-    }
-
-    @keyframes fadeIn {
-      from {
-        opacity: 0;
-        transform: translateY(20px);
-      }
-      to {
-        opacity: 1;
-        transform: translateY(0);
-      }
-    }
-
-    /* Glassmorphic card */
     .card {
-      background: rgba(255, 255, 255, 0.08);
-      backdrop-filter: blur(20px);
-      border: 1px solid rgba(255, 255, 255, 0.1);
+      width: 100%;
+      max-width: 400px;
+      background: rgba(255, 255, 255, 0.05);
       border-radius: 20px;
-      padding: 48px 32px;
-      box-shadow: 
-        0 8px 32px rgba(0, 0, 0, 0.3),
-        inset 0 1px 0 rgba(255, 255, 255, 0.1);
+      padding: 28px;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
       text-align: center;
     }
 
-    /* Logo/Brand Badge */
-    .brand-badge {
-      width: 100px;
-      height: 100px;
-      margin: 0 auto 32px;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      border-radius: 24px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      box-shadow: 
-        0 8px 24px rgba(102, 126, 234, 0.4),
-        0 4px 12px rgba(0, 0, 0, 0.2);
-      animation: brandFloat 3s ease-in-out infinite;
+    .logo {
+      width: 120px;
+      height: 120px;
+      margin: 0 auto 16px;
+      display: block;
+      object-fit: contain;
     }
 
-    @keyframes brandFloat {
-      0%, 100% { transform: translateY(0px); }
-      50% { transform: translateY(-10px); }
+    .heading {
+      font-size: 26px;
+      font-weight: 700;
+      color: #fff;
+      margin-bottom: 8px;
     }
 
-    .brand-badge i {
-      font-size: 48px;
-      color: #ffffff;
-    }
-
-    /* Title with gradient */
-    h1 {
-      font-size: 36px;
-      font-weight: 800;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      background-clip: text;
-      margin-bottom: 16px;
-      letter-spacing: -1px;
-    }
-
-    .subtitle {
-      font-size: 16px;
-      color: rgba(255, 255, 255, 0.7);
-      margin-bottom: 40px;
-      line-height: 1.6;
-    }
-
-    /* Info card */
-    .info-section {
-      background: rgba(255, 255, 255, 0.05);
-      border: 1px solid rgba(255, 255, 255, 0.08);
-      border-radius: 16px;
-      padding: 24px;
+    .subtext {
+      font-size: 14px;
+      color: #b0bcd0;
       margin-bottom: 32px;
-      text-align: left;
     }
 
-    .info-section h2 {
-      font-size: 18px;
-      font-weight: 600;
-      color: #ffffff;
-      margin-bottom: 16px;
-      display: flex;
-      align-items: center;
-      gap: 10px;
-    }
-
-    .info-section h2 i {
-      font-size: 20px;
-      color: #667eea;
-    }
-
-    .feature-list {
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
-    }
-
-    .feature-item {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      padding: 12px;
-      background: rgba(255, 255, 255, 0.03);
-      border-radius: 10px;
-      font-size: 14px;
-      color: rgba(255, 255, 255, 0.8);
-      transition: all 200ms ease;
-    }
-
-    .feature-item:hover {
-      background: rgba(255, 255, 255, 0.06);
-      transform: translateX(4px);
-    }
-
-    .feature-item i {
-      font-size: 16px;
-      color: #4facfe;
-      flex-shrink: 0;
-    }
-
-    /* Action buttons */
-    .button-group {
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
-    }
-
-    .btn-primary {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      gap: 12px;
+    .links-container {
       width: 100%;
-      height: 56px;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      color: #ffffff;
-      font-size: 16px;
-      font-weight: 600;
-      text-decoration: none;
-      border-radius: 16px;
-      border: none;
-      cursor: pointer;
-      box-shadow: 
-        0 8px 24px rgba(102, 126, 234, 0.4),
-        0 4px 12px rgba(0, 0, 0, 0.2);
-      transition: all 300ms ease;
-    }
-
-    .btn-primary:hover {
-      transform: translateY(-2px);
-      box-shadow: 
-        0 12px 32px rgba(102, 126, 234, 0.5),
-        0 6px 16px rgba(0, 0, 0, 0.3);
-    }
-
-    .btn-primary:active {
-      transform: translateY(0);
-      opacity: 0.8;
-    }
-
-    .btn-primary i {
-      font-size: 20px;
-    }
-
-    .btn-secondary {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      gap: 10px;
-      width: 100%;
-      height: 48px;
-      background: rgba(255, 255, 255, 0.05);
-      border: 1px solid rgba(255, 255, 255, 0.1);
-      color: rgba(255, 255, 255, 0.8);
-      font-size: 14px;
-      font-weight: 600;
-      text-decoration: none;
-      border-radius: 12px;
-      transition: all 200ms ease;
-    }
-
-    .btn-secondary:hover {
-      background: rgba(255, 255, 255, 0.1);
-      border-color: rgba(255, 255, 255, 0.2);
-      color: #ffffff;
-    }
-
-    .btn-secondary i {
-      font-size: 16px;
-    }
-
-    /* Quick links section */
-    .quick-links {
-      margin-top: 32px;
-      padding-top: 32px;
-      border-top: 1px solid rgba(255, 255, 255, 0.1);
-    }
-
-    .quick-links h3 {
-      font-size: 14px;
-      font-weight: 600;
-      color: rgba(255, 255, 255, 0.6);
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-      margin-bottom: 16px;
-      text-align: center;
-    }
-
-    .links-grid {
-      display: grid;
-      grid-template-columns: repeat(2, 1fr);
-      gap: 12px;
-    }
-
-    .link-card {
       display: flex;
       flex-direction: column;
-      align-items: center;
-      gap: 8px;
-      padding: 16px;
-      background: rgba(255, 255, 255, 0.03);
-      border: 1px solid rgba(255, 255, 255, 0.06);
-      border-radius: 12px;
-      text-decoration: none;
-      color: rgba(255, 255, 255, 0.8);
-      font-size: 13px;
-      font-weight: 500;
-      transition: all 200ms ease;
-    }
-
-    .link-card:hover {
-      background: rgba(255, 255, 255, 0.08);
-      border-color: rgba(255, 255, 255, 0.15);
-      color: #ffffff;
-      transform: translateY(-2px);
-    }
-
-    .link-card i {
-      font-size: 24px;
-      color: #667eea;
-    }
-
-    /* Status indicator */
-    .status-badge {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      padding: 6px 12px;
-      background: rgba(56, 239, 125, 0.15);
-      border: 1px solid rgba(56, 239, 125, 0.3);
-      border-radius: 20px;
-      font-size: 12px;
-      font-weight: 600;
-      color: #38ef7d;
+      gap: 12px;
       margin-bottom: 24px;
     }
 
-    .status-badge i {
-      font-size: 10px;
-      animation: pulse 2s ease-in-out infinite;
+    .link-button {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      width: 100%;
+      background: rgba(255, 255, 255, 0.06);
+      border-radius: 12px;
+      padding: 16px 18px;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      text-decoration: none;
+      transition: all 0.3s ease;
+      cursor: pointer;
     }
 
-    @keyframes pulse {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0.5; }
+    .link-button:hover {
+      background: rgba(255, 255, 255, 0.1);
+      transform: translateY(-2px);
+    }
+
+    .delete-button {
+      border-color: rgba(245, 87, 108, 0.3);
+    }
+
+    .delete-button:hover {
+      background: rgba(245, 87, 108, 0.1);
+    }
+
+    .link-content {
+      display: flex;
+      align-items: center;
+      flex: 1;
+      gap: 12px;
+    }
+
+    .link-text {
+      color: #7fd3ff;
+      font-size: 16px;
+      font-weight: 600;
+    }
+
+    .delete-button .link-text {
+      color: #f5576c;
+    }
+
+    .icon {
+      font-size: 20px;
+      color: #7fd3ff;
+    }
+
+    .delete-button .icon {
+      color: #f5576c;
+    }
+
+    .icon-right {
+      font-size: 18px;
+    }
+
+    .play-row {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      margin-top: 20px;
+    }
+
+    .play-text {
+      color: #fff;
+      font-size: 14px;
+    }
+
+    .footer {
+      margin-top: 20px;
+      color: #6b7280;
+      font-size: 12px;
     }
 
     @media (max-width: 480px) {
       .card {
-        padding: 40px 24px;
+        padding: 20px;
       }
 
-      h1 {
-        font-size: 32px;
+      .heading {
+        font-size: 22px;
       }
 
-      .brand-badge {
-        width: 80px;
-        height: 80px;
-      }
-
-      .brand-badge i {
-        font-size: 40px;
-      }
-
-      .links-grid {
-        grid-template-columns: 1fr;
+      .link-text {
+        font-size: 14px;
       }
     }
   </style>
 </head>
 <body>
-  <div class="container">
-    <div class="card">
-      <div class="brand-badge">
-        <i class="fas fa-cube"></i>
-      </div>
+  <div class="card">
+    <!-- Correct absolute path to the image and small retina-friendly srcset -->
+    <img
+      src="/assets/rubric.png"
+      srcset="/assets/rubric@2x.png 2x"
+      alt="Rubric Logo"
+      class="logo"
+      loading="lazy"
+      width="120"
+      height="120"
+    />
 
-      <div class="status-badge">
-        <i class="fas fa-circle"></i>
-        <span>System Active</span>
-      </div>
-      
-      <h1>Welcome to Rubric</h1>
-      <p class="subtitle">Your comprehensive verification and authentication platform. This site hosts secure verification pages for the Rubric ecosystem.</p>
-      
-      <div class="info-section">
-        <h2>
-          <i class="fas fa-shield-check"></i>
-          Available Services
-        </h2>
-        <div class="feature-list">
-          <div class="feature-item">
-            <i class="fas fa-envelope-circle-check"></i>
-            <span>Email verification and authentication</span>
-          </div>
-          <div class="feature-item">
-            <i class="fas fa-lock"></i>
-            <span>Secure account management</span>
-          </div>
-          <div class="feature-item">
-            <i class="fas fa-key"></i>
-            <span>Password reset and recovery</span>
-          </div>
-          <div class="feature-item">
-            <i class="fas fa-user-shield"></i>
-            <span>Multi-factor authentication support</span>
-          </div>
-        </div>
-      </div>
-      
-      <div class="button-group">
-        <a href="emailVerified.html" class="btn-primary">
-          <i class="fas fa-vial"></i>
-          <span>Test Email Verification</span>
-        </a>
-        <a href="#" class="btn-secondary">
-          <i class="fas fa-book"></i>
-          <span>View Documentation</span>
-        </a>
-      </div>
+    <h1 class="heading">WELCOME TO RUBRIC!</h1>
+    <p class="subtext">Your Multimodal Study Buddy!</p>
 
-      <div class="quick-links">
-        <h3>Quick Access</h3>
-        <div class="links-grid">
-          <a href="#" class="link-card">
-            <i class="fas fa-house"></i>
-            <span>Main App</span>
-          </a>
-          <a href="#" class="link-card">
-            <i class="fas fa-circle-info"></i>
-            <span>Help Center</span>
-          </a>
-          <a href="#" class="link-card">
-            <i class="fas fa-headset"></i>
-            <span>Support</span>
-          </a>
-          <a href="#" class="link-card">
-            <i class="fas fa-code"></i>
-            <span>API Docs</span>
-          </a>
+    <div class="links-container">
+      <a href="privacy-policy.html" class="link-button">
+        <div class="link-content">
+          <i class="fas fa-shield-alt icon"></i>
+          <span class="link-text">Privacy Policy</span>
         </div>
-      </div>
+        <i class="fas fa-external-link-alt icon icon-right"></i>
+      </a>
+
+      <a href="terms-and-conditions.html" class="link-button">
+        <div class="link-content">
+          <i class="fas fa-file-alt icon"></i>
+          <span class="link-text">Terms &amp; Conditions</span>
+        </div>
+        <i class="fas fa-external-link-alt icon icon-right"></i>
+      </a>
+
+      <a href="faq.html" class="link-button">
+        <div class="link-content">
+          <i class="fas fa-question-circle icon"></i>
+          <span class="link-text">FAQ</span>
+        </div>
+        <i class="fas fa-external-link-alt icon icon-right"></i>
+      </a>
+
+      <a href="account-deletion.html" class="link-button delete-button">
+        <div class="link-content">
+          <i class="fas fa-trash-alt icon"></i>
+          <span class="link-text">Account Deletion</span>
+        </div>
+        <i class="fas fa-external-link-alt icon icon-right"></i>
+      </a>
     </div>
+
+    <div class="play-row">
+      <i class="fab fa-google-play" style="color: #fff; font-size: 20px;"></i>
+      <span class="play-text">Google Play coming soon</span>
+    </div>
+
+    <p class="footer">© 2025 Rubric. All rights reserved.</p>
   </div>
 </body>
 </html>

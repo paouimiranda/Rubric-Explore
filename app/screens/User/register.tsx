@@ -1438,6 +1438,8 @@ const styles = StyleSheet.create({
   },
   nextButton: {
     flex: 1.5,
+    borderWidth: 2,
+    borderColor: '#52F7E2',
   },
   disabledButton: {
     opacity: 0.6,
