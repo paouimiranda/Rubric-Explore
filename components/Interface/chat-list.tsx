@@ -76,12 +76,12 @@ export default function ChatList({ refreshing = false, onRefresh }: ChatListProp
     if (!currentUser) return;
     showAlert(
       'warning',
-      'Delete Conversation',
-      `Are you sure you want to delete your conversation with ${conversation.otherUser.displayName}? This will hide it from your chat list.`,
+      'Archive Conversation',
+      `Are you sure you want to archive your conversation with ${conversation.otherUser.displayName}? This will hide it from your chat list.`,
       [
         { text: 'Cancel', style: 'cancel', onPress: closeAlert },
         {
-          text: 'Delete',
+          text: 'Archive',
           style: 'primary',
           onPress: async () => {
             closeAlert();
