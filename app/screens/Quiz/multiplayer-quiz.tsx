@@ -1,8 +1,9 @@
-// app/Quiz/multiplayer-play.tsx
+// app/Quiz/multiplayer-play.tsx - IMPROVED VERSION
 import { useBacklogLogger } from '@/hooks/useBackLogLogger';
 import { getCurrentUserData } from '@/services/auth-service';
 import { BACKLOG_EVENTS } from '@/services/backlogEvents';
 import {
+  checkAndMarkInactivePlayers,
   getLeaderboard,
   LeaderboardEntry,
   leaveSession,
@@ -10,19 +11,22 @@ import {
   listenToSession,
   moveToNextQuestion,
   MultiplayerSession,
+  reconnectPlayer,
   SessionPlayer,
   submitAnswer,
-  updatePlayerActivity,
+  updatePlayerActivity
 } from '@/services/multiplayer-service';
 import { Question } from '@/services/quiz-service';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import LottieView from 'lottie-react-native';
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Alert,
   Animated,
+  AppState,
+  AppStateStatus,
   BackHandler,
   Dimensions,
   FlatList,
@@ -34,9 +38,8 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  View,
+  View
 } from 'react-native';
-
 
 const { width: screenWidth } = Dimensions.get('window');
 const MATCHING_COLORS = [
@@ -56,7 +59,6 @@ const MultiplayerPlay = () => {
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [showQuestionPreview, setShowQuestionPreview] = useState(false);
-  const [phase, setPhase] = useState<Phase>('question');
   
   // Question state
   const [currentQuestion, setCurrentQuestion] = useState<Question | null>(null);
@@ -85,10 +87,14 @@ const MultiplayerPlay = () => {
   const progressAnim = useRef(new Animated.Value(1)).current;
   const activityInterval = useRef<number | null>(null);
   const questionStartTime = useRef(Date.now());
-  const lastQuestionIndexRef = useRef<number>(-1);
   const questionPreviewScale = useRef(new Animated.Value(0)).current;
-  const currentQuestionLocked = useRef(false);
+  const appState = useRef(AppState.currentState);
+  const questionEndTime = useRef<number>(0);
   
+  // IMPROVED: Track question index to prevent race conditions
+  const currentQuestionIndex = useRef<number>(-1);
+  const isProcessingTransition = useRef<boolean>(false);
+  const hasCalledMoveToNext = useRef<boolean>(false);
 
   // Initialize
   useEffect(() => {
@@ -96,15 +102,23 @@ const MultiplayerPlay = () => {
     return () => cleanup();
   }, []);
 
+  // IMPROVED: Inactivity check
   useEffect(() => {
-    currentQuestionLocked.current = false;
-  }, [session?.currentQuestionIndex]);
+    if (!sessionId || typeof sessionId !== 'string' || !session) return;
+    if (session.status !== 'in_progress') return;
+
+    const inactivityCheck = setInterval(() => {
+      checkAndMarkInactivePlayers(sessionId, 30);
+    }, 10000);
+
+    return () => clearInterval(inactivityCheck);
+  }, [sessionId, session?.status]);
 
   // Handle Android back button
   useEffect(() => {
     const backHandler = BackHandler.addEventListener('hardwareBackPress', () => {
       handleLeave();
-      return true; // Prevent default back action
+      return true;
     });
 
     return () => backHandler.remove();
@@ -123,7 +137,6 @@ const MultiplayerPlay = () => {
 
       setSession(sessionData);
 
-      // Handle session completion
       if (sessionData.status === 'completed' && !showFinalResults) {
         handleQuizComplete();
       }
@@ -138,24 +151,72 @@ const MultiplayerPlay = () => {
 
     const unsubscribe = listenToPlayers(sessionId, (playersData) => {
       setPlayers(playersData);
-      checkAllAnswered(playersData);
     });
 
     return unsubscribe;
-  }, [sessionId, hasAnswered]);
+  }, [sessionId]);
 
-  // Update current question when session changes
+  // IMPROVED: Handle question changes with proper state management
   useEffect(() => {
-    if (session && session.questions && !isTransitioning) {
-      const question = session.questions[session.currentQuestionIndex];
+    if (!session || !session.questions || isTransitioning) return;
+    
+    const newQuestionIndex = session.currentQuestionIndex;
+    
+    // Only initialize if this is actually a NEW question
+    if (newQuestionIndex !== currentQuestionIndex.current) {
+      console.log(`[UI] Question index changed: ${currentQuestionIndex.current} -> ${newQuestionIndex}`);
+      currentQuestionIndex.current = newQuestionIndex;
       
-      // Only initialize if question index actually changed
-      if (question && session.currentQuestionIndex !== lastQuestionIndexRef.current) {
-        lastQuestionIndexRef.current = session.currentQuestionIndex;
-        initializeQuestion(question);
+      // Reset the flag when moving to a new question
+      hasCalledMoveToNext.current = false;
+      
+      const question = session.questions[newQuestionIndex];
+      if (question) {
+        // Check if current player already answered this question
+        const currentPlayer = players.find(p => p.uid === currentUser?.uid);
+        const alreadyAnswered = currentPlayer?.answers.some(
+          a => a.questionIndex === newQuestionIndex
+        );
+        
+        if (alreadyAnswered) {
+          console.log('[UI] Already answered this question, setting hasAnswered=true');
+          setHasAnswered(true);
+        } else {
+          console.log('[UI] Initializing new question');
+          initializeQuestion(question);
+        }
       }
     }
-  }, [session?.currentQuestionIndex, isTransitioning]);
+  }, [session?.currentQuestionIndex, players, currentUser, isTransitioning]);
+
+  // IMPROVED: Check if all answered - now with better debouncing
+  useEffect(() => {
+    if (!hasAnswered || isTransitioning || !session || isProcessingTransition.current) return;
+    if (session.status !== 'in_progress') return;
+    if (hasCalledMoveToNext.current) {
+      console.log('[UI] Already called moveToNext for this question, skipping check');
+      return;
+    }
+
+    const activePlayers = players.filter(p => p.status !== 'disconnected');
+    if (activePlayers.length === 0) {
+      console.log('[UI] No active players, skipping progression check');
+      return;
+    }
+
+    const playersAnswered = activePlayers.filter(p => 
+      p.answers.some(a => a.questionIndex === session.currentQuestionIndex)
+    );
+
+    console.log(`[UI] Answer check: ${playersAnswered.length}/${activePlayers.length} active players answered question ${session.currentQuestionIndex}`);
+
+    const allAnswered = playersAnswered.length === activePlayers.length;
+
+    if (allAnswered) {
+      console.log('[UI] All active players answered, triggering progression');
+      handleAllAnswered();
+    }
+  }, [hasAnswered, players, session?.currentQuestionIndex, isTransitioning]);
 
   // Timer
   useEffect(() => {
@@ -166,6 +227,53 @@ const MultiplayerPlay = () => {
       if (timerRef.current) clearInterval(timerRef.current);
     };
   }, [timeLeft, hasAnswered, isTransitioning]);
+
+  // IMPROVED: App state handling
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (nextAppState: AppStateStatus) => {
+      if (
+        appState.current.match(/inactive|background/) &&
+        nextAppState === 'active'
+      ) {
+        // Reconnect player
+        if (sessionId && typeof sessionId === 'string' && currentUser) {
+          reconnectPlayer(sessionId, currentUser.uid);
+        }
+
+        // Recalculate timer
+        if (!hasAnswered && !isTransitioning && questionEndTime.current > 0) {
+          const now = Date.now();
+          const remaining = Math.max(0, Math.ceil((questionEndTime.current - now) / 1000));
+          
+          setTimeLeft(remaining);
+          
+          if (currentQuestion) {
+            const timeLimit = currentQuestion.timeLimit || 30;
+            const elapsed = (now - questionStartTime.current) / 1000;
+            const progress = Math.max(0, 1 - (elapsed / timeLimit));
+            
+            progressAnim.setValue(progress);
+            
+            if (remaining <= 0) {
+              handleTimeUp();
+            } else {
+              Animated.timing(progressAnim, {
+                toValue: 0,
+                duration: remaining * 1000,
+                useNativeDriver: false,
+              }).start();
+            }
+          }
+        }
+      }
+
+      appState.current = nextAppState;
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, [hasAnswered, isTransitioning, currentQuestion, sessionId, currentUser]);
 
   const initializeGame = async () => {
     try {
@@ -178,8 +286,14 @@ const MultiplayerPlay = () => {
       }
       setCurrentUser(user);
 
-      // Start activity heartbeat
       if (sessionId && typeof sessionId === 'string') {
+        try {
+          await reconnectPlayer(sessionId, user.uid);
+        } catch (error) {
+          console.log('Not reconnecting (probably new session)');
+        }
+
+        // Activity heartbeat
         activityInterval.current = setInterval(() => {
           updatePlayerActivity(sessionId, user.uid);
         }, 15000) as unknown as number;
@@ -195,21 +309,30 @@ const MultiplayerPlay = () => {
   };
 
   const initializeQuestion = (question: Question) => {
-    console.log('Initializing question:', question.id);
+    console.log('[UI] Initializing question:', question.id, 'at index:', session?.currentQuestionIndex);
     setCurrentQuestion(question);
     setHasAnswered(false);
     setShowCorrectAnswer(false);
     setShowLeaderboard(false);
     setIsTransitioning(false);
-    
-    // IMPORTANT: Reset lastAnswerCorrect to null at start of new question
     setLastAnswerCorrect(null);
     setPointsEarned(0);
     
-    // Show question preview first
+    // Check if we already answered this question (important for reconnection)
+    const currentPlayer = players.find(p => p.uid === currentUser?.uid);
+    const alreadyAnswered = currentPlayer?.answers.some(
+      a => a.questionIndex === session?.currentQuestionIndex
+    );
+    
+    if (alreadyAnswered) {
+      console.log('[UI] Player already answered this question during reconnection');
+      setHasAnswered(true);
+      // Don't show preview or start timer
+      return;
+    }
+    
     setShowQuestionPreview(true);
     
-    // Animate scale in
     questionPreviewScale.setValue(0);
     Animated.spring(questionPreviewScale, {
       toValue: 1,
@@ -218,7 +341,6 @@ const MultiplayerPlay = () => {
       useNativeDriver: true,
     }).start();
     
-    // After 3 seconds, hide preview and start question
     setTimeout(() => {
       setShowQuestionPreview(false);
       startQuestion(question);
@@ -226,8 +348,13 @@ const MultiplayerPlay = () => {
   };
 
   const startQuestion = (question: Question) => {
-    setTimeLeft(question.timeLimit || 30);
-    questionStartTime.current = Date.now();
+    const timeLimit = question.timeLimit || 30;
+    const now = Date.now();
+    
+    questionEndTime.current = now + (timeLimit * 1000);
+    questionStartTime.current = now;
+    
+    setTimeLeft(timeLimit);
 
     // Reset answer state
     setSelectedAnswers([]);
@@ -247,7 +374,7 @@ const MultiplayerPlay = () => {
     progressAnim.setValue(1);
     Animated.timing(progressAnim, {
       toValue: 0,
-      duration: (question.timeLimit || 30) * 1000,
+      duration: timeLimit * 1000,
       useNativeDriver: false,
     }).start();
   };
@@ -256,14 +383,15 @@ const MultiplayerPlay = () => {
     if (timerRef.current) clearInterval(timerRef.current);
 
     timerRef.current = setInterval(() => {
-      setTimeLeft(prev => {
-        if (prev <= 1) {
-          handleTimeUp();
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000) as unknown as number;
+      const now = Date.now();
+      const remaining = Math.max(0, Math.ceil((questionEndTime.current - now) / 1000));
+      
+      setTimeLeft(remaining);
+      
+      if (remaining <= 0) {
+        handleTimeUp();
+      }
+    }, 100) as unknown as number;
   };
 
   const handleTimeUp = () => {
@@ -276,78 +404,79 @@ const MultiplayerPlay = () => {
     }
   };
 
-  const checkAllAnswered = (playersData: SessionPlayer[]) => {
-    if (!hasAnswered || isTransitioning || !session) return;
-
-    // Only count ACTIVE players (not disconnected)
-    const activePlayers = playersData.filter(p => p.status !== 'disconnected');
-    const allAnswered = activePlayers.every(p => p.status === 'answered');
-    
-    if (allAnswered && activePlayers.length > 0 && !currentQuestionLocked.current ) {
-      handleAllAnswered();
+  // IMPROVED: Simplified all-answered handler
+  const handleAllAnswered = useCallback(async () => {
+    if (isTransitioning || isProcessingTransition.current) {
+      console.log('[UI] Already processing transition, skipping');
+      return;
     }
-  };
-
-  const handleAllAnswered = async () => {
-    if (isTransitioning || currentQuestionLocked.current) return;
     
-    console.log('All players answered, starting transition...');
+    if (hasCalledMoveToNext.current) {
+      console.log('[UI] Already called moveToNext for this question, skipping');
+      return;
+    }
+    
+    if (!sessionId || typeof sessionId !== 'string' || !session) return;
+    
+    console.log('[UI] Starting transition sequence');
+    hasCalledMoveToNext.current = true;
+    isProcessingTransition.current = true;
     setIsTransitioning(true);
-    currentQuestionLocked.current = true;
 
-    // Stop the timer and animation
+    // Stop timer
     if (timerRef.current) {
       clearInterval(timerRef.current);
       timerRef.current = null;
     }
     progressAnim.stopAnimation();
 
-    // IMPORTANT: Show correct answer immediately for ALL players
-    // Give a small delay to ensure state is set
+    // Show correct answer
     await new Promise(resolve => setTimeout(resolve, 100));
     setShowCorrectAnswer(true);
-    
-    // Keep showing for 3 seconds (increased from 2)
     await new Promise(resolve => setTimeout(resolve, 3000));
     setShowCorrectAnswer(false);
 
-    // Check if this was the last question
-    const isLastQuestion = session && session.currentQuestionIndex + 1 >= session.totalQuestions;
+    const isLastQuestion = session.currentQuestionIndex + 1 >= session.totalQuestions;
 
-    if (sessionId && typeof sessionId === 'string') {
-      if (isLastQuestion) {
-        console.log('Last question, moving to final results...');
-        // Don't show temporary leaderboard, move straight to final results
-        await new Promise(resolve => setTimeout(resolve, 1000));
-
+    if (isLastQuestion) {
+      console.log('[UI] Last question, moving to final results');
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      try {
         await moveToNextQuestion(sessionId);
-        // The session listener will trigger handleQuizComplete
-        setIsTransitioning(false);
-      } else {
-        console.log('Not last question, showing leaderboard...');
-        // Show temporary leaderboard (3 seconds)
-        const leaderboardData = await getLeaderboard(sessionId);
-        setLeaderboard(leaderboardData);
-        setShowLeaderboard(true);
-        await new Promise(resolve => setTimeout(resolve, 3000));
-        setShowLeaderboard(false);
-        
-        console.log('Moving to next question...');
-        // Move to next question
-        await moveToNextQuestion(sessionId);
-        
-        // Wait for the database to update and question to initialize
-        await new Promise(resolve => setTimeout(resolve, 800));
-        setIsTransitioning(false);
+        console.log('[UI] Successfully moved to completion');
+      } catch (error) {
+        console.error('[UI] Error moving to completion:', error);
       }
+      
+      isProcessingTransition.current = false;
     } else {
+      console.log('[UI] Showing leaderboard before next question');
+      const leaderboardData = await getLeaderboard(sessionId);
+      setLeaderboard(leaderboardData);
+      setShowLeaderboard(true);
+      await new Promise(resolve => setTimeout(resolve, 3000));
+      setShowLeaderboard(false);
+      
+      console.log(`[UI] Calling moveToNextQuestion from question ${session.currentQuestionIndex}`);
+      
+      try {
+        await moveToNextQuestion(sessionId);
+        console.log('[UI] Successfully moved to next question');
+      } catch (error) {
+        console.error('[UI] Error moving to next question:', error);
+      }
+      
+      await new Promise(resolve => setTimeout(resolve, 500));
+      isProcessingTransition.current = false;
       setIsTransitioning(false);
     }
-  };
+  }, [sessionId, session, isTransitioning]);
 
   const handleSubmitAnswer = async () => {
     if (hasAnswered || !currentQuestion || !session || !sessionId || !currentUser) return;
 
+    console.log('Submitting answer for question index:', session.currentQuestionIndex);
     setHasAnswered(true);
 
     const timeSpent = Math.floor((Date.now() - questionStartTime.current) / 1000);
@@ -381,9 +510,10 @@ const MultiplayerPlay = () => {
         currentStreak
       );
 
-      // Set the result immediately
       setLastAnswerCorrect(result.isCorrect);
       setPointsEarned(result.pointsEarned);
+      
+      console.log('Answer submitted successfully');
     } catch (error) {
       console.error('Error submitting answer:', error);
       Alert.alert('Error', 'Failed to submit answer');
@@ -422,9 +552,9 @@ const MultiplayerPlay = () => {
             if (sessionId && typeof sessionId === 'string' && currentUser) {
               await leaveSession(sessionId, currentUser.uid);
               addBacklogEvent(BACKLOG_EVENTS.USER_LEFT_MULTIPLAYER_GAME, {
-              sessionId,
-              userId: currentUser?.uid,
-            });
+                sessionId,
+                userId: currentUser?.uid,
+              });
               router.back();
             }
           },
@@ -675,7 +805,6 @@ const MultiplayerPlay = () => {
           <View style={styles.fullScreenLeaderboardContainer}>
             <Text style={styles.fullScreenLeaderboardTitle}>Current Standings</Text>
             
-            {/* Mini Podium for Top 3 */}
             {leaderboard.length >= 3 && (
               <View style={styles.miniPodiumContainer}>
                 {(() => {
@@ -711,7 +840,6 @@ const MultiplayerPlay = () => {
               </View>
             )}
 
-            {/* Full Rankings */}
             <View style={styles.leaderboardListContainer}>
               <FlatList
                 data={leaderboard}
@@ -756,11 +884,10 @@ const MultiplayerPlay = () => {
           <View style={styles.podiumContainer}>
             {(() => {
               const topThree = leaderboard.slice(0, 3);
-              // Reorder for podium display: 2nd, 1st, 3rd
               const reordered = topThree.length >= 2 ? [topThree[1], topThree[0], topThree[2]] : topThree;
-              const heights = [120, 160, 100]; // Heights for positions in display order (2nd, 1st, 3rd)
-              const colors = ['#f59e0b', '#eab308', '#fb923c']; // Colors for positions in display order
-              const ranks = topThree.length >= 2 ? [2, 1, 3] : [1, 2, 3]; // Actual ranks
+              const heights = [120, 160, 100];
+              const colors = ['#f59e0b', '#eab308', '#fb923c'];
+              const ranks = topThree.length >= 2 ? [2, 1, 3] : [1, 2, 3];
 
               return reordered.filter(Boolean).map((player, displayIndex) => {
                 const isCurrentUser = player.uid === currentUser?.uid;
@@ -848,7 +975,11 @@ const MultiplayerPlay = () => {
     );
   }
 
-  const answeredCount = players.filter(p => p.status === 'answered').length;
+  const answeredCount = players.filter(p => 
+    p.status !== 'disconnected' && 
+    p.answers.some(a => a.questionIndex === session.currentQuestionIndex)
+  ).length;
+  const activePlayerCount = players.filter(p => p.status !== 'disconnected').length;
   const currentPlayerData = players.find(p => p.uid === currentUser?.uid);
 
   return (
@@ -920,7 +1051,7 @@ const MultiplayerPlay = () => {
           </View>
         )}
 
-        {/* Scrollable Question Content */}
+        {/* Question Content */}
         {!showCorrectAnswer && !showLeaderboard && !hasAnswered && !showQuestionPreview && (
           <ScrollView 
             style={styles.scrollContainer}
@@ -931,7 +1062,7 @@ const MultiplayerPlay = () => {
           </ScrollView>
         )}
 
-        {/* Waiting State - Full Screen */}
+        {/* Waiting State */}
         {hasAnswered && !showCorrectAnswer && !showLeaderboard && (
           <View style={styles.fullScreenWaitingContainer}>
             <View style={styles.waitingContent}>
@@ -943,13 +1074,13 @@ const MultiplayerPlay = () => {
               />
               <Text style={styles.waitingText}>Waiting for others...</Text>
               <Text style={styles.waitingSubtext}>
-                {answeredCount} / {players.length} answered
+                {answeredCount} / {activePlayerCount} answered
               </Text>
             </View>
           </View>
         )}
 
-        {/* Correct Answer Display - Full Screen */}
+        {/* Correct Answer Display */}
         {showCorrectAnswer && lastAnswerCorrect !== null && (
           <View style={styles.fullScreenResultContainer}>
             {lastAnswerCorrect && (
@@ -976,7 +1107,6 @@ const MultiplayerPlay = () => {
                 <Text style={styles.pointsText}>+{pointsEarned} points</Text>
               )}
               
-              {/* Show correct answer for the question */}
               {currentQuestion && (
                 <View style={styles.correctAnswerDisplay}>
                   <Text style={styles.correctAnswerTitle}>Correct Answer:</Text>
@@ -1078,6 +1208,11 @@ const styles = StyleSheet.create({
     gap: 4,
     minWidth: 40,
   },
+  streakText: {
+    color: '#f59e0b',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
   timerContainer: {
     marginHorizontal: 20,
     marginBottom: 20,
@@ -1115,9 +1250,7 @@ const styles = StyleSheet.create({
     marginBottom: 20,
     resizeMode: 'contain',
   },
-  questionContent: {
-    // Removed flex: 1 to prevent overflow issues
-  },
+  questionContent: {},
   optionsGrid: {
     gap: 12,
   },
@@ -1257,11 +1390,47 @@ const styles = StyleSheet.create({
     top: 4,
     right: 4,
   },
-  waitingContainer: {
+  bottomContainer: {
+    padding: 20,
+  },
+  submitBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#10b981',
+    paddingVertical: 16,
+    borderRadius: 12,
+    gap: 8,
+  },
+  submitBtnText: {
+    color: '#ffffff',
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  scrollContainer: {
     flex: 1,
+  },
+  scrollContent: {
+    paddingBottom: 100,
+  },
+  fullScreenWaitingContainer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: '#0f172a',
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 20,
+  },
+  waitingContent: {
+    alignItems: 'center',
+    width: '100%',
+  },
+  waitingAnimation: {
+    width: 200,
+    height: 200,
   },
   waitingText: {
     color: '#ffffff',
@@ -1274,11 +1443,30 @@ const styles = StyleSheet.create({
     fontSize: 16,
     marginTop: 8,
   },
-  resultContainer: {
-    flex: 1,
+  fullScreenResultContainer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: '#0f172a',
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 20,
+  },
+  resultContent: {
+    alignItems: 'center',
+    width: '100%',
+  },
+  confettiAnimation: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    width: '100%',
+    height: '100%',
+    zIndex: 1000,
   },
   resultText: {
     fontSize: 32,
@@ -1297,51 +1485,152 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     marginTop: 8,
   },
-  bottomContainer: {
-    padding: 20,
-  },
-  submitBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#10b981',
-    paddingVertical: 16,
-    borderRadius: 12,
-    gap: 8,
-  },
-  submitBtnText: {
-    color: '#ffffff',
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.8)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-  },
-  leaderboardCard: {
+  correctAnswerDisplay: {
+    marginTop: 40,
+    width: '100%',
+    maxWidth: 400,
     backgroundColor: '#1e293b',
     borderRadius: 16,
     padding: 20,
-    width: '100%',
-    maxHeight: '80%',
   },
-  leaderboardTitle: {
-    color: '#ffffff',
-    fontSize: 24,
+  correctAnswerTitle: {
+    color: '#94a3b8',
+    fontSize: 16,
     fontWeight: 'bold',
-    textAlign: 'center',
     marginBottom: 16,
+    textAlign: 'center',
   },
-  leaderboardItem: {
+  correctOptionsContainer: {
+    gap: 12,
+  },
+  correctOptionDisplay: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 12,
     backgroundColor: '#0f172a',
-    borderRadius: 8,
     padding: 12,
-    marginBottom: 8,
+    borderRadius: 8,
+  },
+  correctOptionText: {
+    color: '#ffffff',
+    fontSize: 16,
+    flex: 1,
+  },
+  correctAnswerValue: {
+    color: '#ffffff',
+    fontSize: 20,
+    fontWeight: 'bold',
+    textAlign: 'center',
+  },
+  correctMatchesContainer: {
+    gap: 12,
+  },
+  correctMatchPair: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+    backgroundColor: '#0f172a',
+    padding: 12,
+    borderRadius: 8,
+  },
+  correctMatchText: {
+    color: '#ffffff',
+    fontSize: 14,
+    flex: 1,
+    textAlign: 'center',
+  },
+  questionPreviewContainer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: '#0f172a',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 40,
+  },
+  questionPreviewContent: {
+    alignItems: 'center',
+    width: '100%',
+  },
+  questionPreviewNumber: {
+    color: '#8b5cf6',
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginBottom: 24,
+    textTransform: 'uppercase',
+    letterSpacing: 2,
+  },
+  questionPreviewText: {
+    color: '#ffffff',
+    fontSize: 32,
+    fontWeight: 'bold',
+    textAlign: 'center',
+    lineHeight: 42,
+  },
+  fullScreenLeaderboardContainer: {
+    flex: 1,
+    paddingTop: 40,
+  },
+  fullScreenLeaderboardTitle: {
+    color: '#ffffff',
+    fontSize: 32,
+    fontWeight: 'bold',
+    textAlign: 'center',
+    marginBottom: 32,
+  },
+  miniPodiumContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'flex-end',
+    paddingHorizontal: 40,
+    marginBottom: 32,
+    gap: 16,
+  },
+  miniPodiumSlot: {
+    alignItems: 'center',
+    flex: 1,
+  },
+  miniPodiumBar: {
+    width: '100%',
+    borderTopLeftRadius: 8,
+    borderTopRightRadius: 8,
+    justifyContent: 'flex-start',
+    alignItems: 'center',
+    paddingTop: 8,
+  },
+  miniPodiumRank: {
+    color: '#ffffff',
+    fontSize: 20,
+    fontWeight: 'bold',
+  },
+  miniPodiumName: {
+    color: '#ffffff',
+    fontSize: 12,
+    marginTop: 8,
+    textAlign: 'center',
+  },
+  miniPodiumScore: {
+    color: '#94a3b8',
+    fontSize: 14,
+    marginTop: 4,
+    fontWeight: 'bold',
+  },
+  leaderboardListContainer: {
+    flex: 1,
+    paddingHorizontal: 20,
+  },
+  fullScreenLeaderboardItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#1e293b',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#334155',
   },
   currentUserLeaderboard: {
     borderWidth: 2,
@@ -1361,6 +1650,15 @@ const styles = StyleSheet.create({
   leaderboardScore: {
     color: '#f59e0b',
     fontSize: 18,
+    fontWeight: 'bold',
+  },
+  nextQuestionIndicator: {
+    paddingVertical: 20,
+    alignItems: 'center',
+  },
+  nextQuestionText: {
+    color: '#8b5cf6',
+    fontSize: 16,
     fontWeight: 'bold',
   },
   resultsHeader: {
@@ -1496,223 +1794,6 @@ const styles = StyleSheet.create({
   errorText: {
     color: '#ef4444',
     fontSize: 18,
-  },
-  scrollContainer: {
-    flex: 1,
-  },
-  scrollContent: {
-    paddingBottom: 100, // Space for submit button
-  },
-  fullScreenWaitingContainer: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: '#0f172a',
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-  },
-  waitingContent: {
-    alignItems: 'center',
-    width: '100%',
-  },
-  waitingAnimation: {
-    width: 200,
-    height: 200,
-  },
-  fullScreenResultContainer: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: '#0f172a',
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-  },
-  resultContent: {
-    alignItems: 'center',
-    width: '100%',
-  },
-  correctAnswerDisplay: {
-    marginTop: 40,
-    width: '100%',
-    maxWidth: 400,
-    backgroundColor: '#1e293b',
-    borderRadius: 16,
-    padding: 20,
-  },
-  correctAnswerTitle: {
-    color: '#94a3b8',
-    fontSize: 16,
-    fontWeight: 'bold',
-    marginBottom: 16,
-    textAlign: 'center',
-  },
-  correctOptionsContainer: {
-    gap: 12,
-  },
-  correctOptionDisplay: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    backgroundColor: '#0f172a',
-    padding: 12,
-    borderRadius: 8,
-  },
-  correctOptionText: {
-    color: '#ffffff',
-    fontSize: 16,
-    flex: 1,
-  },
-  correctAnswerValue: {
-    color: '#ffffff',
-    fontSize: 20,
-    fontWeight: 'bold',
-    textAlign: 'center',
-  },
-  correctMatchesContainer: {
-    gap: 12,
-  },
-  correctMatchPair: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 12,
-    backgroundColor: '#0f172a',
-    padding: 12,
-    borderRadius: 8,
-  },
-  correctMatchText: {
-    color: '#ffffff',
-    fontSize: 14,
-    flex: 1,
-    textAlign: 'center',
-  },
-  fullScreenLeaderboardContainer: {
-    flex: 1,
-    paddingTop: 40,
-  },
-  fullScreenLeaderboardTitle: {
-    color: '#ffffff',
-    fontSize: 32,
-    fontWeight: 'bold',
-    textAlign: 'center',
-    marginBottom: 32,
-  },
-  miniPodiumContainer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'flex-end',
-    paddingHorizontal: 40,
-    marginBottom: 32,
-    gap: 16,
-  },
-  miniPodiumSlot: {
-    alignItems: 'center',
-    flex: 1,
-  },
-  miniPodiumBar: {
-    width: '100%',
-    borderTopLeftRadius: 8,
-    borderTopRightRadius: 8,
-    justifyContent: 'flex-start',
-    alignItems: 'center',
-    paddingTop: 8,
-  },
-  miniPodiumRank: {
-    color: '#ffffff',
-    fontSize: 20,
-    fontWeight: 'bold',
-  },
-  miniPodiumName: {
-    color: '#ffffff',
-    fontSize: 12,
-    marginTop: 8,
-    textAlign: 'center',
-  },
-  miniPodiumScore: {
-    color: '#94a3b8',
-    fontSize: 14,
-    marginTop: 4,
-    fontWeight: 'bold',
-  },
-  leaderboardListContainer: {
-    flex: 1,
-    paddingHorizontal: 20,
-  },
-  fullScreenLeaderboardItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#1e293b',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: '#334155',
-  },
-  nextQuestionIndicator: {
-    paddingVertical: 20,
-    alignItems: 'center',
-  },
-  nextQuestionText: {
-    color: '#8b5cf6',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  questionPreviewContainer: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: '#0f172a',
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 40,
-  },
-  questionPreviewContent: {
-    alignItems: 'center',
-    width: '100%',
-  },
-  questionPreviewNumber: {
-    color: '#8b5cf6',
-    fontSize: 20,
-    fontWeight: 'bold',
-    marginBottom: 24,
-    textTransform: 'uppercase',
-    letterSpacing: 2,
-  },
-  questionPreviewText: {
-    color: '#ffffff',
-    fontSize: 32,
-    fontWeight: 'bold',
-    textAlign: 'center',
-    lineHeight: 42,
-  },
-  confettiAnimation: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    width: '100%',
-    height: '100%',
-    zIndex: 1000,
-  },
-  streakBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 2,
-    marginTop: 4,
-  },
-  streakText: {
-    color: '#f59e0b',
-    fontSize: 12,
-    fontWeight: 'bold',
   },
 });
 
