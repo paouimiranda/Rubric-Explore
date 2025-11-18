@@ -4,7 +4,7 @@ import { useBacklogLogger } from "@/hooks/useBackLogLogger";
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { LinearGradient } from 'expo-linear-gradient';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Clipboard,
@@ -17,6 +17,9 @@ import {
 
   View
 } from 'react-native';
+// NEW: Add Firebase imports (adjust the path to your firebase.ts file)
+import { auth, firestore } from '@/firebase'; // Import the initialized instances
+import { increment } from 'firebase/firestore'; // For increment function
 
 interface OCRState {
   isProcessing: boolean;
@@ -49,6 +52,9 @@ interface GeminiOCRTabProps {
 
 export function GeminiOCRTab({ onInsertText, onClose }: GeminiOCRTabProps) {
   const { addBacklogEvent } = useBacklogLogger();
+  // NEW: State for usage count and loading
+  const [usageCount, setUsageCount] = useState<number>(0);
+  const [isLoadingCount, setIsLoadingCount] = useState<boolean>(true);
   const [ocrState, setOcrState] = useState<OCRState>({
     isProcessing: false,
     extractedText: "",
@@ -66,6 +72,48 @@ export function GeminiOCRTab({ onInsertText, onClose }: GeminiOCRTabProps) {
   });
 
   const [imagePickerAlert, setImagePickerAlert] = useState(false);
+  // NEW: Helper to get today's date as YYYY-MM-DD
+  const getTodayDate = () => new Date().toISOString().split('T')[0];
+  // NEW: Fetch and reset usage count on mount
+  useEffect(() => {
+    const fetchAndResetUsageCount = async () => {
+      const user = auth.currentUser;
+      if (!user) {
+        setIsLoadingCount(false);
+        showAlert('error', 'Authentication Required', 'Please log in to use OCR.', [{ text: 'OK', onPress: () => {}, style: 'primary' }]);
+        return;
+      }
+      
+      try {
+        const docRef = (firestore as any).collection('OCRLimits').doc(user.uid);  // Type assertion to bypass potential type issues in Expo
+        const docSnap = await docRef.get();
+        const today = getTodayDate();
+        
+        if (docSnap.exists) {
+          const data = docSnap.data();
+          const lastReset = data?.lastResetDate;
+          if (lastReset !== today) {
+            // Reset count for new day
+            await docRef.update({ ocrUsageCount: 0, lastResetDate: today });
+            setUsageCount(0);
+          } else {
+            setUsageCount(data?.ocrUsageCount || 0);
+          }
+        } else {
+          // New user: Create document with initial values
+          await docRef.set({ ocrUsageCount: 0, lastResetDate: today });
+          setUsageCount(0);
+        }
+      } catch (error) {
+        console.error('Error fetching/resetting usage count:', error);
+        showAlert('error', 'Error', 'Failed to load usage data. Please check your connection.', [{ text: 'OK', onPress: () => {}, style: 'primary' }]);
+      } finally {
+        setIsLoadingCount(false);
+      }
+    };
+    
+    fetchAndResetUsageCount();
+  }, []);  // Runs once on mount
 
   const showAlert = (
     type: AlertState['type'],
@@ -103,6 +151,20 @@ export function GeminiOCRTab({ onInsertText, onClose }: GeminiOCRTabProps) {
   };
 
   const pickImage = async (source: 'camera' | 'library') => {
+    // MODIFIED: Add checks for loading and limit
+    if (isLoadingCount) {
+      showAlert('info', 'Loading', 'Please wait while we load your data.', [{ text: 'OK', onPress: () => {}, style: 'primary' }]);
+      return;
+    }
+    if (usageCount >= 3) {
+      showAlert(
+        'warning',
+        'Daily Limit Reached',
+        'You have used the OCR feature 3 times today. Please try again tomorrow.',
+        [{ text: 'OK', onPress: () => {}, style: 'primary' }]
+      );
+      return;
+    }
     setImagePickerAlert(false);
     
     const hasPermission = await requestPermission();
@@ -172,6 +234,19 @@ export function GeminiOCRTab({ onInsertText, onClose }: GeminiOCRTabProps) {
         error: 'Image data is missing. Please try again.',
       }));
       return;
+    }
+    // MODIFIED: Increment usage count (adjusted for web SDK)
+    const user = auth.currentUser;
+    if (user) {
+      try {
+        const docRef = (firestore as any).collection('OCRLimits').doc(user.uid);  // Type assertion
+        await docRef.update({ ocrUsageCount: increment(1) });  // Use increment(1)
+        setUsageCount(prev => prev + 1);  // Update local state
+      } catch (error) {
+        console.error('Error updating usage count:', error);
+        showAlert('error', 'Error', 'Failed to update usage. Please check your connection.', [{ text: 'OK', onPress: () => {}, style: 'primary' }]);
+        return;  // Stop if update fails
+      }
     }
 
     setOcrState(prev => ({
@@ -265,11 +340,11 @@ export function GeminiOCRTab({ onInsertText, onClose }: GeminiOCRTabProps) {
         <View style={styles.card}>
           <TouchableOpacity
             onPress={() => setImagePickerAlert(true)}
-            disabled={ocrState.isProcessing}
+            disabled={ocrState.isProcessing || isLoadingCount || usageCount >= 3}  // MODIFIED: Disable if loading or limit reached
             activeOpacity={0.8}
           >
             <LinearGradient
-              colors={ocrState.isProcessing ? ['#475569', '#64748b'] : ['#667eea', '#764ba2']}
+              colors={ocrState.isProcessing || isLoadingCount || usageCount >= 3 ? ['#475569', '#64748b'] : ['#667eea', '#764ba2']}  // MODIFIED: Gray out when disabled
               style={styles.uploadButton}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 0 }}
