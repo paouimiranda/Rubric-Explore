@@ -18,7 +18,7 @@ import { presenceService } from '@/services/presence-service';
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import { NotificationProvider } from "./contexts/NotificationContext";
 import { PushNotificationProvider } from "./contexts/PushNotificationContext"; // ADD THIS IMPORT
-import Loading from "./screens/Misc/loading";
+// import Loading from "./screens/Misc/loading";
 
 function RootNavigator() {
   const { loading, isAuthenticated } = useAuth();
@@ -104,9 +104,9 @@ function RootNavigator() {
   }, [uploadBacklogs]);
 
   // show loading screen until both fonts + auth finished
-  if (!fontsLoaded || loading) {
-    return <Loading />;
-  }
+  // if (!fontsLoaded || loading) {
+  //   return <Loading />;
+  // }
 
   return (
     <ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
