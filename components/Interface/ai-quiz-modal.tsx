@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import React, { useEffect, useState } from 'react';
 import {
+  ActivityIndicator,
   FlatList,
   Modal,
   SafeAreaView,
@@ -15,6 +16,12 @@ import {
   View,
 } from 'react-native';
 import { CustomAlertModal } from './custom-alert-modal';
+// NEW: Firebase Imports (Adjust path as necessary)
+import { firestore } from '@/firebase'; // Assuming 'auth' is imported via useAuth or not needed here
+import { doc, getDoc, increment, setDoc, updateDoc } from 'firebase/firestore'; // Import Firestore functions
+
+// NEW: Define the daily limit constant
+const DAILY_LIMIT = 3;
 
 interface NotebookProperty {
   key: string;
@@ -65,7 +72,9 @@ export const TopicSelectionModal: React.FC<TopicSelectionModalProps> = ({
 }) => {
   const { user } = useAuth();
   const uid = user?.uid;
-
+  // NEW: State for usage count and loading
+  const [usageCount, setUsageCount] = useState<number>(0);
+  const [isLoadingCount, setIsLoadingCount] = useState<boolean>(true);
   const [activeTab, setActiveTab] = useState<'manual' | 'notes'>('manual');
   const [manualTopic, setManualTopic] = useState('');
   const [notebooks, setNotebooks] = useState<Notebook[]>([]);
@@ -78,6 +87,47 @@ export const TopicSelectionModal: React.FC<TopicSelectionModalProps> = ({
   const [selectedQuestionType, setSelectedQuestionType] = useState('multiple_choice');
   const [questionCount, setQuestionCount] = useState(10);
   const [showQuestionTypeDropdown, setShowQuestionTypeDropdown] = useState(false);
+
+  // NEW: Helper to get today's date as YYYY-MM-DD
+  const getTodayDate = () => new Date().toISOString().split('T')[0];
+
+  // NEW: Fetch and reset usage count on modal open
+  useEffect(() => {
+    if (!visible || !uid) {
+      return;
+    }
+    const fetchAndResetUsageCount = async () => {
+      setIsLoadingCount(true);
+      try {
+        const docRef = doc(firestore, 'QG_Limits', uid); // Using 'QG_Limits' for Question Generation
+        const docSnap = await getDoc(docRef);
+        const today = getTodayDate();
+        
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          const lastReset = data?.lastResetDate;
+          if (lastReset !== today) {
+            // Reset count for new day
+            await updateDoc(docRef, { usageCount: 0, lastResetDate: today });
+            setUsageCount(0);
+          } else {
+            setUsageCount(data?.usageCount || 0);
+          }
+        } else {
+          // New user
+          await setDoc(docRef, { usageCount: 0, lastResetDate: today });
+          setUsageCount(0);
+        }
+      } catch (error) {
+        console.error('Error fetching/resetting QG usage count:', error);
+        showAlert('error', 'Error', 'Failed to load usage data.', [{ text: 'OK', onPress: () => {}, style: 'primary' }]);
+      } finally {
+        setIsLoadingCount(false);
+      }
+    };
+    
+    fetchAndResetUsageCount();
+  }, [visible, uid]); // Runs when modal visibility or user changes
 
   const [alert, setAlert] = useState<AlertState>({
     visible: false,
@@ -246,6 +296,35 @@ export const TopicSelectionModal: React.FC<TopicSelectionModalProps> = ({
     }
   };
 
+  // NEW: Centralized usage check function (check-only, no increment yet)
+const checkUsageAndProceed = async (
+  topic: string,
+  content?: string
+) => {
+  if (isLoadingCount) {
+    showAlert('info', 'Loading', 'Please wait while we check your daily limit.', [{ text: 'OK', onPress: () => {}, style: 'primary' }]);
+    return;
+  }
+  
+  if (usageCount >= DAILY_LIMIT) {
+    showAlert(
+      'warning',
+      'Daily Limit Reached',
+      `You have used the question generation feature ${DAILY_LIMIT} times today. Please try again tomorrow.`,
+      [{ text: 'OK', onPress: () => {}, style: 'primary' }]
+    );
+    return;
+  }
+  // Proceed to disclaimer (no increment here)
+  setPendingGeneration({
+    topic: topic,
+    type: selectedQuestionType,
+    count: questionCount,
+    content: content, 
+  });
+  setShowDisclaimer(true);
+};
+
   const handleNotebookSelect = (notebook: Notebook) => {
     setSelectedNotebook(notebook);
     fetchNotes(notebook.id);
@@ -283,18 +362,19 @@ export const TopicSelectionModal: React.FC<TopicSelectionModalProps> = ({
         return;
       }
 
+      await checkUsageAndProceed(note.title, plainText);
       console.log('📝 Successfully extracted plain text');
       console.log('📝 Original HTML length:', htmlContent.length);
       console.log('📝 Plain text length:', plainText.length);
       console.log('📝 Plain text preview (first 200 chars):', plainText.slice(0, 200));
 
-      // Set up the generation with plain text content
-      setPendingGeneration({
-        topic: note.title,
-        type: selectedQuestionType,
-        count: questionCount,
-        content: plainText, // Pass the extracted plain text
-      });
+      // // Set up the generation with plain text content // remove daw pero for safety wag muna
+      // setPendingGeneration({
+      //   topic: note.title,
+      //   type: selectedQuestionType,
+      //   count: questionCount,
+      //   content: plainText, // Pass the extracted plain text
+      // });
       setShowDisclaimer(true);
     } catch (error) {
       console.error("Error loading note content:", error);
@@ -307,25 +387,39 @@ export const TopicSelectionModal: React.FC<TopicSelectionModalProps> = ({
       showAlert('warning', 'Invalid Topic', 'Please enter a topic to generate questions.');
       return;
     }
-    setPendingGeneration({
-      topic: manualTopic.trim(),
-      type: selectedQuestionType,
-      count: questionCount,
-    });
-    setShowDisclaimer(true);
+    checkUsageAndProceed(manualTopic.trim());
+    // // setPendingGeneration({
+    // //   topic: manualTopic.trim(),
+    // //   type: selectedQuestionType,
+    // //   count: questionCount,
+    // // });
+    // setShowDisclaimer(true);
   };
 
-  const confirmGeneration = () => {
-    if (pendingGeneration) {
-      onTopicSelected(
-        pendingGeneration.topic,
-        pendingGeneration.type,
-        pendingGeneration.count,
-        pendingGeneration.content
-      );
-      handleClose();
+  const confirmGeneration = async () => {  // NEW: Add 'async' keyword here
+  if (pendingGeneration) {
+    // NEW: Increment usage count only on successful confirmation
+    if (uid) {
+      try {
+        const docRef = doc(firestore, 'QG_Limits', uid); 
+        await updateDoc(docRef, { usageCount: increment(1) });  // This await is now valid
+        setUsageCount(prev => prev + 1); // Update local state
+      } catch (error) {
+        console.error('Error updating QG usage count:', error);
+        showAlert('error', 'Error', 'Failed to update usage count, but proceeding with generation.', [{ text: 'OK', onPress: () => {}, style: 'primary' }]);
+      }
     }
-  };
+
+    // Proceed with generation
+    onTopicSelected(
+      pendingGeneration.topic,
+      pendingGeneration.type,
+      pendingGeneration.count,
+      pendingGeneration.content
+    );
+    handleClose();
+  }
+};
 
   const handleClose = () => {
     setManualTopic('');
@@ -398,6 +492,8 @@ export const TopicSelectionModal: React.FC<TopicSelectionModalProps> = ({
   );
 
   const renderContent = () => {
+    // NEW: Combined check for disabling the submit button
+    const isSubmitDisabled = isLoadingCount || usageCount >= DAILY_LIMIT;
     if (activeTab === 'manual') {
       const selectedType = questionTypeOptions.find(type => type.key === selectedQuestionType);
       const countOptions = getQuestionCountOptions(selectedQuestionType);
@@ -503,13 +599,34 @@ export const TopicSelectionModal: React.FC<TopicSelectionModalProps> = ({
             </View>
           )}
 
+          {/* NEW: Add usage indicator here, right before the submit button */}
+          <View style={styles.usageContainer}>
+            {isLoadingCount ? (
+              <View style={styles.usageLoading}>
+                <ActivityIndicator size="small" color="#667eea" />
+                <Text style={styles.usageText}>Loading daily limit...</Text>
+              </View>
+            ) : (
+              <View style={[styles.usageBadge, usageCount >= DAILY_LIMIT && styles.usageLimitReachedBadge]}>
+                <Ionicons 
+                  name={usageCount >= DAILY_LIMIT ? "warning" : "bar-chart-outline"} 
+                  size={14} 
+                  color={usageCount >= DAILY_LIMIT ? "#ef4444" : "#10b981"} 
+                />
+                <Text style={[styles.usageText, usageCount >= DAILY_LIMIT && styles.usageLimitReachedText]}>
+                  Usage: {usageCount} / {DAILY_LIMIT} (Daily Limit)
+                </Text>
+              </View>
+            )}
+          </View>
+
           <TouchableOpacity
             style={[
               styles.submitBtn,
-              { opacity: manualTopic.trim() ? 1 : 0.5 }
+              { opacity: manualTopic.trim() && !isSubmitDisabled ? 1 : 0.5 }
             ]}
             onPress={handleManualSubmit}
-            disabled={!manualTopic.trim()}
+            disabled={!manualTopic.trim() || isSubmitDisabled}
             activeOpacity={0.8}
           >
             <Ionicons name="sparkles" size={20} color="#ffffff" />
@@ -1185,4 +1302,38 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#cbd5e1',
   },
+  // Add to your styles object
+usageContainer: {
+  marginBottom: 16,
+  alignItems: 'center',
+},
+usageBadge: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  paddingVertical: 8,
+  paddingHorizontal: 12,
+  borderRadius: 8,
+  backgroundColor: 'rgba(16, 185, 129, 0.15)', // Tailwind green-500 with opacity
+  gap: 6,
+  borderWidth: 1,
+  borderColor: 'rgba(16, 185, 129, 0.3)',
+},
+usageLimitReachedBadge: {
+  backgroundColor: 'rgba(239, 68, 68, 0.15)', // Tailwind red-500 with opacity
+  borderColor: 'rgba(239, 68, 68, 0.3)',
+},
+usageText: {
+  color: "#10b981", // Green
+  fontSize: 12,
+  fontFamily: 'Montserrat_600SemiBold',
+},
+usageLimitReachedText: {
+  color: "#ef4444", // Red
+},
+usageLoading: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  gap: 8,
+  paddingVertical: 8,
+},
 });
