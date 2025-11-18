@@ -497,12 +497,12 @@ const handleRemoveImage = async () => {
     const trimmedTopic = newTopicInput.trim();
     
     if (!trimmedTopic) {
-      showAlert('warning', 'Validation Error', 'Topic name cannot be empty.');
+      showAlert('warning', 'Validation Error', 'Tag name cannot be empty.');
       return;
     }
 
     if (trimmedTopic.length > 50) {
-      showAlert('warning', 'Validation Error', 'Topic name must be 50 characters or less.');
+      showAlert('warning', 'Validation Error', 'Tag name must be 50 characters or less.');
       return;
     }
 
@@ -510,9 +510,9 @@ const handleRemoveImage = async () => {
     
     if (success) {
       setNewTopicInput('');
-      showAlert('success', 'Success', `Topic "${trimmedTopic}" added successfully!`);
+      showAlert('success', 'Success', `Tag "${trimmedTopic}" added successfully!`);
     } else {
-      showAlert('warning', 'Duplicate Topic', 'This topic already exists.');
+      showAlert('warning', 'Duplicate Tag', 'This tag already exists.');
     }
   };
 
@@ -527,12 +527,12 @@ const handleRemoveImage = async () => {
     const trimmedTopic = editTopicInput.trim();
     
     if (!trimmedTopic) {
-      showAlert('warning', 'Validation Error', 'Topic name cannot be empty.');
+      showAlert('warning', 'Validation Error', 'Tag name cannot be empty.');
       return;
     }
 
     if (trimmedTopic.length > 50) {
-      showAlert('warning', 'Validation Error', 'Topic name must be 50 characters or less.');
+      showAlert('warning', 'Validation Error', 'Tag name must be 50 characters or less.');
       return;
     }
 
@@ -541,17 +541,17 @@ const handleRemoveImage = async () => {
     if (success) {
       setEditingTopic(null);
       setEditTopicInput('');
-      showAlert('success', 'Success', 'Topic updated successfully!');
+      showAlert('success', 'Success', 'Tag updated successfully!');
     } else {
-      showAlert('error', 'Error', 'A topic with this name already exists.');
+      showAlert('error', 'Error', 'A tag with this name already exists.');
     }
   };
 
   const handleDeleteTopic = (topic: string) => {
     showAlert(
       'warning',
-      'Delete Topic',
-      `Are you sure you want to delete "${topic}"? Questions using this topic will have their topic cleared.`,
+      'Delete Tag',
+      `Are you sure you want to delete "${topic}"? Questions using this tag will have their tag cleared.`,
       [
         {
           text: 'Cancel',
@@ -563,7 +563,7 @@ const handleRemoveImage = async () => {
           onPress: () => {
             deleteTopic(topic);
             setAlert(prev => ({ ...prev, visible: false }));
-            showAlert('success', 'Success', 'Topic deleted successfully!');
+            showAlert('success', 'Success', 'Tag deleted successfully!');
           },
           style: 'primary'
         }
@@ -750,13 +750,13 @@ const handleRemoveImage = async () => {
 
           <View style={styles.topicsSection}>
             <View style={styles.topicsHeader}>
-              <Text style={styles.topicsTitle}>Topics ({topics.length})</Text>
+              <Text style={styles.topicsTitle}>Tags ({topics.length})</Text>
               <TouchableOpacity
                 style={styles.manageTopicsButton}
                 onPress={() => setShowManageTopicsModal(true)}
               >
                 <Ionicons name="pricetags" size={16} color="#ffffff" />
-                <Text style={styles.manageTopicsButtonText}>Manage Tags</Text>
+                <Text style={styles.manageTopicsButtonText}>Manage</Text>
               </TouchableOpacity>
             </View>
 
@@ -775,7 +775,7 @@ const handleRemoveImage = async () => {
               </ScrollView>
             ) : (
               <Text style={styles.noTopicsText}>
-                No topics defined yet. Tap "Manage Topics" to add some!
+                No tags defined yet. Tap "Manage Tags" to add some!
               </Text>
             )}
           </View>
@@ -839,7 +839,7 @@ const handleRemoveImage = async () => {
           <View style={styles.modalOverlay}>
             <View style={styles.modalContent}>
               <View style={styles.modalHeader}>
-                <Text style={styles.modalTitle}>Manage Topics</Text>
+                <Text style={styles.modalTitle}>Manage Tags</Text>
                 <TouchableOpacity
                   onPress={() => setShowManageTopicsModal(false)}
                   style={styles.modalCloseIcon}
@@ -851,7 +851,7 @@ const handleRemoveImage = async () => {
               <View style={styles.addTopicSection}>
                 <TextInput
                   style={styles.topicInput}
-                  placeholder="Enter new topic..."
+                  placeholder="Enter new tags..."
                   placeholderTextColor="#64748b"
                   value={newTopicInput}
                   onChangeText={setNewTopicInput}

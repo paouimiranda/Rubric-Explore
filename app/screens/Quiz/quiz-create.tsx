@@ -1025,7 +1025,7 @@ const QuizMaker = () => {
           <View style={styles.modalOverlay}>
             <View style={styles.modalContent}>
               <View style={styles.modalHeader}>
-                <Text style={styles.modalTitle}>Select Topic</Text>
+                <Text style={styles.modalTitle}> Select Tag</Text>
                 <TouchableOpacity
                   onPress={() => setShowTopicSelectorModal(false)}
                   style={styles.modalCloseIcon}
@@ -1035,7 +1035,7 @@ const QuizMaker = () => {
               </View>
 
               <View style={styles.addTopicInModalSection}>
-                <Text style={styles.addTopicInModalLabel}>Add New Topic:</Text>
+                <Text style={styles.addTopicInModalLabel}>Add New Tag:</Text>
                 <View style={styles.addTopicInModalRow}>
                   <TextInput
                     style={styles.newTopicInModalInput}

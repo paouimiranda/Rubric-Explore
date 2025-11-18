@@ -187,7 +187,7 @@ const QuizPerformanceDetail = () => {
 
     return (
       <View style={styles.chartContainer}>
-        <Text style={styles.chartTitle}>Topic Performance</Text>
+        <Text style={styles.chartTitle}>Performance By Tags</Text>
         <View style={styles.chartWrapper}>
           <BarChart
             data={data}
@@ -313,7 +313,7 @@ const QuizPerformanceDetail = () => {
 
     return (
       <View style={styles.insightsContainer}>
-        <Text style={styles.insightsTitle}>Topic Insights</Text>
+        <Text style={styles.insightsTitle}>Performance Insights</Text>
         
         <View style={styles.insightCard}>
           <View style={styles.insightHeader}>

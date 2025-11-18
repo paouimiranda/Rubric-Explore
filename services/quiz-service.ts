@@ -538,9 +538,9 @@ export class QuizService {
 
       // Validate topic field
       if (!question.topic || !question.topic.trim()) {
-        errors.push(`Question ${index + 1} must have a topic assigned for analytics.`);
+        errors.push(`Question ${index + 1} must have a tag assigned for analytics.`);
       } else if (question.topic.length > 50) {
-        errors.push(`Question ${index + 1} topic must be 50 characters or less.`);
+        errors.push(`Question ${index + 1} tag must be 50 characters or less.`);
       }
 
       // Validate points if provided
@@ -665,7 +665,7 @@ export class QuizService {
       
       return Array.from(topicsSet).sort();
     } catch (error) {
-      console.error('Error fetching common topics:', error);
+      console.error('Error fetching common tags:', error);
       return [];
     }
   }
