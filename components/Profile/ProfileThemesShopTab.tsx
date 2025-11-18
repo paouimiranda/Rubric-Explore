@@ -6,15 +6,15 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import React, { useEffect, useState } from 'react';
 import {
-    ActivityIndicator,
-    Animated,
-    Dimensions,
-    FlatList,
-    Modal,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Animated,
+  Dimensions,
+  FlatList,
+  Modal,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 
 const { width } = Dimensions.get('window');
@@ -120,16 +120,7 @@ const ProfileThemesShopTab = () => {
   return (
     <View style={styles.container}>
       {/* Header */}
-      <View style={styles.header}>
-        <View>
-          <Text style={styles.title}>Profile Themes</Text>
-          <Text style={styles.subtitle}>Customize your profile appearance</Text>
-        </View>
-        <View style={styles.shards}>
-          <Ionicons name="diamond" size={18} color="#fbbf24" />
-          <Text style={styles.shardsText}>{shards}</Text>
-        </View>
-      </View>
+      
 
       {/* Rarity Filters */}
       <View style={styles.filtersContainer}>
@@ -361,15 +352,17 @@ const ProfileThemeModal: React.FC<ProfileThemeModalProps> = ({
   };
 
   const handlePurchase = async () => {
-    if (theme.price === 0 || owned) {
-      handleActivate();
-      return;
-    }
+  if (theme.price === 0 || owned) {
+    handleActivate();
+    return;
+  }
 
-    try {
-      setLoading(true);
-      const result = await ProfileThemeShopService.purchaseProfileTheme(theme.id, theme.price);
-      if (result.success) {
+  try {
+    setLoading(true);
+    const result = await ProfileThemeShopService.purchaseProfileTheme(theme.id, theme.price);
+    if (result.success) {
+      // Delay the alert to avoid scheduling updates during render
+      setTimeout(() => {
         showAlert('success', 'Success! ✨', result.message, [
           {
             text: 'OK',
@@ -381,21 +374,28 @@ const ProfileThemeModal: React.FC<ProfileThemeModalProps> = ({
             style: 'primary',
           },
         ]);
-      } else {
+      }, 100);
+    } else {
+      setTimeout(() => {
         showAlert('error', 'Failed', result.message);
-      }
-    } catch (error) {
-      showAlert('error', 'Error', 'Something went wrong');
-    } finally {
-      setLoading(false);
+      }, 100);
     }
-  };
+  } catch (error) {
+    setTimeout(() => {
+      showAlert('error', 'Error', 'Something went wrong');
+    }, 100);
+  } finally {
+    setLoading(false);
+  }
+};
 
   const handleActivate = async () => {
-    try {
-      setLoading(true);
-      const result = await ProfileThemeShopService.setSelectedProfileTheme(theme.id);
-      if (result.success) {
+  try {
+    setLoading(true);
+    const result = await ProfileThemeShopService.setSelectedProfileTheme(theme.id);
+    if (result.success) {
+      // Delay the alert to avoid scheduling updates during render
+      setTimeout(() => {
         showAlert('success', 'Activated! ✨', result.message, [
           {
             text: 'OK',
@@ -407,15 +407,20 @@ const ProfileThemeModal: React.FC<ProfileThemeModalProps> = ({
             style: 'primary',
           },
         ]);
-      } else {
+      }, 100);
+    } else {
+      setTimeout(() => {
         showAlert('error', 'Error', result.message);
-      }
-    } catch (error) {
-      showAlert('error', 'Error', 'Something went wrong');
-    } finally {
-      setLoading(false);
+      }, 100);
     }
-  };
+  } catch (error) {
+    setTimeout(() => {
+      showAlert('error', 'Error', 'Something went wrong');
+    }, 100);
+  } finally {
+    setLoading(false);
+  }
+};
 
   const buttonText = active ? 'Active' : owned ? 'Use Theme' : theme.price === 0 ? 'Get Free' : 'Purchase';
   const disabled = active || (!owned && !canAfford);

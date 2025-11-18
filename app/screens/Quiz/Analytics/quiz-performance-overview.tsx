@@ -387,10 +387,11 @@ const styles = StyleSheet.create({
   },
   scrollView: {
     flex: 1,
+    
   },
   scrollContent: {
     paddingHorizontal: 20,
-    paddingBottom: 20,
+    paddingBottom: 60,
   },
   quizCard: {
     backgroundColor: 'rgba(255, 255, 255, 0.05)',

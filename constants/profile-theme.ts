@@ -41,7 +41,7 @@ export const PROFILE_THEMES: Record<string, ProfileTheme> = {
     description: 'Warm evening glow',
     icon: 'sunny',
     rarity: 'rare',
-    price: 500,
+    price: 50,
     gradient: {
       background: ['#d73900ff', '#ff8c42'],
       decorativeBar: ['#ffd700', '#ff8c42', '#ff6b35'],
@@ -55,7 +55,7 @@ export const PROFILE_THEMES: Record<string, ProfileTheme> = {
     description: 'Starry night with twinkling stars',
     icon: 'moon',
     rarity: 'rare',
-    price: 5,
+    price: 50,
     gradient: {
       background: ['#0a0e27', '#1a1d3a'],
       decorativeBar: ['#8b5cf6', '#6366f1', '#3b82f6'],
@@ -75,7 +75,7 @@ export const PROFILE_THEMES: Record<string, ProfileTheme> = {
     description: 'Gentle snowfall',
     icon: 'snow',
     rarity: 'rare',
-    price: 800,
+    price: 50,
     gradient: {
       background: ['#e3f2fd', '#bbdefb'],
       decorativeBar: ['#64b5f6', '#42a5f5', '#2196f3'],
@@ -95,7 +95,7 @@ export const PROFILE_THEMES: Record<string, ProfileTheme> = {
     description: 'Peaceful spring petals falling',
     icon: 'flower',
     rarity: 'epic',
-    price: 1200,
+    price: 125,
     gradient: {
       background: ['#ff5776ff', '#ffb3c1'],
       decorativeBar: ['#ff6b9d', '#c94b7e', '#ff8fab'],
@@ -115,7 +115,7 @@ export const PROFILE_THEMES: Record<string, ProfileTheme> = {
     description: 'Mystical fireflies in the woods',
     icon: 'leaf',
     rarity: 'epic',
-    price: 1500,
+    price: 125,
     gradient: {
       background: ['#1a4d2e', '#2d5a3d'],
       decorativeBar: ['#7fcd91', '#52c72b', '#4caf50'],
@@ -135,7 +135,7 @@ export const PROFILE_THEMES: Record<string, ProfileTheme> = {
     description: 'Festive confetti celebration',
     icon: 'gift',
     rarity: 'epic',
-    price: 1800,
+    price: 125,
     gradient: {
       background: ['#ff006e', '#8338ec'],
       decorativeBar: ['#ffbe0b', '#fb5607', '#ff006e'],
@@ -155,7 +155,7 @@ export const PROFILE_THEMES: Record<string, ProfileTheme> = {
     description: 'Mesmerizing northern lights',
     icon: 'flash',
     rarity: 'legendary',
-    price: 2500,
+    price: 200,
     gradient: {
       background: ['#001f3f', '#003d5c'],
       decorativeBar: ['#00ffaa', '#00d4ff', '#0088ff'],
@@ -170,7 +170,7 @@ export const PROFILE_THEMES: Record<string, ProfileTheme> = {
     description: 'Cyberpunk vibes',
     icon: 'radio',
     rarity: 'legendary',
-    price: 2800,
+    price: 200,
     gradient: {
       background: ['#1a0033', '#2d0052'],
       decorativeBar: ['#ff00ff', '#00ffff', '#ff00aa'],
@@ -185,7 +185,7 @@ export const PROFILE_THEMES: Record<string, ProfileTheme> = {
     description: 'Journey through space',
     icon: 'planet',
     rarity: 'legendary',
-    price: 3000,
+    price: 200,
     gradient: {
       background: ['#000000', '#1a0a2e'],
       decorativeBar: ['#6a0dad', '#9d4edd', '#c77dff'],

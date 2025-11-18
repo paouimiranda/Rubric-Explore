@@ -1,4 +1,4 @@
-// TopicSelectionModal.tsx - Updated with Custom Alerts and Disclaimer
+// TopicSelectionModal.tsx - Enhanced Plain Text Extraction
 import { useAuth } from '@/app/contexts/AuthContext';
 import { getMergedNoteContent, getNotebooks, getNotesInNotebook } from '@/services/notes-service';
 import { Ionicons } from '@expo/vector-icons';
@@ -116,20 +116,38 @@ export const TopicSelectionModal: React.FC<TopicSelectionModalProps> = ({
     });
   };
 
+  /**
+   * Enhanced plain text extraction from HTML content
+   * This function removes all HTML tags, scripts, styles, and media elements
+   * while preserving the actual text content for AI processing
+   */
   const extractPlainTextFromHtml = (html: string): string => {
     if (!html) return '';
     
-    let text = html.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '');
+    let text = html;
+    
+    // Remove script tags and their content
+    text = text.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '');
+    
+    // Remove style tags and their content
     text = text.replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, '');
+    
+    // Remove all media elements (images, videos, audio, iframes, svg, canvas)
     text = text.replace(/<img[^>]*>/gi, '');
     text = text.replace(/<video[^>]*>.*?<\/video>/gi, '');
     text = text.replace(/<audio[^>]*>.*?<\/audio>/gi, '');
     text = text.replace(/<iframe[^>]*>.*?<\/iframe>/gi, '');
     text = text.replace(/<svg[^>]*>.*?<\/svg>/gi, '');
     text = text.replace(/<canvas[^>]*>.*?<\/canvas>/gi, '');
+    
+    // Convert block-level elements to newlines to preserve structure
     text = text.replace(/<\/?(div|p|br|h[1-6]|li|tr)[^>]*>/gi, '\n');
     text = text.replace(/<\/?(ul|ol|table|tbody|thead)[^>]*>/gi, '\n\n');
+    
+    // Remove all remaining HTML tags
     text = text.replace(/<[^>]+>/g, '');
+    
+    // Decode HTML entities
     text = text.replace(/&nbsp;/g, ' ');
     text = text.replace(/&amp;/g, '&');
     text = text.replace(/&lt;/g, '<');
@@ -137,8 +155,20 @@ export const TopicSelectionModal: React.FC<TopicSelectionModalProps> = ({
     text = text.replace(/&quot;/g, '"');
     text = text.replace(/&#039;/g, "'");
     text = text.replace(/&apos;/g, "'");
-    text = text.replace(/\n\s*\n\s*\n/g, '\n\n');
+    text = text.replace(/&mdash;/g, '—');
+    text = text.replace(/&ndash;/g, '–');
+    text = text.replace(/&hellip;/g, '…');
+    
+    // Clean up excessive newlines (more than 2 consecutive)
+    text = text.replace(/\n\s*\n\s*\n+/g, '\n\n');
+    
+    // Clean up multiple spaces
     text = text.replace(/[ \t]+/g, ' ');
+    
+    // Remove leading/trailing whitespace from each line
+    text = text.split('\n').map(line => line.trim()).join('\n');
+    
+    // Final trim
     text = text.trim();
     
     return text;
@@ -194,11 +224,14 @@ export const TopicSelectionModal: React.FC<TopicSelectionModalProps> = ({
       const data = await getNotesInNotebook(notebookId, uid);
       setNotes(data as any);
 
+      // Generate plain text previews for each note
       const previews: Record<string, string> = {};
       for (const note of data) {
         try {
-          const content = await getMergedNoteContent(note.id);
-          previews[note.id] = content.slice(0, 80) || "No content";
+          const htmlContent = await getMergedNoteContent(note.id);
+          const plainText = extractPlainTextFromHtml(htmlContent);
+          // Show first 80 characters of plain text as preview
+          previews[note.id] = plainText.slice(0, 80) || "No content";
         } catch (err) {
           console.error(`Error getting preview for note ${note.id}:`, err);
           previews[note.id] = "Error loading preview";
@@ -220,6 +253,7 @@ export const TopicSelectionModal: React.FC<TopicSelectionModalProps> = ({
 
   const handleNoteSelect = async (note: Note) => {
     try {
+      // Get the HTML content from the note
       const htmlContent = await getMergedNoteContent(note.id);
 
       if (!htmlContent || htmlContent.trim().length === 0) {
@@ -227,6 +261,7 @@ export const TopicSelectionModal: React.FC<TopicSelectionModalProps> = ({
         return;
       }
 
+      // Extract plain text from HTML
       const plainText = extractPlainTextFromHtml(htmlContent);
 
       if (!plainText || plainText.trim().length === 0) {
@@ -238,14 +273,27 @@ export const TopicSelectionModal: React.FC<TopicSelectionModalProps> = ({
         return;
       }
 
-      console.log('📝 Extracted plain text length:', plainText.length);
-      console.log('📝 Plain text preview:', plainText.slice(0, 200));
+      // Validate minimum content length (at least 50 characters for meaningful questions)
+      if (plainText.length < 50) {
+        showAlert(
+          'warning',
+          'Insufficient Content',
+          'This note has too little text content. Please add more content to generate meaningful questions.'
+        );
+        return;
+      }
 
+      console.log('📝 Successfully extracted plain text');
+      console.log('📝 Original HTML length:', htmlContent.length);
+      console.log('📝 Plain text length:', plainText.length);
+      console.log('📝 Plain text preview (first 200 chars):', plainText.slice(0, 200));
+
+      // Set up the generation with plain text content
       setPendingGeneration({
         topic: note.title,
         type: selectedQuestionType,
         count: questionCount,
-        content: plainText,
+        content: plainText, // Pass the extracted plain text
       });
       setShowDisclaimer(true);
     } catch (error) {

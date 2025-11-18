@@ -37,9 +37,9 @@ interface AlertState {
 
 const CATEGORIES = [
   { id: 'themes' as const, label: 'Themes', icon: 'color-palette' as const },
-  { id: 'avatars' as const, label: 'Avatars', icon: 'person-circle' as const },
+  // { id: 'avatars' as const, label: 'Avatars', icon: 'person-circle' as const },
   { id: 'profiles' as const, label: 'Profiles', icon: 'person' as const },
-  { id: 'effects' as const, label: 'Effects', icon: 'sparkles' as const },
+  // { id: 'effects' as const, label: 'Effects', icon: 'sparkles' as const },
 ];
 
 const RARITIES: (ThemeRarity | 'all')[] = ['all', 'common', 'rare', 'epic', 'legendary', 'mythic'];
@@ -106,7 +106,7 @@ const ShopTab = () => {
       ]);
       setShards(userShards);
       setOwned(inventory.ownedThemes);
-      setActive(inventory.activeTheme);
+      setActive(inventory.selectedFriendCardTheme);
     } catch (error) {
       showAlert('error', 'Error', 'Failed to load shop data');
     } finally {
@@ -230,13 +230,8 @@ const ShopTab = () => {
         </>
       ) : category === 'profiles' ? (
           <ProfileThemesShopTab />
-        ) : (
-        <View style={styles.comingSoon}>
-          <Ionicons name={CATEGORIES.find(c => c.id === category)?.icon || 'cube'} size={64} color="#555" />
-          <Text style={styles.comingSoonTitle}>Coming Soon</Text>
-          <Text style={styles.comingSoonText}>This feature is under development</Text>
-        </View>
-      )}
+        
+      ): null }
 
       {/* Modal */}
       {selected && (
@@ -401,71 +396,60 @@ const ThemeModal: React.FC<ThemeModalProps> = ({ theme, owned, active, shards, o
   };
 
   const handlePurchase = async () => {
-    if (theme.price === 0 || owned) {
-      handleActivate();
-      return;
-    }
+  if (theme.price === 0 || owned) {
+    handleActivate();
+    return;
+  }
 
-    try {
-      setLoading(true);
-      const result = await ShopService.purchaseTheme(theme.id, theme.price);
-      if (result.success) {
-        showAlert(
-          'success',
-          'Success! ✨',
-          result.message,
-          [
-            {
-              text: 'OK',
-              onPress: () => {
-                closeAlert();
-                onSuccess();
-                handleClose();
-              },
-              style: 'primary',
-            },
-          ]
-        );
-      } else {
+  try {
+    setLoading(true);
+    const result = await ShopService.purchaseTheme(theme.id, theme.price);
+    if (result.success) {
+      // Close modal first, then show alert and reload
+      handleClose();
+      setTimeout(() => {
+        onSuccess(); // Reload data
+        showAlert('success', 'Success! ✨', result.message);
+      }, 400); // Wait for modal close animation to complete
+    } else {
+      setTimeout(() => {
         showAlert('error', 'Failed', result.message);
-      }
-    } catch (error) {
-      showAlert('error', 'Error', 'Something went wrong');
-    } finally {
-      setLoading(false);
+      }, 100);
     }
-  };
+  } catch (error) {
+    setTimeout(() => {
+      showAlert('error', 'Error', 'Something went wrong');
+    }, 100);
+  } finally {
+    setLoading(false);
+  }
+};
+
 
   const handleActivate = async () => {
-    try {
-      setLoading(true);
-      const result = await ShopService.setActiveTheme(theme.id);
-      if (result.success) {
-        showAlert(
-          'success',
-          'Activated! ✨',
-          result.message,
-          [
-            {
-              text: 'OK',
-              onPress: () => {
-                closeAlert();
-                onSuccess();
-                handleClose();
-              },
-              style: 'primary',
-            },
-          ]
-        );
-      } else {
+  try {
+    setLoading(true);
+    const result = await ShopService.setActiveTheme(theme.id);
+    if (result.success) {
+      // Close modal first, then show alert and reload
+      handleClose();
+      setTimeout(() => {
+        onSuccess(); // Reload data
+        showAlert('success', 'Activated! ✨', result.message);
+      }, 400); // Wait for modal close animation to complete
+    } else {
+      setTimeout(() => {
         showAlert('error', 'Error', result.message);
-      }
-    } catch (error) {
-      showAlert('error', 'Error', 'Something went wrong');
-    } finally {
-      setLoading(false);
+      }, 100);
     }
-  };
+  } catch (error) {
+    setTimeout(() => {
+      showAlert('error', 'Error', 'Something went wrong');
+    }, 100);
+  } finally {
+    setLoading(false);
+  }
+};
 
   const buttonText = active ? 'Active' : owned ? 'Use Theme' : theme.price === 0 ? 'Get Free' : 'Purchase';
   const disabled = active || (!owned && !canAfford);

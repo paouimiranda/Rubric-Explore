@@ -489,7 +489,7 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingHorizontal: 20,
-    paddingBottom: 20,
+    paddingBottom: 50,
   },
   summaryGrid: {
     flexDirection: 'row',

@@ -15,7 +15,7 @@ import { auth, db } from '../firebase';
 
 export interface UserInventory {
   ownedThemes: string[]; // Array of theme IDs
-  activeTheme: string; // Currently active theme ID
+  selectedFriendCardTheme: string; // Currently active theme ID
   ownedAvatars?: string[];
   activeAvatar?: string;
   ownedBadges?: string[];
@@ -76,7 +76,7 @@ export class ShopService {
         // Return default inventory if user doc doesn't exist
         return {
           ownedThemes: ['default'], // Everyone starts with default theme
-          activeTheme: 'default',
+          selectedFriendCardTheme: 'default',
           ownedAvatars: [],
           ownedBadges: [],
           ownedEffects: [],
@@ -86,7 +86,7 @@ export class ShopService {
       const userData = userDoc.data();
       return {
         ownedThemes: userData.inventory?.ownedThemes || ['default'],
-        activeTheme: userData.inventory?.activeTheme || 'default',
+        selectedFriendCardTheme: userData.inventory?.selectedFriendCardTheme || 'default',
         ownedAvatars: userData.inventory?.ownedAvatars || [],
         activeAvatar: userData.inventory?.activeAvatar,
         ownedBadges: userData.inventory?.ownedBadges || [],
@@ -182,7 +182,7 @@ export class ShopService {
       
       // Update active theme
       await updateDoc(doc(db, 'users', userId), {
-        'inventory.activeTheme': themeId,
+        'inventory.selectedFriendCardTheme': themeId,
         'inventory.updatedAt': serverTimestamp(),
       });
       
@@ -211,7 +211,7 @@ export class ShopService {
         await updateDoc(doc(db, 'users', userId), {
           inventory: {
             ownedThemes: ['default'],
-            activeTheme: 'default',
+            selectedFriendCardTheme: 'default',
             ownedAvatars: [],
             ownedBadges: [],
             ownedEffects: [],
@@ -231,7 +231,7 @@ export class ShopService {
   static async getActiveTheme(): Promise<string> {
     try {
       const inventory = await this.getUserInventory();
-      return inventory.activeTheme;
+      return inventory.selectedFriendCardTheme;
     } catch (error) {
       console.error('Error getting active theme:', error);
       return 'default';
