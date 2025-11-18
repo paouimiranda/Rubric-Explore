@@ -469,7 +469,11 @@ export function GeminiOCRTab({ onInsertText, onClose }: GeminiOCRTabProps) {
             </View>
             
             <View style={styles.textContainer}>
-              <ScrollView style={styles.textScrollView}>
+              <ScrollView 
+                style={styles.textScrollView}
+                nestedScrollEnabled={true}
+                showsVerticalScrollIndicator={true}
+              >
                 <Text style={styles.extractedText} selectable>
                   {ocrState.extractedText}
                 </Text>
@@ -768,13 +772,14 @@ const styles = StyleSheet.create({
   textContainer: {
     backgroundColor: "rgba(0, 0, 0, 0.3)",
     borderRadius: 12,
-    maxHeight: 200,
+    height: 500,
     marginBottom: 16,
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.1)',
   },
   textScrollView: {
     padding: 16,
+    flex: 1
   },
   extractedText: {
     color: "#fff",

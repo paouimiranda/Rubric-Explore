@@ -258,7 +258,7 @@ export default function SharingModal({
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
               >
-                <Ionicons name="share-social" size={20} color="#ffffff" />
+                <Ionicons name="share-outline" size={20} color="#ffffff" />
               </LinearGradient>
               <Text style={styles.title}>Share Note</Text>
             </View>
@@ -347,7 +347,7 @@ export default function SharingModal({
                 <Text style={styles.sectionTitle}>Create Share Link</Text>
               </View>
               
-              {/* Permission Selection */}
+             {/* Permission Selection */}
               <View style={styles.optionRow}>
                 <Text style={styles.optionLabel}>Permission Level</Text>
                 <View style={styles.permissionButtons}>
@@ -370,10 +370,10 @@ export default function SharingModal({
                         <Text style={styles.permissionTextActive}>View</Text>
                       </LinearGradient>
                     ) : (
-                      <>
+                      <View style={styles.permissionGradient}>
                         <Ionicons name="eye" size={16} color="#9ca3af" />
                         <Text style={styles.permissionText}>View</Text>
-                      </>
+                      </View>
                     )}
                   </TouchableOpacity>
                   
@@ -396,10 +396,10 @@ export default function SharingModal({
                         <Text style={styles.permissionTextActive}>Edit</Text>
                       </LinearGradient>
                     ) : (
-                      <>
+                      <View style={styles.permissionGradient}>
                         <Ionicons name="create" size={16} color="#9ca3af" />
                         <Text style={styles.permissionText}>Edit</Text>
-                      </>
+                      </View>
                     )}
                   </TouchableOpacity>
                 </View>
@@ -580,14 +580,14 @@ export default function SharingModal({
                         <Text style={styles.actionText}>Copy</Text>
                       </TouchableOpacity>
                       
-                      <TouchableOpacity
+                      {/* <TouchableOpacity
                         style={styles.actionButton}
                         onPress={() => shareNative(token.token)}
                         activeOpacity={0.7}
                       >
                         <Ionicons name="share-outline" size={16} color="#667eea" />
                         <Text style={styles.actionText}>Share</Text>
-                      </TouchableOpacity>
+                      </TouchableOpacity> */}
                     </View>
                   </View>
                 ))}

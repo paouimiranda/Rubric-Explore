@@ -546,7 +546,7 @@ export default function NoteEditor({
               />
             </TouchableOpacity>
 
-            <TouchableOpacity
+            {/* <TouchableOpacity
               style={styles.iconButton}
               onPress={toggleTheme}
             >
@@ -555,7 +555,7 @@ export default function NoteEditor({
                 size={22} 
                 color={colors.text} 
               />
-            </TouchableOpacity>
+            </TouchableOpacity> */}
 
             {!effectiveIsSharedAccess && (
               <TouchableOpacity
@@ -578,7 +578,7 @@ export default function NoteEditor({
                   }
                 }}
               >
-                <Ionicons name="share-social-outline" size={22} color={colors.text} />
+                <Ionicons name="share-outline" size={22} color={colors.text} />
               </TouchableOpacity>
             )}
             
@@ -784,6 +784,24 @@ export default function NoteEditor({
                   {saving ? 'Saving...' : 'Save'}
                 </Text>
               </TouchableOpacity>
+
+               {/* ADD THIS NEW MENU ITEM */}
+                <TouchableOpacity
+                  style={styles.menuItem}
+                  onPress={() => {
+                    toggleTheme();
+                    setEllipsisMenuVisible(false);
+                  }}
+                >
+                  <Ionicons 
+                    name={themeMode === 'dark' ? 'sunny' : 'moon'} 
+                    size={20} 
+                    color={colors.text} 
+                  />
+                  <Text style={styles.menuItemText}>
+                    Switch to {themeMode === 'dark' ? 'Light' : 'Dark'} Mode
+                  </Text>
+                </TouchableOpacity>
               
               <TouchableOpacity
                 style={styles.menuItem}
