@@ -1,0 +1,816 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Account Deletion - Rubric</title>
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: 'Montserrat', sans-serif;
+            background: linear-gradient(135deg, #0A1C3C 0%, #1a2f4f 50%, #324762 100%);
+            min-height: 100vh;
+            color: #ffffff;
+            overflow-x: hidden;
+        }
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 40px 24px;
+            animation: fadeIn 400ms ease-out;
+        }
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        @keyframes iconBounce {
+            0% {
+                transform: scale(0) rotate(-180deg);
+            }
+            60% {
+                transform: scale(1.1) rotate(10deg);
+            }
+            100% {
+                transform: scale(1) rotate(0deg);
+            }
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 60px;
+            animation: fadeIn 600ms ease-out 200ms backwards;
+        }
+        .icon-badge {
+            width: 100px;
+            height: 100px;
+            background: linear-gradient(135deg, #f5576c 0%, #f093fb 100%);
+            border-radius: 24px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 24px;
+            box-shadow: 0 8px 24px rgba(245, 87, 108, 0.4);
+            animation: iconBounce 800ms ease-out 400ms backwards;
+        }
+        .icon-badge svg {
+            width: 48px;
+            height: 48px;
+            fill: #ffffff;
+        }
+        h1 {
+            font-size: 32px;
+            font-weight: 700;
+            margin-bottom: 12px;
+            background: linear-gradient(135deg, #ffffff 0%, #a8b9d4 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        .subtitle {
+            font-size: 15px;
+            color: #aaaaaa;
+            font-weight: 400;
+        }
+        .glass-card {
+            background: rgba(255, 255, 255, 0.08);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 20px;
+            padding: 32px;
+            margin-bottom: 24px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+            transition: all 300ms ease;
+            animation: fadeIn 400ms ease-out backwards;
+        }
+        .glass-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 8px 16px rgba(0, 0, 0, 0.4);
+            border-color: rgba(255, 255, 255, 0.2);
+        }
+        .section-header {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            margin-bottom: 20px;
+        }
+        .section-icon {
+            width: 48px;
+            height: 48px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+        .section-icon svg {
+            width: 24px;
+            height: 24px;
+            fill: #ffffff;
+        }
+        .gradient-purple {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        .gradient-pink {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+        }
+        .gradient-blue {
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+        }
+        .gradient-yellow {
+            background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
+        }
+        .gradient-green {
+            background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);
+        }
+        .gradient-orange {
+            background: linear-gradient(135deg, #fa8e42 0%, #feb47b 100%);
+        }
+        h2 {
+            font-size: 24px;
+            font-weight: 700;
+            color: #ffffff;
+            margin: 0;
+        }
+        h3 {
+            font-size: 18px;
+            font-weight: 600;
+            color: #ffffff;
+            margin-bottom: 12px;
+            margin-top: 20px;
+        }
+        p {
+            font-size: 15px;
+            line-height: 1.7;
+            color: #d4dce8;
+            margin-bottom: 16px;
+        }
+        .steps-container {
+            background: rgba(79, 172, 254, 0.1);
+            border: 2px solid rgba(79, 172, 254, 0.3);
+            border-radius: 16px;
+            padding: 24px;
+            margin: 24px 0;
+        }
+        .step {
+            display: flex;
+            align-items: flex-start;
+            gap: 16px;
+            margin-bottom: 20px;
+            padding: 16px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 12px;
+            transition: all 300ms ease;
+        }
+        .step:hover {
+            background: rgba(255, 255, 255, 0.08);
+            transform: translateX(4px);
+        }
+        .step:last-child {
+            margin-bottom: 0;
+        }
+        .step-number {
+            width: 40px;
+            height: 40px;
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 18px;
+            flex-shrink: 0;
+        }
+        .step-content {
+            flex: 1;
+        }
+        .step-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: #ffffff;
+            margin-bottom: 8px;
+        }
+        .step-description {
+            font-size: 14px;
+            color: #d4dce8;
+            margin: 0;
+        }
+        ul {
+            list-style: none;
+            padding-left: 0;
+        }
+        li {
+            font-size: 15px;
+            line-height: 1.7;
+            color: #d4dce8;
+            margin-bottom: 12px;
+            padding-left: 28px;
+            position: relative;
+        }
+        li:before {
+            content: "→";
+            position: absolute;
+            left: 0;
+            color: #4facfe;
+            font-weight: 700;
+        }
+        .warning-box {
+            background: rgba(245, 87, 108, 0.15);
+            border: 2px solid rgba(245, 87, 108, 0.3);
+            border-radius: 16px;
+            padding: 20px;
+            margin: 24px 0;
+            display: flex;
+            align-items: flex-start;
+            gap: 16px;
+        }
+        .warning-box svg {
+            width: 24px;
+            height: 24px;
+            fill: #f5576c;
+            flex-shrink: 0;
+            margin-top: 2px;
+        }
+        .warning-content {
+            flex: 1;
+        }
+        .warning-title {
+            font-size: 16px;
+            font-weight: 700;
+            color: #f5576c;
+            margin-bottom: 8px;
+        }
+        .warning-text {
+            font-size: 14px;
+            color: #d4dce8;
+            margin: 0;
+        }
+        .info-box {
+            background: rgba(67, 233, 123, 0.15);
+            border: 2px solid rgba(67, 233, 123, 0.3);
+            border-radius: 16px;
+            padding: 20px;
+            margin: 24px 0;
+            display: flex;
+            align-items: flex-start;
+            gap: 16px;
+        }
+        .info-box svg {
+            width: 24px;
+            height: 24px;
+            fill: #43e97b;
+            flex-shrink: 0;
+            margin-top: 2px;
+        }
+        .info-content {
+            flex: 1;
+        }
+        .info-title {
+            font-size: 16px;
+            font-weight: 700;
+            color: #43e97b;
+            margin-bottom: 8px;
+        }
+        .info-text {
+            font-size: 14px;
+            color: #d4dce8;
+            margin: 0;
+        }
+        .form-container {
+            margin: 24px 0;
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 16px;
+            padding: 24px;
+        }
+        .form-group {
+            margin-bottom: 24px;
+        }
+        .form-group:last-child {
+            margin-bottom: 0;
+        }
+        label {
+            display: block;
+            font-size: 15px;
+            font-weight: 600;
+            color: #ffffff;
+            margin-bottom: 10px;
+            letter-spacing: 0.3px;
+        }
+        input[type="text"],
+        input[type="email"],
+        textarea {
+            width: 100%;
+            padding: 14px 18px;
+            background: rgba(255, 255, 255, 0.08);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            border-radius: 12px;
+            color: #ffffff;
+            font-size: 15px;
+            font-family: 'Montserrat', sans-serif;
+            transition: all 300ms ease;
+            outline: none;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        }
+        input[type="text"]:hover,
+        input[type="email"]:hover,
+        textarea:hover {
+            border-color: rgba(255, 255, 255, 0.25);
+            background: rgba(255, 255, 255, 0.1);
+        }
+        input[type="text"]:focus,
+        input[type="email"]:focus,
+        textarea:focus {
+            border-color: rgba(79, 172, 254, 0.6);
+            background: rgba(255, 255, 255, 0.12);
+            box-shadow: 0 0 0 3px rgba(79, 172, 254, 0.15), 0 4px 8px rgba(0, 0, 0, 0.3);
+            transform: translateY(-1px);
+        }
+        input::placeholder,
+        textarea::placeholder {
+            color: rgba(255, 255, 255, 0.4);
+        }
+        textarea {
+            resize: vertical;
+            min-height: 120px;
+            line-height: 1.6;
+        }
+        .error-message {
+            display: block;
+            color: #f5576c;
+            font-size: 13px;
+            font-weight: 500;
+            margin-top: 8px;
+            min-height: 20px;
+            padding-left: 4px;
+        }
+        .contact-button {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            color: #ffffff;
+            padding: 16px 32px;
+            border-radius: 16px;
+            font-size: 16px;
+            font-weight: 700;
+            border: none;
+            cursor: pointer;
+            box-shadow: 0 4px 12px rgba(245, 87, 108, 0.4);
+            transition: all 300ms ease;
+            margin-top: 20px;
+        }
+        .contact-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 16px rgba(245, 87, 108, 0.6);
+            opacity: 0.9;
+        }
+        .contact-button:active {
+            transform: translateY(0);
+        }
+        .contact-button svg {
+            width: 20px;
+            height: 20px;
+            fill: #ffffff;
+        }
+        .footer {
+            text-align: center;
+            margin-top: 60px;
+            padding-top: 40px;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            animation: fadeIn 400ms ease-out 600ms backwards;
+        }
+        .footer p {
+            color: #aaaaaa;
+            font-size: 14px;
+        }
+        .footer a {
+            color: #4facfe;
+            text-decoration: none;
+            transition: color 300ms ease;
+        }
+        .footer a:hover {
+            color: #00f2fe;
+        }
+        @media (max-width: 768px) {
+            .container {
+                padding: 20px 16px;
+            }
+            h1 {
+                font-size: 26px;
+            }
+            h2 {
+                font-size: 20px;
+            }
+            h3 {
+                font-size: 16px;
+            }
+            .glass-card {
+                padding: 20px;
+                margin-bottom: 20px;
+            }
+            .icon-badge {
+                width: 80px;
+                height: 80px;
+                margin-bottom: 20px;
+            }
+            .icon-badge svg {
+                width: 40px;
+                height: 40px;
+            }
+            .section-header {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 12px;
+            }
+            .section-icon {
+                width: 40px;
+                height: 40px;
+            }
+            .section-icon svg {
+                width: 20px;
+                height: 20px;
+            }
+            .steps-container {
+                padding: 16px;
+            }
+            .step {
+                flex-direction: column;
+                align-items: flex-start;
+                padding: 12px;
+                gap: 12px;
+            }
+            .step-number {
+                width: 36px;
+                height: 36px;
+                font-size: 16px;
+            }
+            .step-title {
+                font-size: 15px;
+            }
+            .step-description {
+                font-size: 13px;
+            }
+            .warning-box, .info-box {
+                flex-direction: column;
+                padding: 16px;
+                gap: 12px;
+            }
+            .warning-box svg, .info-box svg {
+                width: 20px;
+                height: 20px;
+            }
+            .contact-button {
+                width: 100%;
+                padding: 14px 24px;
+                font-size: 15px;
+            }
+            .contact-button svg {
+                width: 18px;
+                height: 18px;
+            }
+            p {
+                font-size: 14px;
+            }
+            li {
+                font-size: 14px;
+            }
+            .header {
+                margin-bottom: 40px;
+            }
+            .subtitle {
+                font-size: 14px;
+            }
+        }
+        
+        @media (max-width: 480px) {
+            .container {
+                padding: 16px 12px;
+            }
+            h1 {
+                font-size: 24px;
+            }
+            h2 {
+                font-size: 18px;
+            }
+            .glass-card {
+                padding: 16px;
+            }
+            .icon-badge {
+                width: 70px;
+                height: 70px;
+            }
+            .icon-badge svg {
+                width: 35px;
+                height: 35px;
+            }
+        }
+        .glass-card:nth-child(1) { animation-delay: 100ms; }
+        .glass-card:nth-child(2) { animation-delay: 200ms; }
+        .glass-card:nth-child(3) { animation-delay: 300ms; }
+        .glass-card:nth-child(4) { animation-delay: 400ms; }
+        .glass-card:nth-child(5) { animation-delay: 500ms; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="icon-badge">
+                <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
+                </svg>
+            </div>
+            <h1>Account Deletion Request</h1>
+            <p class="subtitle">Rubric - Multimodal Study Application</p>
+        </div>
+
+        <div class="glass-card">
+            <div class="section-header">
+                <div class="section-icon gradient-pink">
+                    <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/>
+                    </svg>
+                </div>
+                <h2>How to Delete Your Account</h2>
+            </div>
+            <p>We understand that you may want to delete your Rubric account. This page explains the process for requesting account deletion and what happens to your data.</p>
+            
+            <div class="warning-box">
+                <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"/>
+                </svg>
+                <div class="warning-content">
+                    <div class="warning-title">Important Notice</div>
+                    <p class="warning-text">Account deletion is permanent and cannot be undone. All your data will be permanently deleted from our servers within 30 days of your request.</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="glass-card">
+            <div class="section-header">
+                <div class="section-icon gradient-blue">
+                    <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M9 16.2L4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4L9 16.2z"/>
+                    </svg>
+                </div>
+                <h2>Step-by-Step Process</h2>
+            </div>
+            <p>Follow these simple steps to request the deletion of your Rubric account:</p>
+            
+            <div class="steps-container">
+                <div class="step">
+                    <div class="step-number">1</div>
+                    <div class="step-content">
+                        <div class="step-title">Send a Deletion Request Email</div>
+                        <p class="step-description">Send an email to <strong>rubric.capstone@gmail.com</strong> from the email address associated with your Rubric account.</p>
+                    </div>
+                </div>
+                
+                <div class="step">
+                    <div class="step-number">2</div>
+                    <div class="step-content">
+                        <div class="step-title">Include Required Information</div>
+                        <p class="step-description">In your email, include the subject line "Account Deletion Request" and provide your registered email address and username to help us identify your account.</p>
+                    </div>
+                </div>
+                
+                <div class="step">
+                    <div class="step-number">3</div>
+                    <div class="step-content">
+                        <div class="step-title">Confirm Your Identity</div>
+                        <p class="step-description">We may ask you to verify your identity to ensure account security. This may include answering security questions or confirming recent account activity.</p>
+                    </div>
+                </div>
+                
+                <div class="step">
+                    <div class="step-number">4</div>
+                    <div class="step-content">
+                        <div class="step-title">Receive Confirmation</div>
+                        <p class="step-description">You will receive a confirmation email within 5 business days acknowledging your deletion request.</p>
+                    </div>
+                </div>
+                
+                <div class="step">
+                    <div class="step-number">5</div>
+                    <div class="step-content">
+                        <div class="step-title">Account Deletion Complete</div>
+                        <p class="step-description">Your account and associated data will be permanently deleted within 30 days of your request. You will receive a final confirmation once the process is complete.</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="form-container">
+                <div class="form-group">
+                    <label for="username">Username *</label>
+                    <input type="text" id="username" placeholder="Enter your Rubric username" required>
+                    <span class="error-message" id="username-error"></span>
+                </div>
+
+                <div class="form-group">
+                    <label for="email">Registered Email Address *</label>
+                    <input type="email" id="email" placeholder="Enter your registered email" required>
+                    <span class="error-message" id="email-error"></span>
+                </div>
+
+                <div class="form-group">
+                    <label for="reason">Reason for Deletion (Optional)</label>
+                    <textarea id="reason" rows="4" placeholder="Please let us know why you're leaving (optional but helpful for us to improve)"></textarea>
+                </div>
+            </div>
+
+            <button onclick="sendDeletionRequest()" class="contact-button">
+                <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M20 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z"/>
+                </svg>
+                Send Deletion Request
+            </button>
+        </div>
+
+        <div class="glass-card">
+            <div class="section-header">
+                <div class="section-icon gradient-yellow">
+                    <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94L14.4 2.81c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/>
+                </svg>
+            </div>
+            <h2>What Data Will Be Deleted</h2>
+            </div>
+            <p>When you request account deletion, the following data will be <strong>permanently deleted</strong> from our servers:</p>
+            
+            <h3>Data That Will Be Deleted:</h3>
+            <ul>
+                <li><strong>Personal Information:</strong> Your name, email address, username, and password</li>
+                <li><strong>Profile Data:</strong> Profile picture, bio, and all profile settings</li>
+                <li><strong>Study Content:</strong> All notes, study materials, uploaded documents, and images</li>
+                <li><strong>Learning Progress:</strong> Quiz results, study session history, and activity logs</li>
+                <li><strong>User Preferences:</strong> App settings, customizations, and saved preferences</li>
+                <li><strong>Account Metadata:</strong> Account creation date, last login, and usage statistics</li>
+            </ul>
+
+            <h3>Data That May Be Retained:</h3>
+            <ul>
+                <li><strong>Legal Compliance:</strong> Minimal data required for legal, tax, or regulatory compliance (typically anonymized transaction records)</li>
+                <li><strong>Security Logs:</strong> Anonymized security and fraud prevention logs for up to 90 days</li>
+                <li><strong>Backup Data:</strong> Data in encrypted backups will be deleted according to our backup retention schedule (maximum 90 days)</li>
+            </ul>
+
+            <div class="info-box">
+                <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/>
+                </svg>
+                <div class="info-content">
+                    <div class="info-title">Retention Period</div>
+                    <p class="info-text">All personal data will be completely removed from our active servers within <strong>30 days</strong> of your deletion request. Data in backup systems will be purged within <strong>90 days</strong>.</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="glass-card">
+            <div class="section-header">
+                <div class="section-icon gradient-green">
+                    <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+                    </svg>
+                </div>
+                <h2>Your Rights Under Philippine Law</h2>
+            </div>
+            <p>Under the Data Privacy Act of 2012 (Republic Act No. 10173), you have the following rights:</p>
+            <ul>
+                <li><strong>Right to be Forgotten:</strong> Request deletion of your personal data</li>
+                <li><strong>Right to Data Portability:</strong> Request a copy of your data before deletion</li>
+                <li><strong>Right to Object:</strong> Object to the processing of your personal data</li>
+                <li><strong>Right to File a Complaint:</strong> Lodge complaints with the National Privacy Commission</li>
+            </ul>
+        </div>
+
+        <div class="glass-card">
+            <div class="section-header">
+                <div class="section-icon gradient-orange">
+                    <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M20 2H4c-1.1 0-1.99.9-1.99 2L2 22l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-7 9h-2V5h2v6zm0 4h-2v-2h2v2z"/>
+                    </svg>
+                </div>
+                <h2>Need Help?</h2>
+            </div>
+            <p>If you have any questions about the account deletion process or need assistance, please contact us:</p>
+            <p><strong>Email:</strong> rubric.capstone@gmail.com<br>
+            <strong>Response Time:</strong> Within 5 business days<br>
+            <strong>Subject Line:</strong> "Account Deletion Request" or "Account Deletion Help"</p>
+            
+            <p style="margin-top: 20px;">You may also contact the National Privacy Commission of the Philippines:</p>
+            <p><strong>Website:</strong> privacy.gov.ph<br>
+            <strong>Email:</strong> info@privacy.gov.ph</p>
+        </div>
+
+        <div class="footer">
+            <p>&copy; 2025 Rubric. All rights reserved.</p>
+            <p style="margin-top: 12px;">
+                <a href="index.html">Privacy Policy</a> | 
+                <a href="mailto:rubric.capstone@gmail.com">Contact Us</a>
+            </p>
+        </div>
+    </div>
+    <script>
+        function sendDeletionRequest() {
+            // Get form values
+            const username = document.getElementById('username').value.trim();
+            const email = document.getElementById('email').value.trim();
+            const reason = document.getElementById('reason').value.trim();
+            
+            // Clear previous errors
+            document.getElementById('username-error').textContent = '';
+            document.getElementById('email-error').textContent = '';
+            
+            // Validation
+            let isValid = true;
+            
+            if (!username) {
+                document.getElementById('username-error').textContent = 'Username is required';
+                isValid = false;
+            }
+            
+            if (!email) {
+                document.getElementById('email-error').textContent = 'Email address is required';
+                isValid = false;
+            } else if (!isValidEmail(email)) {
+                document.getElementById('email-error').textContent = 'Please enter a valid email address';
+                isValid = false;
+            }
+            
+            if (!isValid) {
+                return;
+            }
+            
+            // Build email body
+            let emailBody = `Hello Rubric Team,
+I am requesting the deletion of my Rubric account.
+Account Details:
+- Registered Email: ${email}
+- Username: ${username}`;
+            
+            if (reason) {
+                emailBody += `
+Reason for Deletion:
+${reason}`;
+            }
+            
+            emailBody += `
+I understand that:
+- This action is permanent and cannot be undone
+- All my data will be deleted within 30 days
+- I may be asked to verify my identity
+Please proceed with the account deletion.
+Thank you`;
+            
+            // Encode the email body for URL
+            const encodedBody = encodeURIComponent(emailBody);
+            const encodedSubject = encodeURIComponent('Account Deletion Request');
+            
+            // Create mailto link
+            const mailtoLink = `mailto:rubric.capstone@gmail.com?subject=${encodedSubject}&body=${encodedBody}`;
+            
+            // Open email client
+            window.location.href = mailtoLink;
+        }
+        
+        function isValidEmail(email) {
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            return emailRegex.test(email);
+        }
+        
+        // Scroll-triggered animations
+        const observerOptions = {
+            threshold: 0.1,
+            rootMargin: '0px 0px -50px 0px'
+        };
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    entry.target.style.opacity = '1';
+                    entry.target.style.transform = 'translateY(0)';
+                }
+            });
+        }, observerOptions);
+        document.querySelectorAll('.glass-card').forEach(card => {
+            observer.observe(card);
+        });
+    </script>
+</body>
+</html>
+Do not share my personal information
+
