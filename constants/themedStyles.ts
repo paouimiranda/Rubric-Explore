@@ -24,7 +24,7 @@ export const createThemedStyles = (colors: ThemeColors, mode: ThemeMode) => {
       height: 200,
     },
     loadingText: {
-      color: colors.text,
+      color: '#fff',
       fontSize: 18,
       fontWeight: '600',
       marginTop: 24,

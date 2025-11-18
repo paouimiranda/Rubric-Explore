@@ -482,22 +482,6 @@ export default function SharingModal({
                 </View>
               </View>
 
-              {/* Email Invite */}
-              <View style={styles.optionRow}>
-                <Text style={styles.optionLabel}>Invite Email (Optional)</Text>
-                <View style={styles.inputContainer}>
-                  <Ionicons name="mail" size={16} color="#667eea" />
-                  <TextInput
-                    style={styles.input}
-                    value={inviteeEmail}
-                    onChangeText={setInviteeEmail}
-                    placeholder="Enter email address"
-                    placeholderTextColor="#666"
-                    keyboardType="email-address"
-                    autoCapitalize="none"
-                  />
-                </View>
-              </View>
 
               {/* Create Button */}
               <TouchableOpacity

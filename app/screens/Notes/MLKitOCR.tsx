@@ -7,15 +7,15 @@ import * as ImagePicker from 'expo-image-picker';
 import { LinearGradient } from 'expo-linear-gradient';
 import React, { useState } from 'react';
 import {
-    ActivityIndicator,
-    Clipboard,
-    Image,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View
+  ActivityIndicator,
+  Clipboard,
+  Image,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
 } from 'react-native';
 
 interface MLKitState {
@@ -377,7 +377,7 @@ export function MLKitOCRTab({ onInsertText, onClose }: MLKitOCRTabProps) {
             </LinearGradient>
             <Text style={styles.emptyTitle}>On-Device ML Kit OCR</Text>
             <Text style={styles.emptyText}>
-              Fast, offline text recognition powered by Google ML Kit. Processes images locally on your device.
+              Fast text recognition powered by Google ML Kit. Processes images locally on your device.
             </Text>
           </View>
         )}
@@ -391,7 +391,7 @@ export function MLKitOCRTab({ onInsertText, onClose }: MLKitOCRTabProps) {
           <View style={styles.infoList}>
             <View style={styles.infoItem}>
               <Ionicons name="checkmark" size={16} color="#10b981" />
-              <Text style={styles.infoItemText}>On-device processing (offline)</Text>
+              <Text style={styles.infoItemText}>On-device processing </Text>
             </View>
             <View style={styles.infoItem}>
               <Ionicons name="checkmark" size={16} color="#10b981" />
@@ -403,7 +403,7 @@ export function MLKitOCRTab({ onInsertText, onClose }: MLKitOCRTabProps) {
             </View>
             <View style={styles.infoItem}>
               <Ionicons name="checkmark" size={16} color="#10b981" />
-              <Text style={styles.infoItemText}>Great for simple documents</Text>
+              <Text style={styles.infoItemText}>Great for printed documents</Text>
             </View>
           </View>
         </View>

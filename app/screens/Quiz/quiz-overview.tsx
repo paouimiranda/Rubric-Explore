@@ -21,7 +21,6 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   FlatList,
   Image,
   Modal,
@@ -81,6 +80,7 @@ const QuizOverview: React.FC = () => {
   const [isPublic, setIsPublic] = useState(false);
   const [showPublicWarningModal, setShowPublicWarningModal] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
+  const [showImagePickerModal, setShowImagePickerModal] = useState(false);
 
   const [alert, setAlert] = useState<AlertState>({
     visible: false,
@@ -238,36 +238,66 @@ const QuizOverview: React.FC = () => {
   };
 
   const handleImagePicker = () => {
-    Alert.alert(
-      'Select Quiz Cover',
-      'Choose an image source',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Camera Roll',
-          onPress: selectFromCameraRoll
-        },
-        {
-          text: 'Default Images',
-          onPress: showDefaultImagePicker
-        }
-      ]
-    );
-  };
+  setShowImagePickerModal(true);
+};
 
   const showDefaultImagePicker = () => {
-    Alert.alert(
-      'Choose Default Cover',
-      'Select from available covers',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        ...defaultQuizImages.map(image => ({
-          text: image.name,
-          onPress: () => setQuizImage(image.id)
-        }))
-      ]
-    );
-  };
+  setShowImagePickerModal(false);
+  
+  showAlert(
+    'info',
+    'Choose Default Cover',
+    'Select from available quiz covers',
+    defaultQuizImages.map(image => ({
+      text: image.name,
+      onPress: () => {
+        setQuizImage(image.id);
+        setAlert(prev => ({ ...prev, visible: false }));
+      },
+      style: 'default' as const
+    })).concat([{
+      text: 'Cancel',
+      onPress: () => setAlert(prev => ({ ...prev, visible: false })),
+      style: 'default' as const
+    }])
+  );
+};
+
+const handleRemoveImage = async () => {
+  setShowImagePickerModal(false);
+  
+  showAlert(
+    'warning',
+    'Remove Cover Image',
+    'Are you sure you want to remove the cover image?',
+    [
+      {
+        text: 'Cancel',
+        onPress: () => setAlert(prev => ({ ...prev, visible: false })),
+        style: 'cancel'
+      },
+      {
+        text: 'Remove',
+        onPress: async () => {
+          // Delete from Firebase Storage if it's a Firebase URL
+          if (quizImage && isFirebaseStorageUrl(quizImage)) {
+            const imagePath = extractStoragePathFromUrl(quizImage);
+            if (imagePath) {
+              await deleteQuizImage(imagePath).catch(err => 
+                console.log('Image already deleted or not found')
+              );
+            }
+          }
+          
+          setQuizImage('');
+          setAlert(prev => ({ ...prev, visible: false }));
+          showAlert('success', 'Success', 'Cover image removed successfully!');
+        },
+        style: 'primary'
+      }
+    ]
+  );
+};
 
   const selectFromCameraRoll = async () => {
     try {
@@ -726,7 +756,7 @@ const QuizOverview: React.FC = () => {
                 onPress={() => setShowManageTopicsModal(true)}
               >
                 <Ionicons name="pricetags" size={16} color="#ffffff" />
-                <Text style={styles.manageTopicsButtonText}>Manage Topics</Text>
+                <Text style={styles.manageTopicsButtonText}>Manage Tags</Text>
               </TouchableOpacity>
             </View>
 
@@ -965,6 +995,53 @@ const QuizOverview: React.FC = () => {
           buttons={alert.buttons}
           onClose={() => setAlert(prev => ({ ...prev, visible: false }))}
         />
+
+       <CustomAlertModal
+        visible={showImagePickerModal}
+        type="info"
+        title="Select Quiz Cover"
+        message="Choose an image source for your quiz"
+        buttons={
+          quizImage 
+            ? [
+                {
+                  text: 'Camera Roll',
+                  onPress: () => {
+                    setShowImagePickerModal(false);
+                    selectFromCameraRoll();
+                  },
+                  style: 'primary'
+                },
+                {
+                  text: 'Remove Image',
+                  onPress: handleRemoveImage,
+                  style: 'default'
+                },
+                {
+                  text: 'Cancel',
+                  onPress: () => setShowImagePickerModal(false),
+                  style: 'cancel'
+                }
+              ]
+            : [
+                {
+                  text: 'Camera Roll',
+                  onPress: () => {
+                    setShowImagePickerModal(false);
+                    selectFromCameraRoll();
+                  },
+                  style: 'primary'
+                },
+                
+                {
+                  text: 'Cancel',
+                  onPress: () => setShowImagePickerModal(false),
+                  style: 'cancel'
+                }
+              ]
+        }
+        onClose={() => setShowImagePickerModal(false)}
+      />
       </SafeAreaView>
     </LinearGradient>
   );

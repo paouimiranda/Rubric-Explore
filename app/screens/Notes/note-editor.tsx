@@ -765,23 +765,7 @@ export default function NoteEditor({
                 </View>
               )}
               
-              {collaborative.isConnected && (
-                <TouchableOpacity
-                  style={styles.menuItem}
-                  onPress={() => {
-                    setShowCollaborators(!showCollaborators);
-                    if (!showCollaborators && collaborative.activeUsers.length === 0) {
-                      setEllipsisMenuVisible(false);
-                    }
-                  }}
-                >
-                  <Ionicons name="people" size={20} color="#4ade80" />
-                  <Text style={styles.menuItemText}>
-                    {collaborative.activeUsers.length} {collaborative.activeUsers.length === 1 ? 'Collaborator' : 'Collaborators'}
-                  </Text>
-                  <Ionicons name="chevron-forward" size={20} color="#9ca3af" style={{ marginLeft: 'auto' }} />
-                </TouchableOpacity>
-              )}
+             
               
               <TouchableOpacity
                 style={[styles.menuItem, (saving || (effectiveIsSharedAccess && effectiveSharedPermission === 'view')) && styles.menuItemDisabled]}
