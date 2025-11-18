@@ -1,4 +1,4 @@
-// services/multiplayer-service.ts - IMPROVED VERSION
+// services/multiplayer-service.ts - FIXED DISCONNECT HANDLING
 import {
   addDoc,
   collection,
@@ -41,7 +41,7 @@ export interface SessionPlayer {
   uid: string;
   displayName: string;
   avatarId?: number;
-  status: 'connected' | 'disconnected' | 'ready' | 'answered';
+  status: 'connected' | 'disconnected' | 'ready' | 'answered' | 'kicked';
   score: number;
   streak: number;
   lastActive: Timestamp;
@@ -86,6 +86,7 @@ const POINTS_PER_QUESTION = 100;
 const STREAK_BONUS_PERCENT = 10;
 const SESSION_CODE_LENGTH = 6;
 const SESSION_EXPIRY_HOURS = 1;
+const INACTIVITY_THRESHOLD_SECONDS = 20; // Kick after 20 seconds of no heartbeat
 
 const generateSessionCode = (): string => {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
@@ -274,10 +275,6 @@ export const startQuiz = async (sessionId: string): Promise<void> => {
   }
 };
 
-/**
- * Submit answer for current question
- * IMPROVED: No longer automatically triggers question progression
- */
 export const submitAnswer = async (
   sessionId: string,
   playerId: string,
@@ -336,7 +333,7 @@ export const submitAnswer = async (
       answeredAt: Timestamp.fromDate(new Date())
     };
 
-    // Update player document using transaction for consistency
+    // Update player document using transaction
     await runTransaction(db, async (transaction) => {
       const playersRef = collection(db, 'multiplayerSessions', sessionId, 'players');
       const q = query(playersRef, where('uid', '==', playerId));
@@ -346,7 +343,12 @@ export const submitAnswer = async (
         const playerDoc = snapshot.docs[0];
         const playerData = playerDoc.data() as SessionPlayer;
 
-        // Verify this answer is for the current question (prevent duplicate submissions)
+        // Verify not kicked
+        if (playerData.status === 'kicked') {
+          throw new Error('Player has been kicked for inactivity');
+        }
+
+        // Verify this answer is for the current question
         const alreadyAnswered = playerData.answers.some(
           a => a.questionIndex === answer.questionIndex
         );
@@ -378,8 +380,7 @@ export const submitAnswer = async (
 };
 
 /**
- * IMPROVED: Check if all ACTIVE players have answered current question
- * Returns boolean instead of auto-progressing
+ * Check if all ACTIVE (non-kicked) players have answered
  */
 export const checkIfAllAnswered = async (sessionId: string): Promise<boolean> => {
   try {
@@ -399,9 +400,11 @@ export const checkIfAllAnswered = async (sessionId: string): Promise<boolean> =>
       collection(db, 'multiplayerSessions', sessionId, 'players')
     );
     
-    const activePlayers = playersSnapshot.docs.filter(
-      doc => (doc.data() as SessionPlayer).status !== 'disconnected'
-    );
+    // Only count players who are NOT kicked or disconnected
+    const activePlayers = playersSnapshot.docs.filter(doc => {
+      const status = (doc.data() as SessionPlayer).status;
+      return status !== 'disconnected' && status !== 'kicked';
+    });
 
     if (activePlayers.length === 0) {
       return true; // No active players = can progress
@@ -424,14 +427,12 @@ export const checkIfAllAnswered = async (sessionId: string): Promise<boolean> =>
 };
 
 /**
- * IMPROVED: Move to next question with better race condition protection
- * Only call this when you're certain all active players have answered
+ * Move to next question
  */
 export const moveToNextQuestion = async (sessionId: string): Promise<void> => {
   try {
     const sessionRef = doc(db, 'multiplayerSessions', sessionId);
     
-    // First, get current session state
     const sessionDoc = await getDoc(sessionRef);
     if (!sessionDoc.exists()) {
       throw new Error('Session not found');
@@ -442,23 +443,17 @@ export const moveToNextQuestion = async (sessionId: string): Promise<void> => {
     
     console.log(`[moveToNextQuestion] Current question index: ${currentIndex}`);
     
-    // Get all players and check who has answered
+    // Get all active players
     const playersSnapshot = await getDocs(
       collection(db, 'multiplayerSessions', sessionId, 'players')
     );
     
-    const activePlayers = playersSnapshot.docs.filter(
-      doc => (doc.data() as SessionPlayer).status !== 'disconnected'
-    );
+    const activePlayers = playersSnapshot.docs.filter(doc => {
+      const status = (doc.data() as SessionPlayer).status;
+      return status !== 'disconnected' && status !== 'kicked';
+    });
     
     console.log(`[moveToNextQuestion] Active players: ${activePlayers.length}`);
-    
-    // Log who has answered
-    activePlayers.forEach(playerDoc => {
-      const player = playerDoc.data() as SessionPlayer;
-      const hasAnswered = player.answers.some(a => a.questionIndex === currentIndex);
-      console.log(`  - ${player.displayName}: ${hasAnswered ? 'answered' : 'NOT answered'} (${player.answers.length} total answers)`);
-    });
     
     if (activePlayers.length > 0) {
       const allAnswered = activePlayers.every(playerDoc => {
@@ -484,9 +479,9 @@ export const moveToNextQuestion = async (sessionId: string): Promise<void> => {
       
       const freshSessionData = freshSessionDoc.data() as MultiplayerSession;
       
-      // Check if question index changed while we were checking (race condition protection)
+      // Race condition protection
       if (freshSessionData.currentQuestionIndex !== currentIndex) {
-        console.log(`[moveToNextQuestion] Question index changed during check (${currentIndex} -> ${freshSessionData.currentQuestionIndex}). Aborting.`);
+        console.log(`[moveToNextQuestion] Question index changed (${currentIndex} -> ${freshSessionData.currentQuestionIndex}). Aborting.`);
         return;
       }
       
@@ -508,7 +503,7 @@ export const moveToNextQuestion = async (sessionId: string): Promise<void> => {
       }
     });
     
-    // After transaction, reset player statuses
+    // Reset player statuses for next question
     const updatedSessionDoc = await getDoc(sessionRef);
     const updatedSessionData = updatedSessionDoc.data() as MultiplayerSession;
     
@@ -521,8 +516,8 @@ export const moveToNextQuestion = async (sessionId: string): Promise<void> => {
       playersSnapshot.docs.forEach((playerDoc) => {
         const player = playerDoc.data() as SessionPlayer;
         
-        // Only reset status for ACTIVE players
-        if (player.status !== 'disconnected') {
+        // Only reset status for ACTIVE players (not kicked or disconnected)
+        if (player.status !== 'disconnected' && player.status !== 'kicked') {
           batch.update(playerDoc.ref, {
             status: 'connected',
             currentQuestionIndex: updatedSessionData.currentQuestionIndex,
@@ -544,20 +539,22 @@ export const getLeaderboard = async (sessionId: string): Promise<LeaderboardEntr
       collection(db, 'multiplayerSessions', sessionId, 'players')
     );
 
-    const leaderboard: LeaderboardEntry[] = playersSnapshot.docs.map((doc) => {
-      const player = doc.data() as SessionPlayer;
-      const correctAnswers = player.answers.filter((a) => a.isCorrect).length;
+    const leaderboard: LeaderboardEntry[] = playersSnapshot.docs
+      .filter(doc => (doc.data() as SessionPlayer).status !== 'kicked') // Exclude kicked players
+      .map((doc) => {
+        const player = doc.data() as SessionPlayer;
+        const correctAnswers = player.answers.filter((a) => a.isCorrect).length;
 
-      return {
-        uid: player.uid,
-        displayName: player.displayName,
-        avatarId: player.avatarId,
-        score: player.score,
-        streak: player.streak,
-        correctAnswers,
-        rank: 0,
-      };
-    });
+        return {
+          uid: player.uid,
+          displayName: player.displayName,
+          avatarId: player.avatarId,
+          score: player.score,
+          streak: player.streak,
+          correctAnswers,
+          rank: 0,
+        };
+      });
 
     leaderboard.sort((a, b) => b.score - a.score);
     leaderboard.forEach((entry, index) => {
@@ -598,6 +595,10 @@ export const listenToPlayers = (
   });
 };
 
+/**
+ * IMPROVED: Activity heartbeat that updates lastActive timestamp
+ * This is the ONLY way players should update their activity
+ */
 export const updatePlayerActivity = async (
   sessionId: string,
   playerId: string
@@ -608,7 +609,16 @@ export const updatePlayerActivity = async (
     const snapshot = await getDocs(q);
 
     if (!snapshot.empty) {
-      await updateDoc(snapshot.docs[0].ref, {
+      const playerDoc = snapshot.docs[0];
+      const player = playerDoc.data() as SessionPlayer;
+      
+      // Don't update if player is already kicked
+      if (player.status === 'kicked') {
+        console.log(`[updatePlayerActivity] Player ${playerId} is kicked, not updating`);
+        return;
+      }
+      
+      await updateDoc(playerDoc.ref, {
         lastActive: serverTimestamp(),
       });
     }
@@ -618,7 +628,83 @@ export const updatePlayerActivity = async (
 };
 
 /**
- * IMPROVED: Leave session with better cleanup
+ * IMPROVED: Kick inactive players (mark as 'kicked' instead of 'disconnected')
+ * This runs periodically and kicks anyone who hasn't sent a heartbeat
+ */
+export const kickInactivePlayers = async (
+  sessionId: string,
+  thresholdSeconds: number = INACTIVITY_THRESHOLD_SECONDS
+): Promise<string[]> => {
+  try {
+    const playersSnapshot = await getDocs(
+      collection(db, 'multiplayerSessions', sessionId, 'players')
+    );
+
+    const now = Timestamp.now();
+    const thresholdTime = new Timestamp(
+      now.seconds - thresholdSeconds,
+      now.nanoseconds
+    );
+
+    const batch = writeBatch(db);
+    const kickedPlayerIds: string[] = [];
+
+    playersSnapshot.docs.forEach((playerDoc) => {
+      const player = playerDoc.data() as SessionPlayer;
+
+      // Only check players who are currently active (not already kicked/disconnected)
+      if (player.status !== 'kicked' && player.status !== 'disconnected') {
+        if (player.lastActive.seconds < thresholdTime.seconds) {
+          console.log(`[kickInactivePlayers] Kicking player ${player.displayName} (${player.uid}) for inactivity`);
+          console.log(`  Last active: ${new Date(player.lastActive.seconds * 1000).toISOString()}`);
+          console.log(`  Threshold: ${new Date(thresholdTime.seconds * 1000).toISOString()}`);
+          
+          batch.update(playerDoc.ref, {
+            status: 'kicked',
+          });
+          kickedPlayerIds.push(player.uid);
+        }
+      }
+    });
+
+    if (kickedPlayerIds.length > 0) {
+      await batch.commit();
+      console.log(`[kickInactivePlayers] Kicked ${kickedPlayerIds.length} players`);
+    }
+    
+    return kickedPlayerIds;
+  } catch (error) {
+    console.error('Error kicking inactive players:', error);
+    return [];
+  }
+};
+
+/**
+ * Check if a specific player has been kicked
+ */
+export const isPlayerKicked = async (
+  sessionId: string,
+  playerId: string
+): Promise<boolean> => {
+  try {
+    const playersRef = collection(db, 'multiplayerSessions', sessionId, 'players');
+    const q = query(playersRef, where('uid', '==', playerId));
+    const snapshot = await getDocs(q);
+
+    if (!snapshot.empty) {
+      const player = snapshot.docs[0].data() as SessionPlayer;
+      return player.status === 'kicked';
+    }
+    
+    return false;
+  } catch (error) {
+    console.error('Error checking if player is kicked:', error);
+    return false;
+  }
+};
+
+/**
+ * Leave session voluntarily
  */
 export const leaveSession = async (
   sessionId: string,
@@ -638,18 +724,19 @@ export const leaveSession = async (
       console.log(`Player ${playerId} marked as disconnected`);
     }
 
-    // Check if all players disconnected
+    // Check if all players left
     const allPlayersSnapshot = await getDocs(playersRef);
-    const allDisconnected = allPlayersSnapshot.docs.every(
-      (doc) => doc.data().status === 'disconnected'
-    );
+    const allGone = allPlayersSnapshot.docs.every(doc => {
+      const status = (doc.data() as SessionPlayer).status;
+      return status === 'disconnected' || status === 'kicked';
+    });
 
-    if (allDisconnected) {
+    if (allGone) {
       await updateDoc(doc(db, 'multiplayerSessions', sessionId), {
         status: 'abandoned',
         lastActivity: serverTimestamp(),
       });
-      console.log('All players disconnected, session marked as abandoned');
+      console.log('All players gone, session marked as abandoned');
     }
   } catch (error) {
     console.error('Error leaving session:', error);
@@ -755,104 +842,5 @@ export const usePowerUp = async (
   } catch (error) {
     console.error('Error using power-up:', error);
     return false;
-  }
-};
-
-/**
- * IMPROVED: Check for inactive players and mark them as disconnected
- */
-export const checkAndMarkInactivePlayers = async (
-  sessionId: string,
-  inactivityThresholdSeconds: number = 30
-): Promise<void> => {
-  try {
-    const playersSnapshot = await getDocs(
-      collection(db, 'multiplayerSessions', sessionId, 'players')
-    );
-
-    const now = Timestamp.now();
-    const thresholdTime = new Timestamp(
-      now.seconds - inactivityThresholdSeconds,
-      now.nanoseconds
-    );
-
-    const batch = writeBatch(db);
-    let hasChanges = false;
-
-    playersSnapshot.docs.forEach((playerDoc) => {
-      const player = playerDoc.data() as SessionPlayer;
-
-      if (player.status !== 'disconnected') {
-        if (player.lastActive.seconds < thresholdTime.seconds) {
-          console.log(`Marking player ${player.displayName} as disconnected due to inactivity`);
-          batch.update(playerDoc.ref, {
-            status: 'disconnected',
-          });
-          hasChanges = true;
-        }
-      }
-    });
-
-    if (hasChanges) {
-      await batch.commit();
-      console.log('Inactive players marked as disconnected');
-    }
-  } catch (error) {
-    console.error('Error checking inactive players:', error);
-  }
-};
-
-/**
- * IMPROVED: Reconnect a disconnected player
- */
-export const reconnectPlayer = async (
-  sessionId: string,
-  playerId: string
-): Promise<void> => {
-  try {
-    const playersRef = collection(db, 'multiplayerSessions', sessionId, 'players');
-    const q = query(playersRef, where('uid', '==', playerId));
-    const snapshot = await getDocs(q);
-
-    if (!snapshot.empty) {
-      const playerDoc = snapshot.docs[0];
-      const player = playerDoc.data() as SessionPlayer;
-      
-      console.log(`[reconnectPlayer] Player ${player.displayName} status: ${player.status}`);
-      
-      if (player.status === 'disconnected') {
-        // Get current session to determine correct status
-        const sessionDoc = await getDoc(doc(db, 'multiplayerSessions', sessionId));
-        const session = sessionDoc.data() as MultiplayerSession;
-        
-        console.log(`[reconnectPlayer] Session at question ${session.currentQuestionIndex}`);
-        console.log(`[reconnectPlayer] Player has ${player.answers.length} answers`);
-        
-        // Check if player already answered current question
-        const hasAnsweredCurrent = player.answers.some(
-          a => a.questionIndex === session.currentQuestionIndex
-        );
-        
-        console.log(`[reconnectPlayer] Has answered current question: ${hasAnsweredCurrent}`);
-        
-        const newStatus = hasAnsweredCurrent ? 'answered' : 'connected';
-        
-        await updateDoc(playerDoc.ref, {
-          status: newStatus,
-          lastActive: serverTimestamp(),
-        });
-        
-        console.log(`[reconnectPlayer] Player ${player.displayName} reconnected with status: ${newStatus}`);
-      } else {
-        // Player wasn't disconnected, just update activity
-        console.log(`[reconnectPlayer] Player ${player.displayName} was not disconnected, updating activity`);
-        await updateDoc(playerDoc.ref, {
-          lastActive: serverTimestamp(),
-        });
-      }
-    }
-  } catch (error) {
-    console.error('[reconnectPlayer] Error:', error);
-    throw error;
   }
 };

@@ -1,17 +1,17 @@
-// app/Quiz/multiplayer-play.tsx - IMPROVED VERSION
+// app/Quiz/multiplayer-play.tsx - FIXED AUTO-SUBMIT ISSUE
 import { useBacklogLogger } from '@/hooks/useBackLogLogger';
 import { getCurrentUserData } from '@/services/auth-service';
 import { BACKLOG_EVENTS } from '@/services/backlogEvents';
 import {
-  checkAndMarkInactivePlayers,
   getLeaderboard,
+  isPlayerKicked,
+  kickInactivePlayers,
   LeaderboardEntry,
   leaveSession,
   listenToPlayers,
   listenToSession,
   moveToNextQuestion,
   MultiplayerSession,
-  reconnectPlayer,
   SessionPlayer,
   submitAnswer,
   updatePlayerActivity
@@ -47,7 +47,8 @@ const MATCHING_COLORS = [
   '#ec4899', '#06b6d4', '#f97316', '#14b8a6', '#a855f7',
 ];
 
-type Phase = 'question' | 'correct' | 'incorrect' | 'leaderboard' | 'waiting';
+const HEARTBEAT_INTERVAL = 5000;
+const INACTIVITY_CHECK_INTERVAL = 8000;
 
 const MultiplayerPlay = () => {
   const router = useRouter();
@@ -59,14 +60,13 @@ const MultiplayerPlay = () => {
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [showQuestionPreview, setShowQuestionPreview] = useState(false);
+  const [wasKicked, setWasKicked] = useState(false);
   
-  // Question state
   const [currentQuestion, setCurrentQuestion] = useState<Question | null>(null);
   const [timeLeft, setTimeLeft] = useState(0);
   const [hasAnswered, setHasAnswered] = useState(false);
   const [isTransitioning, setIsTransitioning] = useState(false);
   
-  // Answer state
   const [selectedAnswers, setSelectedAnswers] = useState<number[]>([]);
   const [fillBlankText, setFillBlankText] = useState('');
   const [matchingPairs, setMatchingPairs] = useState<{ left: string; right: string }[]>([]);
@@ -74,7 +74,6 @@ const MultiplayerPlay = () => {
   const [selectedLeft, setSelectedLeft] = useState<number | null>(null);
   const [selectedRight, setSelectedRight] = useState<number | null>(null);
   
-  // Results state
   const [showCorrectAnswer, setShowCorrectAnswer] = useState(false);
   const [lastAnswerCorrect, setLastAnswerCorrect] = useState<boolean | null>(null);
   const [pointsEarned, setPointsEarned] = useState(0);
@@ -82,49 +81,133 @@ const MultiplayerPlay = () => {
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
   const [showFinalResults, setShowFinalResults] = useState(false);
   
-  // Refs
+  // CRITICAL REFS - These prevent race conditions and double submissions
   const timerRef = useRef<number | null>(null);
   const progressAnim = useRef(new Animated.Value(1)).current;
-  const activityInterval = useRef<number | null>(null);
+  const heartbeatInterval = useRef<number | null>(null);
+  const inactivityCheckInterval = useRef<number | null>(null);
   const questionStartTime = useRef(Date.now());
   const questionPreviewScale = useRef(new Animated.Value(0)).current;
   const appState = useRef(AppState.currentState);
   const questionEndTime = useRef<number>(0);
-  
-  // IMPROVED: Track question index to prevent race conditions
   const currentQuestionIndex = useRef<number>(-1);
   const isProcessingTransition = useRef<boolean>(false);
   const hasCalledMoveToNext = useRef<boolean>(false);
+  const isCheckingKickStatus = useRef<boolean>(false);
+  
+  // NEW: Prevent auto-submit during transitions
+  const isSubmitting = useRef<boolean>(false);
+  const hasAnsweredForQuestion = useRef<Map<number, boolean>>(new Map());
+  const questionInitialized = useRef<boolean>(false);
+  const previewTimeout = useRef<number | null>(null);
 
-  // Initialize
   useEffect(() => {
     initializeGame();
     return () => cleanup();
   }, []);
 
-  // IMPROVED: Inactivity check
+  useEffect(() => {
+    if (!sessionId || typeof sessionId !== 'string' || !currentUser || !session) return;
+    if (session.status !== 'in_progress' && session.status !== 'waiting') return;
+    if (wasKicked) return;
+
+    console.log('[Heartbeat] Starting heartbeat interval');
+    updatePlayerActivity(sessionId, currentUser.uid);
+
+    heartbeatInterval.current = setInterval(() => {
+      if (!wasKicked) {
+        console.log('[Heartbeat] Sending activity update');
+        updatePlayerActivity(sessionId, currentUser.uid);
+      }
+    }, HEARTBEAT_INTERVAL) as unknown as number;
+
+    return () => {
+      if (heartbeatInterval.current) {
+        console.log('[Heartbeat] Stopping heartbeat interval');
+        clearInterval(heartbeatInterval.current);
+        heartbeatInterval.current = null;
+      }
+    };
+  }, [sessionId, currentUser, session?.status, wasKicked]);
+
   useEffect(() => {
     if (!sessionId || typeof sessionId !== 'string' || !session) return;
     if (session.status !== 'in_progress') return;
+    if (wasKicked) return;
 
-    const inactivityCheck = setInterval(() => {
-      checkAndMarkInactivePlayers(sessionId, 30);
-    }, 10000);
+    console.log('[InactivityCheck] Starting inactivity check interval');
 
-    return () => clearInterval(inactivityCheck);
-  }, [sessionId, session?.status]);
+    inactivityCheckInterval.current = setInterval(async () => {
+      if (!wasKicked) {
+        console.log('[InactivityCheck] Checking for inactive players');
+        const kickedIds = await kickInactivePlayers(sessionId);
+        
+        if (kickedIds.length > 0) {
+          console.log('[InactivityCheck] Kicked players:', kickedIds);
+        }
+      }
+    }, INACTIVITY_CHECK_INTERVAL) as unknown as number;
 
-  // Handle Android back button
+    return () => {
+      if (inactivityCheckInterval.current) {
+        console.log('[InactivityCheck] Stopping inactivity check interval');
+        clearInterval(inactivityCheckInterval.current);
+        inactivityCheckInterval.current = null;
+      }
+    };
+  }, [sessionId, session?.status, wasKicked]);
+
+  useEffect(() => {
+    if (!sessionId || typeof sessionId !== 'string' || !currentUser) return;
+    if (wasKicked || isCheckingKickStatus.current) return;
+
+    const checkKickStatus = async () => {
+      isCheckingKickStatus.current = true;
+      const kicked = await isPlayerKicked(sessionId, currentUser.uid);
+      
+      if (kicked && !wasKicked) {
+        console.log('[KickMonitor] Player has been kicked!');
+        setWasKicked(true);
+        
+        // Clean up all intervals and timers
+        stopAllTimers();
+        
+        Alert.alert(
+          'Kicked for Inactivity',
+          'You have been removed from the quiz due to inactivity. Please make sure to keep the app in the foreground during multiplayer games.',
+          [
+            {
+              text: 'OK',
+              onPress: () => {
+                addBacklogEvent(BACKLOG_EVENTS.USER_LEFT_MULTIPLAYER_GAME, {
+                  sessionId,
+                  userId: currentUser.uid,
+                  reason: 'kicked_inactivity',
+                });
+                router.back();
+              }
+            }
+          ],
+          { cancelable: false }
+        );
+      }
+      
+      isCheckingKickStatus.current = false;
+    };
+
+    checkKickStatus();
+    const kickCheckInterval = setInterval(checkKickStatus, 3000);
+    return () => clearInterval(kickCheckInterval);
+  }, [sessionId, currentUser, wasKicked]);
+
   useEffect(() => {
     const backHandler = BackHandler.addEventListener('hardwareBackPress', () => {
       handleLeave();
       return true;
     });
-
     return () => backHandler.remove();
   }, [sessionId, currentUser]);
 
-  // Listen to session
   useEffect(() => {
     if (!sessionId || typeof sessionId !== 'string') return;
 
@@ -145,7 +228,6 @@ const MultiplayerPlay = () => {
     return unsubscribe;
   }, [sessionId]);
 
-  // Listen to players
   useEffect(() => {
     if (!sessionId || typeof sessionId !== 'string') return;
 
@@ -156,49 +238,57 @@ const MultiplayerPlay = () => {
     return unsubscribe;
   }, [sessionId]);
 
-  // IMPROVED: Handle question changes with proper state management
+  // CRITICAL EFFECT - Question Change Detection with Protection
   useEffect(() => {
-    if (!session || !session.questions || isTransitioning) return;
+    if (!session || !session.questions || isTransitioning || wasKicked) return;
     
     const newQuestionIndex = session.currentQuestionIndex;
     
-    // Only initialize if this is actually a NEW question
+    // Only process if question actually changed
     if (newQuestionIndex !== currentQuestionIndex.current) {
       console.log(`[UI] Question index changed: ${currentQuestionIndex.current} -> ${newQuestionIndex}`);
-      currentQuestionIndex.current = newQuestionIndex;
       
-      // Reset the flag when moving to a new question
+      // CRITICAL: Stop all timers immediately to prevent auto-submit
+      stopAllTimers();
+      
+      // Update tracking
+      currentQuestionIndex.current = newQuestionIndex;
       hasCalledMoveToNext.current = false;
+      questionInitialized.current = false;
       
       const question = session.questions[newQuestionIndex];
       if (question) {
-        // Check if current player already answered this question
         const currentPlayer = players.find(p => p.uid === currentUser?.uid);
         const alreadyAnswered = currentPlayer?.answers.some(
           a => a.questionIndex === newQuestionIndex
         );
         
-        if (alreadyAnswered) {
+        // Check if already answered using our tracking map too
+        const answeredInMap = hasAnsweredForQuestion.current.get(newQuestionIndex);
+        
+        if (alreadyAnswered || answeredInMap) {
           console.log('[UI] Already answered this question, setting hasAnswered=true');
           setHasAnswered(true);
+          questionInitialized.current = true;
         } else {
           console.log('[UI] Initializing new question');
+          // Reset answer state BEFORE initializing
+          resetAnswerState();
           initializeQuestion(question);
         }
       }
     }
-  }, [session?.currentQuestionIndex, players, currentUser, isTransitioning]);
+  }, [session?.currentQuestionIndex, players, currentUser, isTransitioning, wasKicked]);
 
-  // IMPROVED: Check if all answered - now with better debouncing
   useEffect(() => {
-    if (!hasAnswered || isTransitioning || !session || isProcessingTransition.current) return;
+    if (!hasAnswered || isTransitioning || !session || isProcessingTransition.current || wasKicked) return;
     if (session.status !== 'in_progress') return;
-    if (hasCalledMoveToNext.current) {
-      console.log('[UI] Already called moveToNext for this question, skipping check');
-      return;
-    }
+    if (hasCalledMoveToNext.current) return;
 
-    const activePlayers = players.filter(p => p.status !== 'disconnected');
+    const activePlayers = players.filter(p => 
+      p.status !== 'disconnected' && p.status !== 'kicked'
+    );
+    
     if (activePlayers.length === 0) {
       console.log('[UI] No active players, skipping progression check');
       return;
@@ -216,32 +306,34 @@ const MultiplayerPlay = () => {
       console.log('[UI] All active players answered, triggering progression');
       handleAllAnswered();
     }
-  }, [hasAnswered, players, session?.currentQuestionIndex, isTransitioning]);
+  }, [hasAnswered, players, session?.currentQuestionIndex, isTransitioning, wasKicked]);
 
-  // Timer
+  // MODIFIED: Timer effect with better safeguards
   useEffect(() => {
-    if (timeLeft > 0 && !hasAnswered && !isTransitioning) {
+    if (timeLeft > 0 && !hasAnswered && !isTransitioning && !wasKicked && questionInitialized.current) {
       startTimer();
     }
     return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
     };
-  }, [timeLeft, hasAnswered, isTransitioning]);
+  }, [timeLeft, hasAnswered, isTransitioning, wasKicked, questionInitialized.current]);
 
-  // IMPROVED: App state handling
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (nextAppState: AppStateStatus) => {
-      if (
-        appState.current.match(/inactive|background/) &&
-        nextAppState === 'active'
-      ) {
-        // Reconnect player
-        if (sessionId && typeof sessionId === 'string' && currentUser) {
-          reconnectPlayer(sessionId, currentUser.uid);
+      console.log('[AppState] Changed from', appState.current, 'to', nextAppState);
+      
+      if (appState.current.match(/inactive|background/) && nextAppState === 'active') {
+        console.log('[AppState] App came to foreground');
+        
+        if (sessionId && typeof sessionId === 'string' && currentUser && !wasKicked) {
+          console.log('[AppState] Sending immediate heartbeat');
+          updatePlayerActivity(sessionId, currentUser.uid);
         }
 
-        // Recalculate timer
-        if (!hasAnswered && !isTransitioning && questionEndTime.current > 0) {
+        if (!hasAnswered && !isTransitioning && questionEndTime.current > 0 && !wasKicked && questionInitialized.current) {
           const now = Date.now();
           const remaining = Math.max(0, Math.ceil((questionEndTime.current - now) / 1000));
           
@@ -265,6 +357,8 @@ const MultiplayerPlay = () => {
             }
           }
         }
+      } else if (nextAppState.match(/inactive|background/)) {
+        console.log('[AppState] App went to background - heartbeat will stop, may be kicked');
       }
 
       appState.current = nextAppState;
@@ -273,7 +367,40 @@ const MultiplayerPlay = () => {
     return () => {
       subscription.remove();
     };
-  }, [hasAnswered, isTransitioning, currentQuestion, sessionId, currentUser]);
+  }, [hasAnswered, isTransitioning, currentQuestion, sessionId, currentUser, wasKicked]);
+
+  // NEW: Helper function to stop all timers
+  const stopAllTimers = () => {
+    console.log('[Timers] Stopping all timers and animations');
+    
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+    
+    if (previewTimeout.current) {
+      clearTimeout(previewTimeout.current);
+      previewTimeout.current = null;
+    }
+    
+    progressAnim.stopAnimation();
+  };
+
+  // NEW: Reset answer state completely
+  const resetAnswerState = () => {
+    console.log('[State] Resetting answer state');
+    setHasAnswered(false);
+    setSelectedAnswers([]);
+    setFillBlankText('');
+    setMatchingPairs([]);
+    setShuffledRightItems([]);
+    setSelectedLeft(null);
+    setSelectedRight(null);
+    setShowCorrectAnswer(false);
+    setLastAnswerCorrect(null);
+    setPointsEarned(0);
+    isSubmitting.current = false;
+  };
 
   const initializeGame = async () => {
     try {
@@ -287,16 +414,7 @@ const MultiplayerPlay = () => {
       setCurrentUser(user);
 
       if (sessionId && typeof sessionId === 'string') {
-        try {
-          await reconnectPlayer(sessionId, user.uid);
-        } catch (error) {
-          console.log('Not reconnecting (probably new session)');
-        }
-
-        // Activity heartbeat
-        activityInterval.current = setInterval(() => {
-          updatePlayerActivity(sessionId, user.uid);
-        }, 15000) as unknown as number;
+        await updatePlayerActivity(sessionId, user.uid);
       }
     } catch (error) {
       console.error('Error initializing game:', error);
@@ -310,6 +428,10 @@ const MultiplayerPlay = () => {
 
   const initializeQuestion = (question: Question) => {
     console.log('[UI] Initializing question:', question.id, 'at index:', session?.currentQuestionIndex);
+    
+    // CRITICAL: Stop any existing timers first
+    stopAllTimers();
+    
     setCurrentQuestion(question);
     setHasAnswered(false);
     setShowCorrectAnswer(false);
@@ -318,7 +440,6 @@ const MultiplayerPlay = () => {
     setLastAnswerCorrect(null);
     setPointsEarned(0);
     
-    // Check if we already answered this question (important for reconnection)
     const currentPlayer = players.find(p => p.uid === currentUser?.uid);
     const alreadyAnswered = currentPlayer?.answers.some(
       a => a.questionIndex === session?.currentQuestionIndex
@@ -327,7 +448,7 @@ const MultiplayerPlay = () => {
     if (alreadyAnswered) {
       console.log('[UI] Player already answered this question during reconnection');
       setHasAnswered(true);
-      // Don't show preview or start timer
+      questionInitialized.current = true;
       return;
     }
     
@@ -341,13 +462,16 @@ const MultiplayerPlay = () => {
       useNativeDriver: true,
     }).start();
     
-    setTimeout(() => {
+    // CRITICAL: Use ref for timeout to allow cancellation
+    previewTimeout.current = setTimeout(() => {
       setShowQuestionPreview(false);
       startQuestion(question);
-    }, 3000);
+    }, 3000) as unknown as number;
   };
 
   const startQuestion = (question: Question) => {
+    console.log('[Question] Starting question');
+    
     const timeLimit = question.timeLimit || 30;
     const now = Date.now();
     
@@ -355,14 +479,8 @@ const MultiplayerPlay = () => {
     questionStartTime.current = now;
     
     setTimeLeft(timeLimit);
+    resetAnswerState(); // Ensure clean state
 
-    // Reset answer state
-    setSelectedAnswers([]);
-    setFillBlankText('');
-    setSelectedLeft(null);
-    setSelectedRight(null);
-
-    // Initialize matching
     if (question.type === 'matching') {
       const pairs = question.matchPairs.map(pair => ({ left: pair.left, right: '' }));
       setMatchingPairs(pairs);
@@ -370,19 +488,31 @@ const MultiplayerPlay = () => {
       setShuffledRightItems([...rightItems].sort(() => Math.random() - 0.5));
     }
 
-    // Animate progress bar
     progressAnim.setValue(1);
     Animated.timing(progressAnim, {
       toValue: 0,
       duration: timeLimit * 1000,
       useNativeDriver: false,
     }).start();
+    
+    // Mark as initialized
+    questionInitialized.current = true;
   };
 
   const startTimer = () => {
     if (timerRef.current) clearInterval(timerRef.current);
 
     timerRef.current = setInterval(() => {
+      // CRITICAL: Check if we should still be running
+      if (isTransitioning || hasAnsweredForQuestion.current.get(currentQuestionIndex.current)) {
+        console.log('[Timer] Stopping timer - transition or already answered');
+        if (timerRef.current) {
+          clearInterval(timerRef.current);
+          timerRef.current = null;
+        }
+        return;
+      }
+      
       const now = Date.now();
       const remaining = Math.max(0, Math.ceil((questionEndTime.current - now) / 1000));
       
@@ -395,18 +525,33 @@ const MultiplayerPlay = () => {
   };
 
   const handleTimeUp = () => {
-    if (timerRef.current) {
-      clearInterval(timerRef.current);
-      timerRef.current = null;
+    console.log('[Timer] Time up!');
+    
+    // CRITICAL: Multiple safeguards
+    if (isSubmitting.current) {
+      console.log('[Timer] Already submitting, ignoring');
+      return;
     }
-    if (!hasAnswered) {
+    
+    if (hasAnsweredForQuestion.current.get(currentQuestionIndex.current)) {
+      console.log('[Timer] Already answered this question, ignoring');
+      return;
+    }
+    
+    if (isTransitioning) {
+      console.log('[Timer] In transition, ignoring');
+      return;
+    }
+    
+    stopAllTimers();
+    
+    if (!hasAnswered && questionInitialized.current) {
       handleSubmitAnswer();
     }
   };
 
-  // IMPROVED: Simplified all-answered handler
   const handleAllAnswered = useCallback(async () => {
-    if (isTransitioning || isProcessingTransition.current) {
+    if (isTransitioning || isProcessingTransition.current || wasKicked) {
       console.log('[UI] Already processing transition, skipping');
       return;
     }
@@ -423,14 +568,9 @@ const MultiplayerPlay = () => {
     isProcessingTransition.current = true;
     setIsTransitioning(true);
 
-    // Stop timer
-    if (timerRef.current) {
-      clearInterval(timerRef.current);
-      timerRef.current = null;
-    }
-    progressAnim.stopAnimation();
+    // CRITICAL: Stop all timers during transition
+    stopAllTimers();
 
-    // Show correct answer
     await new Promise(resolve => setTimeout(resolve, 100));
     setShowCorrectAnswer(true);
     await new Promise(resolve => setTimeout(resolve, 3000));
@@ -471,13 +611,52 @@ const MultiplayerPlay = () => {
       isProcessingTransition.current = false;
       setIsTransitioning(false);
     }
-  }, [sessionId, session, isTransitioning]);
+  }, [sessionId, session, isTransitioning, wasKicked]);
 
+  // MODIFIED: Submit answer with comprehensive guards
   const handleSubmitAnswer = async () => {
-    if (hasAnswered || !currentQuestion || !session || !sessionId || !currentUser) return;
+    console.log('[Submit] handleSubmitAnswer called');
+    
+    // CRITICAL: Multiple layers of protection
+    if (isSubmitting.current) {
+      console.log('[Submit] Already submitting, aborting');
+      return;
+    }
+    
+    if (hasAnsweredForQuestion.current.get(currentQuestionIndex.current)) {
+      console.log('[Submit] Already answered this question index, aborting');
+      return;
+    }
+    
+    if (hasAnswered) {
+      console.log('[Submit] hasAnswered is true, aborting');
+      return;
+    }
+    
+    if (!currentQuestion || !session || !sessionId || !currentUser || wasKicked) {
+      console.log('[Submit] Missing required data, aborting');
+      return;
+    }
+    
+    if (!questionInitialized.current) {
+      console.log('[Submit] Question not initialized, aborting');
+      return;
+    }
+    
+    if (isTransitioning) {
+      console.log('[Submit] In transition, aborting');
+      return;
+    }
 
-    console.log('Submitting answer for question index:', session.currentQuestionIndex);
+    console.log('[Submit] All checks passed, submitting answer for question index:', session.currentQuestionIndex);
+    
+    // Set all flags immediately
+    isSubmitting.current = true;
     setHasAnswered(true);
+    hasAnsweredForQuestion.current.set(session.currentQuestionIndex, true);
+    
+    // Stop timer immediately
+    stopAllTimers();
 
     const timeSpent = Math.floor((Date.now() - questionStartTime.current) / 1000);
     const currentPlayer = players.find(p => p.uid === currentUser.uid);
@@ -513,10 +692,31 @@ const MultiplayerPlay = () => {
       setLastAnswerCorrect(result.isCorrect);
       setPointsEarned(result.pointsEarned);
       
-      console.log('Answer submitted successfully');
-    } catch (error) {
-      console.error('Error submitting answer:', error);
-      Alert.alert('Error', 'Failed to submit answer');
+      console.log('[Submit] Answer submitted successfully');
+    } catch (error: any) {
+      console.error('[Submit] Error submitting answer:', error);
+      
+      // Reset flags on error
+      isSubmitting.current = false;
+      
+      if (error.message?.includes('kicked')) {
+        setWasKicked(true);
+        Alert.alert(
+          'Kicked for Inactivity',
+          'You have been removed from the quiz due to inactivity.',
+          [
+            {
+              text: 'OK',
+              onPress: () => router.back()
+            }
+          ]
+        );
+      } else {
+        Alert.alert('Error', 'Failed to submit answer');
+        // Allow retry
+        setHasAnswered(false);
+        hasAnsweredForQuestion.current.delete(session.currentQuestionIndex);
+      }
     }
   };
 
@@ -535,8 +735,9 @@ const MultiplayerPlay = () => {
   };
 
   const cleanup = () => {
-    if (timerRef.current) clearInterval(timerRef.current);
-    if (activityInterval.current) clearInterval(activityInterval.current);
+    stopAllTimers();
+    if (heartbeatInterval.current) clearInterval(heartbeatInterval.current);
+    if (inactivityCheckInterval.current) clearInterval(inactivityCheckInterval.current);
   };
 
   const handleLeave = () => {
@@ -563,9 +764,8 @@ const MultiplayerPlay = () => {
     );
   };
 
-  // Question type handlers
   const handleMultipleChoiceAnswer = (optionIndex: number) => {
-    if (hasAnswered) return;
+    if (hasAnswered || wasKicked || isSubmitting.current) return;
     const newSelected = [...selectedAnswers];
     const existingIndex = newSelected.indexOf(optionIndex);
     
@@ -578,7 +778,7 @@ const MultiplayerPlay = () => {
   };
 
   const handleMatchingSelection = (side: 'left' | 'right', index: number) => {
-    if (hasAnswered || !currentQuestion) return;
+    if (hasAnswered || !currentQuestion || wasKicked || isSubmitting.current) return;
 
     if (side === 'left') {
       if (matchingPairs[index]?.right) {
@@ -619,7 +819,6 @@ const MultiplayerPlay = () => {
     return MATCHING_COLORS[leftIndex % MATCHING_COLORS.length];
   };
 
-  // Render functions
   const renderMultipleChoice = (question: Question) => (
     <View style={styles.questionContent}>
       <View style={styles.optionsGrid}>
@@ -654,7 +853,7 @@ const MultiplayerPlay = () => {
               style={optionStyles}
               onPress={() => handleMultipleChoiceAnswer(index)}
               activeOpacity={0.8}
-              disabled={hasAnswered}
+              disabled={hasAnswered || wasKicked || isSubmitting.current}
             >
               <View style={styles.optionContent}>
                 <View style={styles.optionIndicator}>
@@ -689,7 +888,7 @@ const MultiplayerPlay = () => {
           placeholderTextColor="#64748b"
           autoCapitalize="none"
           autoCorrect={false}
-          editable={!hasAnswered}
+          editable={!hasAnswered && !wasKicked && !isSubmitting.current}
         />
         {showCorrectAnswer && (
           <View style={styles.correctAnswerBox}>
@@ -724,7 +923,7 @@ const MultiplayerPlay = () => {
                   isMatched && { backgroundColor: matchColor, borderColor: matchColor }
                 ]}
                 onPress={() => handleMatchingSelection('left', index)}
-                disabled={hasAnswered}
+                disabled={hasAnswered || wasKicked || isSubmitting.current}
               >
                 <Text style={[
                   styles.matchingItemText,
@@ -761,7 +960,7 @@ const MultiplayerPlay = () => {
                   isMatched && { backgroundColor: matchColor, borderColor: matchColor }
                 ]}
                 onPress={() => handleMatchingSelection('right', index)}
-                disabled={hasAnswered || isMatched}
+                disabled={hasAnswered || isMatched || wasKicked || isSubmitting.current}
               >
                 <Text style={[
                   styles.matchingItemText,
@@ -975,17 +1174,16 @@ const MultiplayerPlay = () => {
     );
   }
 
-  const answeredCount = players.filter(p => 
-    p.status !== 'disconnected' && 
+  const activePlayers = players.filter(p => p.status !== 'kicked' && p.status !== 'disconnected');
+  const answeredCount = activePlayers.filter(p => 
     p.answers.some(a => a.questionIndex === session.currentQuestionIndex)
   ).length;
-  const activePlayerCount = players.filter(p => p.status !== 'disconnected').length;
+  const activePlayerCount = activePlayers.length;
   const currentPlayerData = players.find(p => p.uid === currentUser?.uid);
 
   return (
     <LinearGradient colors={['#0f172a', '#1e293b']} style={styles.container}>
       <SafeAreaView style={styles.container}>
-        {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity onPress={handleLeave} style={styles.exitBtn}>
             <Ionicons name="close" size={24} color="#ffffff" />
@@ -1015,7 +1213,6 @@ const MultiplayerPlay = () => {
           </View>
         </View>
 
-        {/* Timer */}
         <View style={styles.timerContainer}>
           <Animated.View 
             style={[
@@ -1051,8 +1248,7 @@ const MultiplayerPlay = () => {
           </View>
         )}
 
-        {/* Question Content */}
-        {!showCorrectAnswer && !showLeaderboard && !hasAnswered && !showQuestionPreview && (
+        {!showCorrectAnswer && !showLeaderboard && !hasAnswered && !showQuestionPreview && !wasKicked && (
           <ScrollView 
             style={styles.scrollContainer}
             contentContainerStyle={styles.scrollContent}
@@ -1062,8 +1258,7 @@ const MultiplayerPlay = () => {
           </ScrollView>
         )}
 
-        {/* Waiting State */}
-        {hasAnswered && !showCorrectAnswer && !showLeaderboard && (
+        {hasAnswered && !showCorrectAnswer && !showLeaderboard && !wasKicked && (
           <View style={styles.fullScreenWaitingContainer}>
             <View style={styles.waitingContent}>
               <LottieView
@@ -1080,8 +1275,7 @@ const MultiplayerPlay = () => {
           </View>
         )}
 
-        {/* Correct Answer Display */}
-        {showCorrectAnswer && lastAnswerCorrect !== null && (
+        {showCorrectAnswer && lastAnswerCorrect !== null && !wasKicked && (
           <View style={styles.fullScreenResultContainer}>
             {lastAnswerCorrect && (
               <LottieView
@@ -1145,12 +1339,12 @@ const MultiplayerPlay = () => {
           </View>
         )}
 
-        {/* Submit Button */}
-        {!hasAnswered && !showCorrectAnswer && !showLeaderboard && !showQuestionPreview && (
+        {!hasAnswered && !showCorrectAnswer && !showLeaderboard && !showQuestionPreview && !wasKicked && (
           <View style={styles.bottomContainer}>
             <TouchableOpacity
               style={styles.submitBtn}
               onPress={handleSubmitAnswer}
+              disabled={isSubmitting.current}
             >
               <Text style={styles.submitBtnText}>Submit Answer</Text>
               <Ionicons name="checkmark" size={20} color="#ffffff" />
@@ -1165,6 +1359,9 @@ const MultiplayerPlay = () => {
   );
 };
 
+export default MultiplayerPlay;
+
+// Add your existing styles here
 const styles = StyleSheet.create({
   container: { flex: 1 },
   header: {
@@ -1796,5 +1993,3 @@ const styles = StyleSheet.create({
     fontSize: 18,
   },
 });
-
-export default MultiplayerPlay;
