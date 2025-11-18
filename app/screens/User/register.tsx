@@ -939,7 +939,7 @@ const RegisterScreen = () => {
                       {
                         translateY: confirmPasswordLabelAnim.interpolate({
                           inputRange: [0, 1],
-                          outputRange: [12,24]
+                          outputRange: [12,-24]
                         })
                       },
                       {
@@ -985,9 +985,9 @@ const RegisterScreen = () => {
                 <TouchableOpacity onPress={() => setShowConfirmPassword(!showConfirmPassword)} style={styles.eyeIcon}>
                   <Ionicons name={showConfirmPassword ? "eye-off" : "eye"} size={20} color="rgba(255, 255, 255, 0.6)" />
                 </TouchableOpacity>
-                <Animated.View style={[styles.checkmark, { opacity: passwordMatchAnim, transform: [{ scale: passwordMatchAnim }] }]}>
+                {/* <Animated.View style={[styles.checkmark, { opacity: passwordMatchAnim, transform: [{ scale: passwordMatchAnim }] }]}>
                   <Ionicons name="checkmark-circle" size={24} color="#5EEF96" />
-                </Animated.View>
+                </Animated.View> */}
               </View>
             </View>
           </Animated.View>
