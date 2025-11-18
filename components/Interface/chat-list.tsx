@@ -94,8 +94,8 @@ export default function ChatList({ refreshing = false, onRefresh }: ChatListProp
               
               showAlert(
                 'success',
-                'Deleted',
-                'Conversation deleted successfully.',
+                'Archived',
+                'Conversation archived successfully.',
                 [{ text: 'OK', onPress: closeAlert }]
               );
             } catch (error) {
