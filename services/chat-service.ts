@@ -194,6 +194,9 @@ export const sendMessage = async (
     if (conversationDoc.exists()) {
       const conversationData = conversationDoc.data();
       const otherParticipantId = conversationData.participants.find((id: string) => id !== senderId);
+      if (!otherParticipantId) {
+        throw new Error('Invalid conversation participants');
+      }
       batch.update(conversationRef, {
         lastMessage: {
           text: text.trim(),
@@ -204,23 +207,36 @@ export const sendMessage = async (
         lastMessageTime: serverTimestamp(),
         [`unreadCount.${otherParticipantId}`]: (conversationData.unreadCount?.[otherParticipantId] || 0) + 1
       });
-      // UPDATED: Use set with merge for userConversations (creates if missing)
-      const userConvRefs = [
-        doc(db, 'userConversations', senderId, 'conversations', conversationId),
-        doc(db, 'userConversations', otherParticipantId, 'conversations', conversationId)
-      ];
-      userConvRefs.forEach(ref => {
-        batch.set(ref, {
-          lastMessage: {
-            text: text.trim(),
-            senderId,
-            senderName: senderData.displayName,
-            timestamp: serverTimestamp()
-          },
-          lastMessageTime: serverTimestamp(),
-          unreadCount: otherParticipantId === senderId ? 0 : (conversationData.unreadCount?.[otherParticipantId] || 0) + 1
-        }, { merge: true });  // KEY: merge=true creates the doc if it doesn't exist
-      });
+      // UPDATED: Update userConversations for both users, reset isDeleted for recipient
+      const senderConvRef = doc(db, 'userConversations', senderId, 'conversations', conversationId);
+      const recipientConvRef = doc(db, 'userConversations', otherParticipantId, 'conversations', conversationId);
+      
+      // For sender: Update last message and unread count (keep isDeleted as is)
+      batch.set(senderConvRef, {
+        lastMessage: {
+          text: text.trim(),
+          senderId,
+          senderName: senderData.displayName,
+          timestamp: serverTimestamp()
+        },
+        lastMessageTime: serverTimestamp(),
+        unreadCount: 0  // Sender has read their own message
+      }, { merge: true });
+      
+      // For recipient: Update last message, increment unread count, and RESET isDeleted to false
+      batch.set(recipientConvRef, {
+        lastMessage: {
+          text: text.trim(),
+          senderId,
+          senderName: senderData.displayName,
+          timestamp: serverTimestamp()
+        },
+        lastMessageTime: serverTimestamp(),
+        unreadCount: (conversationData.unreadCount?.[otherParticipantId] || 0) + 1,
+        isDeleted: false  // KEY: Reset to false so it reappears in recipient's chat list
+      }, { merge: true });
+      
+      console.log(`Message sent: Reset isDeleted for recipient ${otherParticipantId}`);  // DEBUG: Remove after testing
     }
     
     await batch.commit();
@@ -344,16 +360,18 @@ export const listenToConversations = (
     orderBy('lastMessageTime', 'desc')
   );
   return onSnapshot(userConversationsQuery, async (snapshot: QuerySnapshot<DocumentData>) => {
+    console.log(`listenToConversations fired for user ${userId}, docs: ${snapshot.docs.length}`);  // DEBUG
     const conversations: ConversationPreview[] = [];
     for (const docSnap of snapshot.docs) {
       const data = docSnap.data();
+      console.log(`Processing conversation ${data.conversationId}, unreadCount: ${data.unreadCount}`);  // DEBUG
       const conversationId = data.conversationId;
       // Get other user info
       const convDoc = await getDoc(doc(db, 'conversations', conversationId));
       if (convDoc.exists()) {
-        const convData = convDoc.data() as Conversation;  // SAFE CAST
+        const convData = convDoc.data() as Conversation;
         const otherParticipantId = convData.participants.find((id: string) => id !== userId);
-        if (!otherParticipantId) continue;  // SKIP IF INVALID
+        if (!otherParticipantId) continue;
         const otherUserInfo = convData.participantInfo[otherParticipantId];
         conversations.push({
           id: conversationId,
@@ -369,6 +387,7 @@ export const listenToConversations = (
         });
       }
     }
+    console.log(`Callback with ${conversations.length} conversations`);  // DEBUG
     callback(conversations);
   });
 };
@@ -381,6 +400,8 @@ export const markMessagesAsRead = async (
   userId: string
 ): Promise<boolean> => {
   try {
+    console.log(`Marking messages as read for user ${userId} in conversation ${conversationId}`);  // DEBUG
+    
     const batch = writeBatch(db);
     
     // Update main conversation
@@ -389,11 +410,24 @@ export const markMessagesAsRead = async (
       [`unreadCount.${userId}`]: 0
     });
     
-    // UPDATED: Use set with merge for userConversations
+    // Ensure userConversations doc exists and update it
     const userConvRef = doc(db, 'userConversations', userId, 'conversations', conversationId);
-    batch.set(userConvRef, {
-      unreadCount: 0
-    }, { merge: true });  // Creates if missing
+    const userConvSnap = await getDoc(userConvRef);
+    
+    if (!userConvSnap.exists()) {
+      console.log('userConversations doc does not exist, creating it');  // DEBUG
+      batch.set(userConvRef, {
+        conversationId,
+        lastMessageTime: serverTimestamp(),
+        unreadCount: 0,
+        isDeleted: false
+      });
+    } else {
+      console.log('userConversations doc exists, updating unreadCount to 0');  // DEBUG
+      batch.update(userConvRef, {
+        unreadCount: 0
+      });
+    }
     
     // Mark messages as read in subcollection
     const messagesQuery = query(
@@ -414,6 +448,7 @@ export const markMessagesAsRead = async (
     });
     
     await batch.commit();
+    console.log('Batch committed successfully, messages marked as read');  // DEBUG
     return true;
   } catch (error) {
     console.error('Error marking messages as read:', error);
