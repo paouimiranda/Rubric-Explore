@@ -33,7 +33,7 @@ export const db = getFirestore(app);
 export const storage = getStorage(app);
 export const functions = getFunctions(app);
 export const rtdb = getDatabase(app);
-
+export const firestore = getFirestore(app);
 // Log initialization status
 console.log('🔥 Firebase initialized successfully');
 console.log('📡 RTDB URL:', firebaseConfig.databaseURL);
