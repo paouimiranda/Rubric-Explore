@@ -436,9 +436,13 @@ const QuizPlay = () => {
                     <View style={styles.radioCircleInner} />
                   )}
                 </View>
-                <Text style={styles.optionText} numberOfLines={3}>
-                  {option}
-                </Text>
+                <Text 
+  style={styles.optionText} 
+  adjustsFontSizeToFit={true}
+  minimumFontScale={0.7}
+>
+  {option}
+</Text>
               </View>
             </TouchableOpacity>
           );

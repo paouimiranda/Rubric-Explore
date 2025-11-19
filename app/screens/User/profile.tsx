@@ -216,7 +216,7 @@ export default function ProfileScreen() {
                 </View>
                 <View style={styles.statInfo}>
                   <Text style={styles.statNumber}>{stats.totalQuizzesCreated}</Text>
-                  <Text style={styles.statLabel}>Quizzes</Text>
+                  <Text style={styles.statLabel} adjustsFontSizeToFit numberOfLines={1}>Quizzes</Text>
                 </View>
               </View>
             </View>
@@ -234,7 +234,7 @@ export default function ProfileScreen() {
                 </View>
                 <View style={styles.statInfo}>
                   <Text style={styles.statNumber}>{stats.totalNotebooksCreated || 0}</Text>
-                  <Text style={styles.statLabel}>Notebooks</Text>
+                  <Text style={styles.statLabel} adjustsFontSizeToFit numberOfLines={1}>Notebooks</Text>
                 </View>
               </View>
             </View>
@@ -252,7 +252,7 @@ export default function ProfileScreen() {
                 </View>
                 <View style={styles.statInfo}>
                   <Text style={styles.statNumber}>{stats.quizzesTaken}</Text>
-                  <Text style={styles.statLabel}>Completed</Text>
+                  <Text style={styles.statLabel} adjustsFontSizeToFit numberOfLines={1}>Completed</Text>
                 </View>
               </View>
             </View>
@@ -270,7 +270,7 @@ export default function ProfileScreen() {
                 </View>
                 <View style={styles.statInfo}>
                   <Text style={styles.statNumber}>{stats.averageQuizScore}%</Text>
-                  <Text style={styles.statLabel}>Avg Score</Text>
+                  <Text style={styles.statLabel} adjustsFontSizeToFit numberOfLines={1}>Avg Score</Text>
                 </View>
               </View>
             </View>
