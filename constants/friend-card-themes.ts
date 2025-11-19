@@ -35,16 +35,16 @@ export interface FriendCardTheme {
 
 export const FRIEND_CARD_THEMES: Record<string, FriendCardTheme> = {
   // DEFAULT (Free)
-  // default: {
-  //   id: 'default',
-  //   name: 'Default',
-  //   rarity: 'common',
-  //   price: 0,
-  //   description: 'The classic look',
-  //   backgroundColor: 'rgba(31, 41, 55, 0.7)',
-  //   borderColor: 'rgba(75, 85, 99, 0.3)',
-  //   borderWidth: 1,
-  // },
+  default: {
+    id: 'default',
+    name: 'Default',
+    rarity: 'common',
+    price: 0,
+    description: 'The classic look',
+    backgroundColor: 'rgba(31, 41, 55, 0.7)',
+    borderColor: 'rgba(75, 85, 99, 0.3)',
+    borderWidth: 1,
+  },
 
   // GRADIENT THEMES
   sunsetBlaze: {

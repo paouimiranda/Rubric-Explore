@@ -21,19 +21,19 @@ export interface ProfileTheme {
 }
 
 export const PROFILE_THEMES: Record<string, ProfileTheme> = {
-  // default: {
-  //   id: 'default',
-  //   name: 'Default',
-  //   description: 'Classic rubric theme',
-  //   icon: 'water',
-  //   rarity: 'common',
-  //   price: 0, // Free - default theme
-  //   gradient: {
-  //     background: ['#0f2c45', '#1a3a52'],
-  //     decorativeBar: ['#6ADBCE', '#568CD2', '#EE007F'],
-  //     accent: ['#6ADBCE', '#568CD2'],
-  //   },
-  // },
+  default: {
+    id: 'default',
+    name: 'Default',
+    description: 'Classic rubric theme',
+    icon: 'water',
+    rarity: 'common',
+    price: 0, // Free - default theme
+    gradient: {
+      background: ['#0f2c45', '#1a3a52'],
+      decorativeBar: ['#6ADBCE', '#568CD2', '#EE007F'],
+      accent: ['#6ADBCE', '#568CD2'],
+    },
+  },
   
   sunset: {
     id: 'sunset',
