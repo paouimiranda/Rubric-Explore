@@ -207,22 +207,27 @@ const QuizMaker = () => {
   const handleSetCorrectAnswer = (answerIndex: number) => {
     const updated = { ...questions[currentQuestionIndex] };
     
-    if (updated.type === 'multiple_choice') {
-      const currentAnswers = [...updated.correctAnswers];
-      const index = currentAnswers.indexOf(answerIndex);
+    // if (updated.type === 'multiple_choice') {
+    //   const currentAnswers = [...updated.correctAnswers];
+    //   const index = currentAnswers.indexOf(answerIndex);
       
-      if (index > -1) {
-        currentAnswers.splice(index, 1);
-      } else {
-        currentAnswers.push(answerIndex);
-      }
+    //   if (index > -1) {
+    //     currentAnswers.splice(index, 1);
+    //   } else {
+    //     currentAnswers.push(answerIndex);
+    //   }
       
-      if (currentAnswers.length === 0) {
-        currentAnswers.push(answerIndex);
-      }
+    //   if (currentAnswers.length === 0) {
+    //     currentAnswers.push(answerIndex);
+    //   }
       
-      updated.correctAnswers = currentAnswers;
-    }
+    //   updated.correctAnswers = currentAnswers;
+    // }
+
+     if (updated.type === 'multiple_choice') {
+    // Always set to single answer only
+    updated.correctAnswers = [answerIndex];
+  }
     
     updateQuestion(currentQuestionIndex, updated);
   };

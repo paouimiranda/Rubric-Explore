@@ -42,7 +42,7 @@ interface AlertState {
   buttons: Array<{
     text: string;
     onPress: () => void;
-    style?: 'default' | 'cancel' | 'primary';
+    style?: 'default' | 'cancel' | 'primary' | 'delete';
   }>;
 }
 
@@ -565,7 +565,7 @@ const handleRemoveImage = async () => {
             setAlert(prev => ({ ...prev, visible: false }));
             showAlert('success', 'Success', 'Tag deleted successfully!');
           },
-          style: 'primary'
+          style: 'delete'
         }
       ]
     );

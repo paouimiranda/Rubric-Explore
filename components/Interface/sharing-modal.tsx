@@ -173,11 +173,25 @@ export default function SharingModal({
     }
   };
 
-  const copyToClipboard = async (token: string) => {
-    const url = sharingService.generateShareUrl(token);
-    await Clipboard.setString(url);
-    showAlert('success', 'Copied!', 'Share link copied to clipboard');
-  };
+  const copyToClipboard = async (token: ShareToken) => {  // ← Pass full token object
+  let textToCopy: string;
+  
+  if (token.method === 'share_code') {
+    // For share codes, only copy the code itself
+    textToCopy = token.token;
+  } else {
+    // For public URLs, copy the full URL
+    textToCopy = sharingService.generateShareUrl(token.token);
+  }
+  
+  await Clipboard.setString(textToCopy);
+  
+  const message = token.method === 'share_code' 
+    ? 'Share code copied to clipboard' 
+    : 'Share link copied to clipboard';
+    
+  showAlert('success', 'Copied!', message);
+};
 
   const shareNative = async (token: string) => {
     try {
@@ -573,7 +587,7 @@ export default function SharingModal({
                     <View style={styles.tokenActions}>
                       <TouchableOpacity
                         style={styles.actionButton}
-                        onPress={() => copyToClipboard(token.token)}
+                        onPress={() => copyToClipboard(token)}
                         activeOpacity={0.7}
                       >
                         <Ionicons name="copy" size={16} color="#667eea" />

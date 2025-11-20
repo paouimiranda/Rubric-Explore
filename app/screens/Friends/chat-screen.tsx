@@ -1,5 +1,6 @@
 // app/screens/Chat/chat-screen.tsx
 import { useNotifications } from '@/app/contexts/NotificationContext';
+import { CustomAlertModal } from '@/components/Interface/custom-alert-modal';
 import { auth } from '@/firebase';
 import {
   createOrGetConversation,
@@ -9,12 +10,14 @@ import {
   sendMessage
 } from '@/services/chat-service';
 import { Ionicons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Clipboard,
   KeyboardAvoidingView,
   Platform,
   SafeAreaView,
@@ -23,7 +26,7 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  View
+  View,
 } from 'react-native';
 
 export default function ChatScreen() {
@@ -33,6 +36,18 @@ export default function ChatScreen() {
     otherUserId: string;
     otherUserName: string;
   }>();
+
+  interface AlertState {
+  visible: boolean;
+  type: 'info' | 'success' | 'error' | 'warning' | 'question';
+  title: string;
+  message: string;
+  buttons?: Array<{
+    text: string;
+    onPress: () => void;
+    style?: 'default' | 'cancel' | 'primary';
+  }>;
+}
 
   const { setActiveConversationId } = useNotifications();
   
@@ -44,6 +59,38 @@ export default function ChatScreen() {
   const [conversationId, setConversationId] = useState<string>(paramConversationId || '');
   const scrollViewRef = useRef<ScrollView>(null);
   const currentUser = auth.currentUser;
+  const [alert, setAlert] = useState<AlertState>({
+      visible: false,
+      type: 'info',
+      title: '',
+      message: '',
+    });
+  
+    const showAlert = (
+      type: 'info' | 'success' | 'error' | 'warning' | 'question',
+      title: string,
+      message: string,
+      buttons?: AlertState['buttons']
+    ) => {
+      setAlert({
+        visible: true,
+        type,
+        title,
+        message,
+        buttons: buttons || [
+          {
+            text: 'OK',
+            onPress: () => closeAlert(),
+            style: 'primary',
+          },
+        ],
+      });
+    };
+  
+    const closeAlert = () => {
+      setAlert(prev => ({ ...prev, visible: false }));
+    };
+  
 
   useEffect(() => {
     if (!currentUser || !otherUserId) {
@@ -126,6 +173,48 @@ export default function ChatScreen() {
     }
   };
 
+  const handleCopyMessage = (messageText: string) => {
+    try {
+
+      showAlert(
+      'question',
+      'Copy Message',
+      `Would you like to copy the text in the message to your clipboard?`,
+      [
+        {
+          text: 'Cancel',
+          onPress: () => setAlert(prev => ({ ...prev, visible: false })),
+          style: 'cancel'
+        },
+        {
+          text: 'Copy',
+          onPress: () => {
+            Clipboard.setString(messageText);
+            setAlert(prev => ({ ...prev, visible: false }));
+            showAlert('success', 'Success', 'Copied to clipboard!');
+          },
+          style: 'primary'
+        }
+      ]
+    );
+      
+      
+      // Provide haptic feedback
+      if (Platform.OS === 'ios') {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      } else {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      }
+      
+      
+    } catch (error) {
+      showAlert(
+        'error',
+        'Error',
+        'Failed to copy to clipboard, please try again');
+    }
+  };
+
   const formatMessageTime = (timestamp: any) => {
     if (!timestamp) return '';
     
@@ -159,11 +248,16 @@ export default function ChatScreen() {
           </View>
         )}
         
-        <View style={[
-          styles.messageBubble,
-          isOwnMessage ? styles.ownMessageBubble : styles.otherMessageBubble,
-          !isOwnMessage && !showAvatar && styles.messageWithoutAvatar
-        ]}>
+        <TouchableOpacity
+          onLongPress={() => handleCopyMessage(message.text)}
+          delayLongPress={500}
+          activeOpacity={0.7}
+          style={[
+            styles.messageBubble,
+            isOwnMessage ? styles.ownMessageBubble : styles.otherMessageBubble,
+            !isOwnMessage && !showAvatar && styles.messageWithoutAvatar
+          ]}
+        >
           {!isOwnMessage && showAvatar && (
             <Text style={styles.senderName}>{message.senderName}</Text>
           )}
@@ -180,7 +274,7 @@ export default function ChatScreen() {
             {formatMessageTime(message.timestamp)}
             {message.edited && ' (edited)'}
           </Text>
-        </View>
+        </TouchableOpacity>
         
         {isOwnMessage && showAvatar && (
           <View style={styles.messageAvatar}>
@@ -287,6 +381,16 @@ export default function ChatScreen() {
             </View>
           </View>
         </KeyboardAvoidingView>
+
+         {/* Custom Alert Modal */}
+              <CustomAlertModal
+                visible={alert.visible}
+                type={alert.type}
+                title={alert.title}
+                message={alert.message}
+                buttons={alert.buttons}
+                onClose={closeAlert}
+              />
       </SafeAreaView>
     </LinearGradient>
   );

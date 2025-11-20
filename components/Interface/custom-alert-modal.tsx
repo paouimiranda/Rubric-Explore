@@ -13,13 +13,13 @@ import {
 
 interface CustomAlertModalProps {
   visible: boolean;
-  type?: 'info' | 'success' | 'error' | 'warning';
+  type?: 'info' | 'success' | 'error' | 'warning' | 'question';
   title: string;
   message: string;
   buttons?: Array<{
     text: string;
     onPress: () => void;
-    style?: 'default' | 'cancel' | 'primary';
+    style?: 'default' | 'cancel' | 'primary' | 'delete';
   }>;
   onClose?: () => void;
 }
@@ -85,6 +85,12 @@ export const CustomAlertModal: React.FC<CustomAlertModalProps> = ({
           colors: ['#f59e0b', '#d97706'],
           bgColor: 'rgba(245, 158, 11, 0.15)',
         };
+      case 'question':
+          return {
+            name: 'help-circle',
+            colors: ['#1dceffff', '#71B280'],
+            bgColor: 'rgba(16, 185, 129, 0.15)',
+          };
       default:
         return {
           name: 'information-circle',
@@ -100,6 +106,8 @@ export const CustomAlertModal: React.FC<CustomAlertModalProps> = ({
         return ['#667eea', '#764ba2'] as any;
       case 'cancel':
         return ['#475569', '#334155'] as any;
+      case 'delete':
+        return ['#ec008c', '#fc6767'] as any;
       default:
         return ['#1e293b', '#0f172a'] as any;
     }
@@ -209,7 +217,7 @@ export const CustomAlertModal: React.FC<CustomAlertModalProps> = ({
                         style={[
                           styles.buttonText,
                           button.style === 'cancel' && styles.buttonTextSecondary,
-                        ]}
+                        ]} adjustsFontSizeToFit numberOfLines={2}
                       >
                         {button.text}
                       </Text>
@@ -305,6 +313,8 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: 'bold',
     color: '#ffffff',
+    margin: 5,
+    textAlign: 'center',
   },
   buttonTextSecondary: {
     color: '#cbd5e1',

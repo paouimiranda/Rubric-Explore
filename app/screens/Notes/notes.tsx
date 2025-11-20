@@ -1,4 +1,4 @@
-// notes.tsx - Refined and Restructured UI - COMPLETE VERSION
+// notes.tsx - Refined and Restructured UI - COMPLETE VERSION WITH ICON+TEXT BUTTONS
 import CreateNotebookModal from '@/components/Interface/create-notebook-modal';
 import { CustomAlertModal } from '@/components/Interface/custom-alert-modal';
 import { JoinNoteIconButton } from '@/components/Interface/join-button';
@@ -332,6 +332,14 @@ export default function NotesHome() {
     }
   };
 
+  const getViewLabel = () => {
+    switch (viewMode) {
+      case 'list': return 'List';
+      case 'compact': return 'Compact';
+      case 'grid': return 'Grid';
+    }
+  };
+
   const NotebookCard = ({ item }: { item: Notebook }) => {
     const primaryProperty = item.properties?.[0];
     const coverImageSource = getCoverImageSource(item.coverImage);
@@ -629,38 +637,48 @@ export default function NotesHome() {
           ListHeaderComponent={
             <View style={styles.headerContainer}>
               <View style={styles.titleSection}>
-                <View style={styles.titleRow}>
-                  <View style={styles.titleTextContainer}>
-                    <Text style={styles.mainTitle} adjustsFontSizeToFit numberOfLines={1}>My Notebooks</Text>
-                    <Text style={styles.subtitle} adjustsFontSizeToFit numberOfLines={1}>Organize your thoughts and ideas</Text>
-                  </View>
-                  
-                  <View style={styles.headerButtons}>
-                    <View style={styles.actionButtonWrapper}>
-                      <LinearGradient
-                        colors={['#8b5cf6', '#7c3aed']}
-                        style={styles.actionButton}
-                      >
+                <View style={styles.titleTextContainer}>
+                  <Text style={styles.mainTitle} adjustsFontSizeToFit numberOfLines={1}>My Notebooks</Text>
+                  <Text style={styles.subtitle} adjustsFontSizeToFit numberOfLines={1}>Organize your thoughts and ideas</Text>
+                </View>
+                
+                <View style={styles.headerButtons}>
+                  <TouchableOpacity 
+                    activeOpacity={0.8}
+                    style={styles.actionButtonWrapper}
+                  >
+                    <LinearGradient
+                      colors={['#8b5cf6', '#7c3aed']}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 1 }}
+                      style={styles.actionButtonWithText}
+                    >
+                      <Ionicons name="link-outline" size={18} color="#ffffff" />
+                      <Text style={styles.actionButtonText}>Join</Text>
+                      <View style={styles.hiddenJoinButton}>
                         <JoinNoteIconButton 
                           style={styles.joinButtonOverride}
                           onNoteJoined={(noteId, permission) => {}}
                         />
-                      </LinearGradient>
-                    </View>
-                    
-                    <TouchableOpacity 
-                      onPress={cycleViewMode}
-                      activeOpacity={0.8}
-                      style={styles.actionButtonWrapper}
+                      </View>
+                    </LinearGradient>
+                  </TouchableOpacity>
+                  
+                  <TouchableOpacity 
+                    onPress={cycleViewMode}
+                    activeOpacity={0.8}
+                    style={styles.actionButtonWrapper}
+                  >
+                    <LinearGradient
+                      colors={['#f59e0b', '#d97706']}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 1 }}
+                      style={styles.actionButtonWithText}
                     >
-                      <LinearGradient
-                        colors={['#f59e0b', '#d97706']}
-                        style={styles.actionButton}
-                      >
-                        <Ionicons name={getViewIcon()} size={22} color="#ffffff" />
-                      </LinearGradient>
-                    </TouchableOpacity>
-                  </View>
+                      <Ionicons name={getViewIcon()} size={18} color="#ffffff" />
+                      <Text style={styles.actionButtonText}>{getViewLabel()}</Text>
+                    </LinearGradient>
+                  </TouchableOpacity>
                 </View>
               </View>
               
@@ -784,14 +802,13 @@ const styles = StyleSheet.create({
   titleSection: {
     marginBottom: 24,
     paddingTop: 8,
-  },
-  titleRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'flex-start',
+    alignItems: 'center',
   },
   titleTextContainer: {
     flex: 1,
+    marginRight: 12,
   },
   mainTitle: {
     fontSize: 32,
@@ -806,29 +823,45 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   headerButtons: {
-    flexDirection: 'row',
-    gap: 12,
-    marginLeft: 16,
+    flexDirection: 'column',
+    gap: 10,
   },
   actionButtonWrapper: {
     borderRadius: 16,
     overflow: 'hidden',
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.3,
-    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
     elevation: 6,
   },
-  actionButton: {
-    width: 52,
-    height: 52,
-    justifyContent: 'center',
+  actionButtonWithText: {
+    flexDirection: 'row',
     alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    gap: 8,
+    minWidth: 90,
+    position: 'relative',
+  },
+  actionButtonText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#ffffff',
+    letterSpacing: 0.3,
+  },
+  hiddenJoinButton: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    opacity: 0,
   },
   joinButtonOverride: {
     backgroundColor: 'transparent',
-    width: 52,
-    height: 52,
+    width: '100%',
+    height: '100%',
     borderRadius: 0,
     shadowColor: 'transparent',
     elevation: 0,

@@ -342,16 +342,16 @@ const QuizPlay = () => {
 
   // Question type handlers
   const handleMultipleChoiceAnswer = (optionIndex: number) => {
-    const newSelected = [...selectedAnswers];
-    const existingIndex = newSelected.indexOf(optionIndex);
+    // const newSelected = [...selectedAnswers];
+    // const existingIndex = newSelected.indexOf(optionIndex);
     
-    if (existingIndex > -1) {
-      newSelected.splice(existingIndex, 1);
-    } else {
-      newSelected.push(optionIndex);
-    }
+    // if (existingIndex > -1) {
+    //   newSelected.splice(existingIndex, 1);
+    // } else {
+    //   newSelected.push(optionIndex);
+    // }
     
-    setSelectedAnswers(newSelected);
+    setSelectedAnswers([optionIndex]);
   };
 
   const handleMatchingSelection = (side: 'left' | 'right', index: number) => {
