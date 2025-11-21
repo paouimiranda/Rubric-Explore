@@ -726,7 +726,7 @@ export default function PlanModal({
             {reminderPickerVisible && hasPermission && (
               <View style={[styles.pickerContainer, styles.fullWidth]}>
                 {[
-                  { minutes: 0, label: 'At plan time', icon: 'notifications-off' },
+                  { minutes: 0, label: 'None', icon: 'notifications-off' },
                   { minutes: 5, label: '5 minutes before', icon: 'alarm' },
                   { minutes: 15, label: '15 minutes before', icon: 'notifications' },
                   { minutes: 30, label: '30 minutes before', icon: 'notifications' },
