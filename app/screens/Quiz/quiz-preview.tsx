@@ -32,7 +32,7 @@ const QuizPreview = () => {
   // Alert modal state
   const [alertModal, setAlertModal] = useState({
     visible: false,
-    type: 'info' as 'info' | 'success' | 'error' | 'warning',
+    type: 'info' as 'info' | 'success' | 'error' | 'warning' | 'question',
     title: '',
     message: '',
     buttons: [] as Array<{
@@ -45,11 +45,11 @@ const QuizPreview = () => {
   useEffect(() => {
     if (quizId && typeof quizId === 'string') {
       loadQuiz(quizId);
-    }
+    }0
   }, [quizId]);
 
   const showAlert = (
-    type: 'info' | 'success' | 'error' | 'warning',
+    type: 'info' | 'success' | 'error' | 'warning' | 'question',
     title: string,
     message: string,
     buttons: Array<{
@@ -170,7 +170,7 @@ const QuizPreview = () => {
       }
 
       showAlert(
-        'info',
+        'question',
         'Host Multiplayer Quiz',
         'Would you like to create a multiplayer lobby for this quiz?',
         [

@@ -68,35 +68,41 @@ export class ShopService {
    * Get user inventory from users collection
    */
   static async getUserInventory(): Promise<UserInventory> {
-    try {
-      const userId = this.getCurrentUserId();
-      const userDoc = await getDoc(doc(db, 'users', userId));
-      
-      if (!userDoc.exists()) {
-        // Return default inventory if user doc doesn't exist
-        return {
-          ownedThemes: ['default'], // Everyone starts with default theme
-          selectedFriendCardTheme: 'default',
-          ownedAvatars: [],
-          ownedBadges: [],
-          ownedEffects: [],
-        };
-      }
-      
-      const userData = userDoc.data();
+  try {
+    const userId = this.getCurrentUserId();
+    const userDoc = await getDoc(doc(db, 'users', userId));
+    
+    if (!userDoc.exists()) {
       return {
-        ownedThemes: userData.inventory?.ownedThemes || ['default'],
-        selectedFriendCardTheme: userData.inventory?.selectedFriendCardTheme || 'default',
-        ownedAvatars: userData.inventory?.ownedAvatars || [],
-        activeAvatar: userData.inventory?.activeAvatar,
-        ownedBadges: userData.inventory?.ownedBadges || [],
-        ownedEffects: userData.inventory?.ownedEffects || [],
+        ownedThemes: ['default'],
+        selectedFriendCardTheme: 'default',
+        ownedAvatars: [],
+        ownedBadges: [],
+        ownedEffects: [],
       };
-    } catch (error) {
-      console.error('Error fetching user inventory:', error);
-      throw error;
     }
+    
+    const userData = userDoc.data();
+    const ownedThemes = userData.inventory?.ownedThemes || [];
+    
+    // Ensure 'default' is always included
+    const allOwnedThemes = ownedThemes.includes('default') 
+      ? ownedThemes 
+      : ['default', ...ownedThemes];
+    
+    return {
+      ownedThemes: allOwnedThemes,
+      selectedFriendCardTheme: userData.inventory?.selectedFriendCardTheme || 'default',
+      ownedAvatars: userData.inventory?.ownedAvatars || [],
+      activeAvatar: userData.inventory?.activeAvatar,
+      ownedBadges: userData.inventory?.ownedBadges || [],
+      ownedEffects: userData.inventory?.ownedEffects || [],
+    };
+  } catch (error) {
+    console.error('Error fetching user inventory:', error);
+    throw error;
   }
+}
 
   /**
    * Check if user owns a specific theme

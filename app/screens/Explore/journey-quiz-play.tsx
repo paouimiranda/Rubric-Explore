@@ -157,6 +157,8 @@ const JourneyQuizPlay = () => {
   const [selectedLeft, setSelectedLeft] = useState<number | null>(null);
   const [selectedRight, setSelectedRight] = useState<number | null>(null);
 
+  const animationRef = useRef<Animated.CompositeAnimation | null>(null);
+
   useEffect(() => {
     if (quizId && typeof quizId === 'string' && levelId) {
       loadQuizAndCheckAttempt();
@@ -180,6 +182,29 @@ const JourneyQuizPlay = () => {
       }
     };
   }, [timeLeft, isPaused, isQuizCompleted, showPreQuiz]);
+
+  useEffect(() => {
+  if (isPaused) {
+    // Stop the animation and timer when paused
+    animationRef.current?.stop();
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+  } else if (!isQuizCompleted && !showPreQuiz && timeLeft > 0) {
+    // Resume animation and timer when unpaused
+    startTimer();
+  }
+}, [isPaused]);
+
+useEffect(() => {
+  return () => {
+    animationRef.current?.stop();
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+    }
+  };
+}, []);
 
   const loadQuizAndCheckAttempt = async () => {
     try {
@@ -255,6 +280,8 @@ const JourneyQuizPlay = () => {
     const shuffled = [...rightItems].sort(() => Math.random() - 0.5);
     setShuffledRightItems(shuffled);
   }
+  
+  // DON'T start animation here - let startTimer handle it
 };
 
   const startTimer = () => {
@@ -262,16 +289,20 @@ const JourneyQuizPlay = () => {
     clearInterval(timerRef.current);
   }
   
+  // Stop any existing animation
+  animationRef.current?.stop();
+  
   const question = quiz?.questions[currentQuestionIndex];
   const totalTime = question?.timeLimit || 30;
   
   // Start continuous animation from current position to 0
-  Animated.timing(progressAnim, {
+  animationRef.current = Animated.timing(progressAnim, {
     toValue: 0,
-    duration: timeLeft * 1000, // Smooth animation for remaining time
+    duration: timeLeft * 1000,
     useNativeDriver: false,
-    easing: (t) => t, // Linear easing
-  }).start();
+    easing: (t) => t,
+  });
+  animationRef.current.start();
   
   timerRef.current = setInterval(() => {
     setTimeLeft(prev => {

@@ -394,29 +394,17 @@ const ProfileThemeModal: React.FC<ProfileThemeModalProps> = ({
     setLoading(true);
     const result = await ProfileThemeShopService.setSelectedProfileTheme(theme.id);
     if (result.success) {
-      // Delay the alert to avoid scheduling updates during render
+      // Close modal first, then reload data, then show alert
+      handleClose();
       setTimeout(() => {
-        showAlert('success', 'Activated! ✨', result.message, [
-          {
-            text: 'OK',
-            onPress: () => {
-              closeAlert();
-              onSuccess();
-              handleClose();
-            },
-            style: 'primary',
-          },
-        ]);
-      }, 100);
+        onSuccess(); // Reload data
+        showAlert('success', 'Activated! ✨', result.message);
+      }, 400); // Wait for modal close animation to complete
     } else {
-      setTimeout(() => {
-        showAlert('error', 'Error', result.message);
-      }, 100);
+      showAlert('error', 'Error', result.message);
     }
   } catch (error) {
-    setTimeout(() => {
-      showAlert('error', 'Error', 'Something went wrong');
-    }, 100);
+    showAlert('error', 'Error', 'Something went wrong');
   } finally {
     setLoading(false);
   }

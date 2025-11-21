@@ -15,13 +15,11 @@ import { Note } from '../app/types/notebook';
 import { db } from '../firebase';
 
 export type SharePermission = 'view' | 'edit';
-export type ShareMethod = 'public_url' | 'email_invite' | 'share_code';
 
 export interface ShareToken {
   id: string;
   noteId: string;
   createdBy: string;
-  method: ShareMethod;
   permission: SharePermission;
   token: string;
   expiresAt: Date | null;
@@ -29,8 +27,8 @@ export interface ShareToken {
   maxUses: number | null;
   createdAt: Date;
   isActive: boolean;
-  inviteeEmail?: string; // For email invites
-  inviteeName?: string;  // For named invites
+  inviteeEmail?: string;
+  inviteeName?: string;
 }
 
 export interface ShareLinkOptions {
@@ -44,16 +42,6 @@ export interface ShareLinkOptions {
 
 class SharingService {
   
-  // Generate a secure random token
-  private generateToken(length: number = 32): string {
-    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-    let result = '';
-    for (let i = 0; i < length; i++) {
-      result += chars.charAt(Math.floor(Math.random() * chars.length));
-    }
-    return result;
-  }
-
   // Generate a shorter share code (for easy sharing)
   private generateShareCode(): string {
     const chars = 'ABCDEFGHIJKLMNPQRSTUVWXYZ23456789'; // Removed confusing chars
@@ -64,11 +52,49 @@ class SharingService {
     return result;
   }
 
-  // Create a shareable link for a note
+  // Check if a "forever unlimited" share code already exists (no max uses AND no expiry)
+  async checkExistingUnlimitedCode(
+    noteId: string, 
+    creatorUid: string, 
+    permission: SharePermission
+  ): Promise<ShareToken | null> {
+    try {
+      const tokensRef = collection(db, 'shareTokens');
+      const q = query(
+        tokensRef,
+        where('noteId', '==', noteId),
+        where('createdBy', '==', creatorUid),
+        where('permission', '==', permission),
+        where('isActive', '==', true)
+      );
+      const querySnap = await getDocs(q);
+
+      // Find a token that has NO maxUses AND NO expiration (forever unlimited)
+      for (const docSnap of querySnap.docs) {
+        const data = docSnap.data();
+        const noMaxUses = data.maxUses === null || data.maxUses === undefined;
+        const noExpiration = data.expiresAt === null || data.expiresAt === undefined;
+        
+        if (noMaxUses && noExpiration) {
+          return {
+            id: docSnap.id,
+            ...data,
+            createdAt: data.createdAt?.toDate() || new Date(),
+            expiresAt: null,
+          } as ShareToken;
+        }
+      }
+      return null;
+    } catch (error) {
+      console.error('Error checking existing unlimited code:', error);
+      return null;
+    }
+  }
+
+  // Create a shareable code for a note
   async createShareLink(
     noteId: string, 
     creatorUid: string, 
-    method: ShareMethod = 'public_url',
     options: ShareLinkOptions
   ): Promise<ShareToken> {
     try {
@@ -85,10 +111,19 @@ class SharingService {
         throw new Error('You do not have permission to share this note');
       }
 
-      // Generate token based on method
-      const token = method === 'share_code' 
-        ? this.generateShareCode() 
-        : this.generateToken();
+      // Check if trying to create a "forever unlimited" code (no maxUses AND no expiration)
+      const noMaxUses = !options.maxUses;
+      const noExpiration = !options.expiresIn;
+      
+      if (noMaxUses && noExpiration) {
+        const existingCode = await this.checkExistingUnlimitedCode(noteId, creatorUid, options.permission);
+        if (existingCode) {
+          throw new Error(`An unlimited ${options.permission} code already exists. Delete it first to create a new one.`);
+        }
+      }
+
+      // Generate share code
+      const token = this.generateShareCode();
 
       // Calculate expiration
       const expiresAt = options.expiresIn 
@@ -99,7 +134,6 @@ class SharingService {
       const shareData = {
         noteId,
         createdBy: creatorUid,
-        method,
         permission: options.permission,
         token,
         expiresAt,
@@ -147,7 +181,7 @@ class SharingService {
       collaborators[shareTokenId] = {
         permission,
         joinedAt: serverTimestamp(),
-        via: 'share_link'
+        via: 'share_code'
       };
 
       await updateDoc(noteRef, { collaborators });
@@ -167,7 +201,7 @@ class SharingService {
       const querySnap = await getDocs(q);
 
       if (querySnap.empty) {
-        throw new Error('Invalid or expired share link');
+        throw new Error('Invalid or expired share code');
       }
 
       const shareDoc = querySnap.docs[0];
@@ -182,13 +216,13 @@ class SharingService {
       // Check if token has expired
       if (shareToken.expiresAt && shareToken.expiresAt < new Date()) {
         await updateDoc(doc(db, 'shareTokens', shareDoc.id), { isActive: false });
-        throw new Error('This share link has expired');
+        throw new Error('This share code has expired');
       }
 
       // Check usage limits
       if (shareToken.maxUses && shareToken.usageCount >= shareToken.maxUses) {
         await updateDoc(doc(db, 'shareTokens', shareDoc.id), { isActive: false });
-        throw new Error('This share link has reached its usage limit');
+        throw new Error('This share code has reached its usage limit');
       }
 
       // Get the note
@@ -246,7 +280,7 @@ class SharingService {
         collaborators[userUid] = {
           permission,
           joinedAt: serverTimestamp(),
-          via: 'share_link'
+          via: 'share_code'
         };
 
         await updateDoc(noteRef, { collaborators });
@@ -322,26 +356,6 @@ class SharingService {
       console.error('Error deleting share token:', error);
       throw error;
     }
-  }
-
-  // Generate various types of shareable URLs/codes
-  generateShareUrl(token: string): string {
-    // Replace with your actual app URL scheme
-    const baseUrl = __DEV__ 
-      ? 'http://localhost:3000/shared' 
-      : 'https://yourapp.com/shared';
-    
-    return `${baseUrl}/${token}`;
-  }
-
-  generateDeepLink(token: string): string {
-    // Replace with your app's deep link scheme
-    return `yourapp://shared/${token}`;
-  }
-
-  // Generate QR code data (you'll need a QR code library to display this)
-  generateQRCodeData(token: string): string {
-    return this.generateDeepLink(token);
   }
 }
 

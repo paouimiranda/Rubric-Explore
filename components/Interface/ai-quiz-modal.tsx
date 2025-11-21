@@ -1,9 +1,11 @@
-// TopicSelectionModal.tsx - Enhanced Plain Text Extraction
+// TopicSelectionModal.tsx - Enhanced with Recent Notes Sub-Tab
 import { useAuth } from '@/app/contexts/AuthContext';
+import { db, firestore } from '@/firebase';
 import { getMergedNoteContent, getNotebooks, getNotesInNotebook } from '@/services/notes-service';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import React, { useEffect, useState } from 'react';
+import { collection, doc, getDoc, getDocs, increment, limit, orderBy, query, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -17,11 +19,7 @@ import {
   View,
 } from 'react-native';
 import { CustomAlertModal } from './custom-alert-modal';
-// NEW: Firebase Imports (Adjust path as necessary)
-import { firestore } from '@/firebase'; // Assuming 'auth' is imported via useAuth or not needed here
-import { doc, getDoc, increment, setDoc, updateDoc } from 'firebase/firestore'; // Import Firestore functions
 
-// NEW: Define the daily limit constant
 const DAILY_LIMIT = 3;
 
 interface NotebookProperty {
@@ -48,6 +46,15 @@ interface Note {
   updatedAt: Date;
 }
 
+interface RecentNote {
+  id: string;
+  noteId: string;
+  title: string;
+  permission: 'view' | 'edit';
+  visitedAt: Date;
+  ownerName?: string;
+}
+
 interface TopicSelectionModalProps {
   visible: boolean;
   onClose: () => void;
@@ -66,6 +73,8 @@ interface AlertState {
   }>;
 }
 
+type NotesSubTab = 'my-notebooks' | 'recent';
+
 export const TopicSelectionModal: React.FC<TopicSelectionModalProps> = ({
   visible,
   onClose,
@@ -73,26 +82,27 @@ export const TopicSelectionModal: React.FC<TopicSelectionModalProps> = ({
 }) => {
   const { user } = useAuth();
   const uid = user?.uid;
-  // NEW: State for usage count and loading
+  
   const [usageCount, setUsageCount] = useState<number>(0);
   const [isLoadingCount, setIsLoadingCount] = useState<boolean>(true);
   const [activeTab, setActiveTab] = useState<'manual' | 'notes'>('manual');
+  const [notesSubTab, setNotesSubTab] = useState<NotesSubTab>('my-notebooks');
   const [manualTopic, setManualTopic] = useState('');
   const [notebooks, setNotebooks] = useState<Notebook[]>([]);
   const [selectedNotebook, setSelectedNotebook] = useState<Notebook | null>(null);
   const [notes, setNotes] = useState<Note[]>([]);
+  const [recentNotes, setRecentNotes] = useState<RecentNote[]>([]);
   const [loading, setLoading] = useState(false);
   const [notesLoading, setNotesLoading] = useState(false);
+  const [recentLoading, setRecentLoading] = useState(false);
   const [notePreviews, setNotePreviews] = useState<Record<string, string>>({});
   const [showQuestionCountDropdown, setShowQuestionCountDropdown] = useState(false);
   const [selectedQuestionType, setSelectedQuestionType] = useState('multiple_choice');
   const [questionCount, setQuestionCount] = useState(10);
   const [showQuestionTypeDropdown, setShowQuestionTypeDropdown] = useState(false);
 
-  // NEW: Helper to get today's date as YYYY-MM-DD
   const getTodayDate = () => new Date().toISOString().split('T')[0];
 
-  // NEW: Fetch and reset usage count on modal open
   useEffect(() => {
     if (!visible || !uid) {
       return;
@@ -100,7 +110,7 @@ export const TopicSelectionModal: React.FC<TopicSelectionModalProps> = ({
     const fetchAndResetUsageCount = async () => {
       setIsLoadingCount(true);
       try {
-        const docRef = doc(firestore, 'QG_Limits', uid); // Using 'QG_Limits' for Question Generation
+        const docRef = doc(firestore, 'QG_Limits', uid);
         const docSnap = await getDoc(docRef);
         const today = getTodayDate();
         
@@ -108,14 +118,12 @@ export const TopicSelectionModal: React.FC<TopicSelectionModalProps> = ({
           const data = docSnap.data();
           const lastReset = data?.lastResetDate;
           if (lastReset !== today) {
-            // Reset count for new day
             await updateDoc(docRef, { usageCount: 0, lastResetDate: today });
             setUsageCount(0);
           } else {
             setUsageCount(data?.usageCount || 0);
           }
         } else {
-          // New user
           await setDoc(docRef, { usageCount: 0, lastResetDate: today });
           setUsageCount(0);
         }
@@ -128,7 +136,7 @@ export const TopicSelectionModal: React.FC<TopicSelectionModalProps> = ({
     };
     
     fetchAndResetUsageCount();
-  }, [visible, uid]); // Runs when modal visibility or user changes
+  }, [visible, uid]);
 
   const [alert, setAlert] = useState<AlertState>({
     visible: false,
@@ -167,38 +175,21 @@ export const TopicSelectionModal: React.FC<TopicSelectionModalProps> = ({
     });
   };
 
-  /**
-   * Enhanced plain text extraction from HTML content
-   * This function removes all HTML tags, scripts, styles, and media elements
-   * while preserving the actual text content for AI processing
-   */
   const extractPlainTextFromHtml = (html: string): string => {
     if (!html) return '';
     
     let text = html;
-    
-    // Remove script tags and their content
     text = text.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '');
-    
-    // Remove style tags and their content
     text = text.replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, '');
-    
-    // Remove all media elements (images, videos, audio, iframes, svg, canvas)
     text = text.replace(/<img[^>]*>/gi, '');
     text = text.replace(/<video[^>]*>.*?<\/video>/gi, '');
     text = text.replace(/<audio[^>]*>.*?<\/audio>/gi, '');
     text = text.replace(/<iframe[^>]*>.*?<\/iframe>/gi, '');
     text = text.replace(/<svg[^>]*>.*?<\/svg>/gi, '');
     text = text.replace(/<canvas[^>]*>.*?<\/canvas>/gi, '');
-    
-    // Convert block-level elements to newlines to preserve structure
     text = text.replace(/<\/?(div|p|br|h[1-6]|li|tr)[^>]*>/gi, '\n');
     text = text.replace(/<\/?(ul|ol|table|tbody|thead)[^>]*>/gi, '\n\n');
-    
-    // Remove all remaining HTML tags
     text = text.replace(/<[^>]+>/g, '');
-    
-    // Decode HTML entities
     text = text.replace(/&nbsp;/g, ' ');
     text = text.replace(/&amp;/g, '&');
     text = text.replace(/&lt;/g, '<');
@@ -209,17 +200,9 @@ export const TopicSelectionModal: React.FC<TopicSelectionModalProps> = ({
     text = text.replace(/&mdash;/g, '—');
     text = text.replace(/&ndash;/g, '–');
     text = text.replace(/&hellip;/g, '…');
-    
-    // Clean up excessive newlines (more than 2 consecutive)
     text = text.replace(/\n\s*\n\s*\n+/g, '\n\n');
-    
-    // Clean up multiple spaces
     text = text.replace(/[ \t]+/g, ' ');
-    
-    // Remove leading/trailing whitespace from each line
     text = text.split('\n').map(line => line.trim()).join('\n');
-    
-    // Final trim
     text = text.trim();
     
     return text;
@@ -248,9 +231,13 @@ export const TopicSelectionModal: React.FC<TopicSelectionModalProps> = ({
 
   useEffect(() => {
     if (visible && uid && activeTab === 'notes') {
-      fetchNotebooks();
+      if (notesSubTab === 'my-notebooks') {
+        fetchNotebooks();
+      } else if (notesSubTab === 'recent') {
+        fetchRecentNotes();
+      }
     }
-  }, [visible, uid, activeTab]);
+  }, [visible, uid, activeTab, notesSubTab]);
 
   const fetchNotebooks = async () => {
     if (!uid) return;
@@ -267,6 +254,55 @@ export const TopicSelectionModal: React.FC<TopicSelectionModalProps> = ({
     }
   };
 
+  const fetchRecentNotes = useCallback(async () => {
+    if (!uid) return;
+    
+    setRecentLoading(true);
+    try {
+      const recentRef = collection(db, 'users', uid, 'recentSharedNotes');
+      const q = query(recentRef, orderBy('visitedAt', 'desc'), limit(20));
+      const snapshot = await getDocs(q);
+      
+      const notes: RecentNote[] = [];
+      for (const docSnap of snapshot.docs) {
+        const data = docSnap.data();
+        const noteRef = doc(db, 'notes', data.noteId);
+        const noteSnap = await getDoc(noteRef);
+        
+        if (noteSnap.exists()) {
+          notes.push({
+            id: docSnap.id,
+            noteId: data.noteId,
+            title: noteSnap.data().title || 'Untitled Note',
+            permission: data.permission,
+            visitedAt: data.visitedAt?.toDate() || new Date(),
+            ownerName: data.ownerName,
+          });
+        }
+      }
+      setRecentNotes(notes);
+      
+      // Generate previews for recent notes
+      const previews: Record<string, string> = {};
+      for (const note of notes) {
+        try {
+          const htmlContent = await getMergedNoteContent(note.noteId);
+          const plainText = extractPlainTextFromHtml(htmlContent);
+          previews[note.noteId] = plainText.slice(0, 80) || "No content";
+        } catch (err) {
+          console.error(`Error getting preview for note ${note.noteId}:`, err);
+          previews[note.noteId] = "Error loading preview";
+        }
+      }
+      setNotePreviews(previews);
+    } catch (error) {
+      console.error('Error fetching recent notes:', error);
+      showAlert('error', 'Error', 'Failed to load recent notes. Please try again.');
+    } finally {
+      setRecentLoading(false);
+    }
+  }, [uid]);
+
   const fetchNotes = async (notebookId: string) => {
     if (!uid) return;
     
@@ -275,13 +311,11 @@ export const TopicSelectionModal: React.FC<TopicSelectionModalProps> = ({
       const data = await getNotesInNotebook(notebookId, uid);
       setNotes(data as any);
 
-      // Generate plain text previews for each note
       const previews: Record<string, string> = {};
       for (const note of data) {
         try {
           const htmlContent = await getMergedNoteContent(note.id);
           const plainText = extractPlainTextFromHtml(htmlContent);
-          // Show first 80 characters of plain text as preview
           previews[note.id] = plainText.slice(0, 80) || "No content";
         } catch (err) {
           console.error(`Error getting preview for note ${note.id}:`, err);
@@ -297,51 +331,70 @@ export const TopicSelectionModal: React.FC<TopicSelectionModalProps> = ({
     }
   };
 
-  // NEW: Centralized usage check function (check-only, no increment yet)
-const checkUsageAndProceed = async (
-  topic: string,
-  content?: string
-) => {
-  if (isLoadingCount) {
-    showAlert('info', 'Loading', 'Please wait while we check your daily limit.', [{ text: 'OK', onPress: () => {}, style: 'primary' }]);
-    return;
-  }
-  
-  if (usageCount >= DAILY_LIMIT) {
-    showAlert(
-      'warning',
-      'Daily Limit Reached',
-      `You have used the question generation feature ${DAILY_LIMIT} times today. Please try again tomorrow.`,
-      [{ text: 'OK', onPress: () => {}, style: 'primary' }]
-    );
-    return;
-  }
-  // Proceed to disclaimer (no increment here)
-  setPendingGeneration({
-    topic: topic,
-    type: selectedQuestionType,
-    count: questionCount,
-    content: content, 
-  });
-  setShowDisclaimer(true);
-};
+  const trackVisitedNote = async (
+    noteId: string, 
+    noteTitle: string, 
+    permission: 'view' | 'edit',
+    ownerName?: string
+  ) => {
+    if (!uid) return;
+    
+    try {
+      const recentRef = doc(db, 'users', uid, 'recentSharedNotes', noteId);
+      await setDoc(recentRef, {
+        noteId,
+        title: noteTitle,
+        permission,
+        visitedAt: serverTimestamp(),
+        ownerName: ownerName || null,
+      }, { merge: true });
+    } catch (error) {
+      console.error('Error tracking visited note:', error);
+    }
+  };
+
+  const checkUsageAndProceed = async (
+    topic: string,
+    content?: string
+  ) => {
+    if (isLoadingCount) {
+      showAlert('info', 'Loading', 'Please wait while we check your daily limit.', [{ text: 'OK', onPress: () => {}, style: 'primary' }]);
+      return;
+    }
+    
+    if (usageCount >= DAILY_LIMIT) {
+      showAlert(
+        'warning',
+        'Daily Limit Reached',
+        `You have used the question generation feature ${DAILY_LIMIT} times today. Please try again tomorrow.`,
+        [{ text: 'OK', onPress: () => {}, style: 'primary' }]
+      );
+      return;
+    }
+    
+    setPendingGeneration({
+      topic: topic,
+      type: selectedQuestionType,
+      count: questionCount,
+      content: content, 
+    });
+    setShowDisclaimer(true);
+  };
 
   const handleNotebookSelect = (notebook: Notebook) => {
     setSelectedNotebook(notebook);
     fetchNotes(notebook.id);
   };
 
-  const handleNoteSelect = async (note: Note) => {
+  const handleNoteSelect = async (noteId: string, noteTitle: string) => {
     try {
-      // Get the HTML content from the note
-      const htmlContent = await getMergedNoteContent(note.id);
+      const htmlContent = await getMergedNoteContent(noteId);
 
       if (!htmlContent || htmlContent.trim().length === 0) {
         showAlert('warning', 'Empty Note', 'This note has no content to generate questions from.');
         return;
       }
 
-      // Extract plain text from HTML
       const plainText = extractPlainTextFromHtml(htmlContent);
 
       if (!plainText || plainText.trim().length === 0) {
@@ -353,7 +406,6 @@ const checkUsageAndProceed = async (
         return;
       }
 
-      // Validate minimum content length (at least 50 characters for meaningful questions)
       if (plainText.length < 50) {
         showAlert(
           'warning',
@@ -363,24 +415,28 @@ const checkUsageAndProceed = async (
         return;
       }
 
-      await checkUsageAndProceed(note.title, plainText);
+      await checkUsageAndProceed(noteTitle, plainText);
       console.log('📝 Successfully extracted plain text');
       console.log('📝 Original HTML length:', htmlContent.length);
       console.log('📝 Plain text length:', plainText.length);
       console.log('📝 Plain text preview (first 200 chars):', plainText.slice(0, 200));
-
-      // // Set up the generation with plain text content // remove daw pero for safety wag muna
-      // setPendingGeneration({
-      //   topic: note.title,
-      //   type: selectedQuestionType,
-      //   count: questionCount,
-      //   content: plainText, // Pass the extracted plain text
-      // });
-      setShowDisclaimer(true);
     } catch (error) {
       console.error("Error loading note content:", error);
       showAlert('error', 'Error', "Failed to load the note's content. Please try again.");
     }
+  };
+
+  const handleRecentNoteSelect = async (recentNote: RecentNote) => {
+    // Track the visit
+    await trackVisitedNote(
+      recentNote.noteId,
+      recentNote.title,
+      recentNote.permission,
+      recentNote.ownerName
+    );
+    
+    // Handle note selection
+    await handleNoteSelect(recentNote.noteId, recentNote.title);
   };
 
   const handleManualSubmit = () => {
@@ -389,45 +445,39 @@ const checkUsageAndProceed = async (
       return;
     }
     checkUsageAndProceed(manualTopic.trim());
-    // // setPendingGeneration({
-    // //   topic: manualTopic.trim(),
-    // //   type: selectedQuestionType,
-    // //   count: questionCount,
-    // // });
-    // setShowDisclaimer(true);
   };
 
-  const confirmGeneration = async () => {  // NEW: Add 'async' keyword here
-  if (pendingGeneration) {
-    // NEW: Increment usage count only on successful confirmation
-    if (uid) {
-      try {
-        const docRef = doc(firestore, 'QG_Limits', uid); 
-        await updateDoc(docRef, { usageCount: increment(1) });  // This await is now valid
-        setUsageCount(prev => prev + 1); // Update local state
-      } catch (error) {
-        console.error('Error updating QG usage count:', error);
-        showAlert('error', 'Error', 'Failed to update usage count, but proceeding with generation.', [{ text: 'OK', onPress: () => {}, style: 'primary' }]);
+  const confirmGeneration = async () => {
+    if (pendingGeneration) {
+      if (uid) {
+        try {
+          const docRef = doc(firestore, 'QG_Limits', uid); 
+          await updateDoc(docRef, { usageCount: increment(1) });
+          setUsageCount(prev => prev + 1);
+        } catch (error) {
+          console.error('Error updating QG usage count:', error);
+          showAlert('error', 'Error', 'Failed to update usage count, but proceeding with generation.', [{ text: 'OK', onPress: () => {}, style: 'primary' }]);
+        }
       }
-    }
 
-    // Proceed with generation
-    onTopicSelected(
-      pendingGeneration.topic,
-      pendingGeneration.type,
-      pendingGeneration.count,
-      pendingGeneration.content
-    );
-    handleClose();
-  }
-};
+      onTopicSelected(
+        pendingGeneration.topic,
+        pendingGeneration.type,
+        pendingGeneration.count,
+        pendingGeneration.content
+      );
+      handleClose();
+    }
+  };
 
   const handleClose = () => {
     setManualTopic('');
     setSelectedNotebook(null);
     setNotes([]);
+    setRecentNotes([]);
     setNotePreviews({});
     setActiveTab('manual');
+    setNotesSubTab('my-notebooks');
     setSelectedQuestionType('multiple_choice');
     setQuestionCount(10);
     setShowQuestionTypeDropdown(false);
@@ -440,6 +490,20 @@ const checkUsageAndProceed = async (
     setSelectedNotebook(null);
     setNotes([]);
     setNotePreviews({});
+  };
+
+  const formatTimeAgo = (date: Date): string => {
+    const now = new Date();
+    const diff = now.getTime() - date.getTime();
+    const mins = Math.floor(diff / 60000);
+    const hours = Math.floor(diff / 3600000);
+    const days = Math.floor(diff / 86400000);
+    
+    if (mins < 1) return 'Just now';
+    if (mins < 60) return `${mins}m ago`;
+    if (hours < 24) return `${hours}h ago`;
+    if (days < 7) return `${days}d ago`;
+    return date.toLocaleDateString();
   };
 
   const renderNotebook = ({ item }: { item: Notebook }) => (
@@ -473,7 +537,7 @@ const checkUsageAndProceed = async (
   const renderNote = ({ item }: { item: Note }) => (
     <TouchableOpacity
       style={styles.noteItem}
-      onPress={() => handleNoteSelect(item)}
+      onPress={() => handleNoteSelect(item.id, item.title)}
       activeOpacity={0.7}
     >
       <View style={styles.itemIconContainer}>
@@ -492,12 +556,54 @@ const checkUsageAndProceed = async (
     </TouchableOpacity>
   );
 
+  const renderRecentNote = ({ item }: { item: RecentNote }) => (
+    <TouchableOpacity
+      style={styles.recentNoteItem}
+      onPress={() => handleRecentNoteSelect(item)}
+      activeOpacity={0.7}
+    >
+      <View style={styles.recentNoteIcon}>
+        <Ionicons 
+          name={item.permission === 'edit' ? 'create-outline' : 'eye-outline'} 
+          size={20} 
+          color={item.permission === 'edit' ? '#6366f1' : '#10b981'} 
+        />
+      </View>
+      <View style={styles.recentNoteContent}>
+        <Text style={styles.recentNoteTitle} numberOfLines={1}>
+          {item.title}
+        </Text>
+        <Text style={styles.notePreview} numberOfLines={1}>
+          {notePreviews[item.noteId] || 'Loading...'}
+        </Text>
+        <View style={styles.recentNoteMeta}>
+          <View style={[
+            styles.permissionBadge,
+            item.permission === 'edit' ? styles.editBadge : styles.viewBadge
+          ]}>
+            <Text style={styles.permissionText}>
+              {item.permission === 'edit' ? 'Edit' : 'View'}
+            </Text>
+          </View>
+          <Text style={styles.recentNoteTime}>
+            {formatTimeAgo(item.visitedAt)}
+          </Text>
+          {item.ownerName && (
+            <Text style={styles.ownerName} numberOfLines={1}>
+              by {item.ownerName}
+            </Text>
+          )}
+        </View>
+      </View>
+      <Ionicons name="chevron-forward" size={20} color="#64748b" />
+    </TouchableOpacity>
+  );
+
   const renderContent = () => {
-    // NEW: Combined check for disabling the submit button
     const isSubmitDisabled = isLoadingCount || usageCount >= DAILY_LIMIT;
+    
     if (activeTab === 'manual') {
       const selectedType = questionTypeOptions.find(type => type.key === selectedQuestionType);
-      const countOptions = getQuestionCountOptions(selectedQuestionType);
       
       return (
         <View style={styles.manualTab}>
@@ -565,32 +671,31 @@ const checkUsageAndProceed = async (
             )}
           </View>
 
-          {/* NEW: Replace the old questionCountContainer with this dropdown */}
           <View style={styles.selectorContainer}>
             <Text style={styles.selectorLabel}>Number of Questions</Text>
             <TouchableOpacity
               style={[
                 styles.dropdownButton,
-                selectedQuestionType === 'matching' && styles.dropdownButtonDisabled  // NEW: Grey out for matching
+                selectedQuestionType === 'matching' && styles.dropdownButtonDisabled
               ]}
               onPress={() => setShowQuestionCountDropdown(!showQuestionCountDropdown)}
-              disabled={selectedQuestionType === 'matching'}  // NEW: Disable for matching
+              disabled={selectedQuestionType === 'matching'}
               activeOpacity={0.7}
             >
               <Text style={[
                 styles.dropdownButtonText,
-                selectedQuestionType === 'matching' && styles.dropdownButtonTextDisabled  // NEW: Grey text for matching
+                selectedQuestionType === 'matching' && styles.dropdownButtonTextDisabled
               ]}>
                 {questionCount}
               </Text>
               <Ionicons 
                 name={showQuestionCountDropdown ? "chevron-up" : "chevron-down"} 
                 size={20} 
-                color={selectedQuestionType === 'matching' ? "#64748b" : "#64748b"}  // Grey chevron for matching
+                color={selectedQuestionType === 'matching' ? "#64748b" : "#64748b"}
               />
             </TouchableOpacity>
             
-            {showQuestionCountDropdown && selectedQuestionType !== 'matching' && (  // NEW: Only show menu if not matching
+            {showQuestionCountDropdown && selectedQuestionType !== 'matching' && (
               <View style={styles.dropdownMenu}>
                 <ScrollView style={styles.dropdownScrollView} showsVerticalScrollIndicator={false}>
                   {Array.from({length: 15}, (_, i) => i + 1).map((count) => (
@@ -631,7 +736,6 @@ const checkUsageAndProceed = async (
             </View>
           )}
 
-          {/* NEW: Add usage indicator here, right before the submit button */}
           <View style={styles.usageContainer}>
             {isLoadingCount ? (
               <View style={styles.usageLoading}>
@@ -670,6 +774,7 @@ const checkUsageAndProceed = async (
       );
     }
 
+    // Notes tab with sub-tabs
     if (selectedNotebook) {
       return (
         <View style={styles.notesView}>
@@ -714,28 +819,103 @@ const checkUsageAndProceed = async (
 
     return (
       <View style={styles.notebooksView}>
-        <Text style={styles.sectionTitle}>Select from Your Notes</Text>
-        {loading ? (
-          <View style={styles.loadingContainer}>
-            <Ionicons name="hourglass-outline" size={48} color="#8b5cf6" />
-            <Text style={styles.loadingText}>Loading notebooks...</Text>
-          </View>
-        ) : notebooks.length === 0 ? (
-          <View style={styles.emptyContainer}>
-            <Ionicons name="book-outline" size={64} color="#475569" />
-            <Text style={styles.emptyText}>No notebooks found</Text>
-            <Text style={styles.emptySubtext}>
-              Create notebooks in the Notes section first
+        {/* Sub-tabs for Notes section */}
+        <View style={styles.subTabsContainer}>
+          <TouchableOpacity
+            style={[
+              styles.subTab,
+              notesSubTab === 'my-notebooks' && styles.subTabActive
+            ]}
+            onPress={() => setNotesSubTab('my-notebooks')}
+            activeOpacity={0.7}
+          >
+            <Ionicons 
+              name="book-outline" 
+              size={18} 
+              color={notesSubTab === 'my-notebooks' ? '#8b5cf6' : '#64748b'} 
+            />
+            <Text style={[
+              styles.subTabText,
+              notesSubTab === 'my-notebooks' && styles.subTabTextActive
+            ]}>
+              My Notebooks
             </Text>
-          </View>
+          </TouchableOpacity>
+          
+          <TouchableOpacity
+            style={[
+              styles.subTab,
+              notesSubTab === 'recent' && styles.subTabActive
+            ]}
+            onPress={() => setNotesSubTab('recent')}
+            activeOpacity={0.7}
+          >
+            <Ionicons 
+              name="time-outline" 
+              size={18} 
+              color={notesSubTab === 'recent' ? '#8b5cf6' : '#64748b'} 
+            />
+            <Text style={[
+              styles.subTabText,
+              notesSubTab === 'recent' && styles.subTabTextActive
+            ]}>
+              Recent
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        {notesSubTab === 'my-notebooks' ? (
+          <>
+            <Text style={styles.sectionTitle}>Select from Your Notes</Text>
+            {loading ? (
+              <View style={styles.loadingContainer}>
+                <Ionicons name="hourglass-outline" size={48} color="#8b5cf6" />
+                <Text style={styles.loadingText}>Loading notebooks...</Text>
+              </View>
+            ) : notebooks.length === 0 ? (
+              <View style={styles.emptyContainer}>
+                <Ionicons name="book-outline" size={64} color="#475569" />
+                <Text style={styles.emptyText}>No notebooks found</Text>
+                <Text style={styles.emptySubtext}>
+                  Create notebooks in the Notes section first
+                </Text>
+              </View>
+            ) : (
+              <FlatList
+                data={notebooks}
+                renderItem={renderNotebook}
+                keyExtractor={(item) => item.id}
+                style={styles.notebooksList}
+                showsVerticalScrollIndicator={false}
+              />
+            )}
+          </>
         ) : (
-          <FlatList
-            data={notebooks}
-            renderItem={renderNotebook}
-            keyExtractor={(item) => item.id}
-            style={styles.notebooksList}
-            showsVerticalScrollIndicator={false}
-          />
+          <>
+            <Text style={styles.sectionTitle}>Recently Visited Notes</Text>
+            {recentLoading ? (
+              <View style={styles.loadingContainer}>
+                <Ionicons name="hourglass-outline" size={48} color="#8b5cf6" />
+                <Text style={styles.loadingText}>Loading recent notes...</Text>
+              </View>
+            ) : recentNotes.length === 0 ? (
+              <View style={styles.emptyContainer}>
+                <Ionicons name="time-outline" size={64} color="#475569" />
+                <Text style={styles.emptyText}>No Recent Notes</Text>
+                <Text style={styles.emptySubtext}>
+                  Notes you visit will appear here for quick access
+                </Text>
+              </View>
+            ) : (
+              <FlatList
+                data={recentNotes}
+                renderItem={renderRecentNote}
+                keyExtractor={(item) => item.id}
+                style={styles.notesList}
+                showsVerticalScrollIndicator={false}
+              />
+            )}
+          </>
         )}
       </View>
     );
@@ -1184,34 +1364,6 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontWeight: '600',
   },
-  questionCountContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
-  },
-  countButton: {
-    backgroundColor: '#1e293b',
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    borderRadius: 10,
-    minWidth: 45,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#334155',
-  },
-  countButtonActive: {
-    backgroundColor: '#8b5cf6',
-    borderColor: '#8b5cf6',
-  },
-  countButtonText: {
-    color: '#64748b',
-    fontSize: 15,
-    fontWeight: '600',
-  },
-  countButtonTextActive: {
-    color: '#ffffff',
-    fontWeight: 'bold',
-  },
   infoContainer: {
     flexDirection: 'row',
     backgroundColor: '#1e3a8a',
@@ -1228,6 +1380,147 @@ const styles = StyleSheet.create({
     color: '#bfdbfe',
     fontSize: 14,
     lineHeight: 20,
+  },
+  subTabsContainer: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 20,
+    backgroundColor: '#1e293b',
+    padding: 4,
+    borderRadius: 10,
+  },
+  subTab: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    gap: 6,
+  },
+  subTabActive: {
+    backgroundColor: '#334155',
+  },
+  subTabText: {
+    fontSize: 14,
+    color: '#64748b',
+    fontWeight: '600',
+  },
+  subTabTextActive: {
+    color: '#8b5cf6',
+  },
+  recentNoteItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#1e293b',
+    padding: 14,
+    borderRadius: 12,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: '#334155',
+  },
+  recentNoteIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    backgroundColor: '#0f172a',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  recentNoteContent: {
+    flex: 1,
+  },
+  recentNoteTitle: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#ffffff',
+    marginBottom: 4,
+  },
+  recentNoteMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 4,
+  },
+  permissionBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  editBadge: {
+    backgroundColor: 'rgba(99, 102, 241, 0.2)',
+  },
+  viewBadge: {
+    backgroundColor: 'rgba(16, 185, 129, 0.2)',
+  },
+  permissionText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#9ca3af',
+  },
+  recentNoteTime: {
+    color: '#64748b',
+    fontSize: 12,
+  },
+  ownerName: {
+    color: '#64748b',
+    fontSize: 12,
+    fontStyle: 'italic',
+    flex: 1,
+  },
+  usageContainer: {
+    marginBottom: 16,
+    alignItems: 'center',
+  },
+  usageBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    backgroundColor: 'rgba(16, 185, 129, 0.15)',
+    gap: 6,
+    borderWidth: 1,
+    borderColor: 'rgba(16, 185, 129, 0.3)',
+  },
+  usageLimitReachedBadge: {
+    backgroundColor: 'rgba(239, 68, 68, 0.15)',
+    borderColor: 'rgba(239, 68, 68, 0.3)',
+  },
+  usageText: {
+    color: "#10b981",
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  usageLimitReachedText: {
+    color: "#ef4444",
+  },
+  usageLoading: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 8,
+  },
+  dropdownButtonDisabled: {
+    backgroundColor: '#334155',
+    borderColor: '#475569',
+  },
+  dropdownButtonTextDisabled: {
+    color: '#64748b',
+  },
+  dropdownMenu: {
+    backgroundColor: '#1e293b',
+    borderRadius: 12,
+    marginTop: 8,
+    borderWidth: 1,
+    borderColor: '#334155',
+    overflow: 'hidden',
+    maxHeight: 150,
+  },
+  dropdownScrollView: {
+    maxHeight: 150,
   },
   disclaimerOverlay: {
     flex: 1,
@@ -1326,58 +1619,4 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#cbd5e1',
   },
-  // Add to your styles object
-usageContainer: {
-  marginBottom: 16,
-  alignItems: 'center',
-},
-usageBadge: {
-  flexDirection: 'row',
-  alignItems: 'center',
-  paddingVertical: 8,
-  paddingHorizontal: 12,
-  borderRadius: 8,
-  backgroundColor: 'rgba(16, 185, 129, 0.15)', // Tailwind green-500 with opacity
-  gap: 6,
-  borderWidth: 1,
-  borderColor: 'rgba(16, 185, 129, 0.3)',
-},
-usageLimitReachedBadge: {
-  backgroundColor: 'rgba(239, 68, 68, 0.15)', // Tailwind red-500 with opacity
-  borderColor: 'rgba(239, 68, 68, 0.3)',
-},
-usageText: {
-  color: "#10b981", // Green
-  fontSize: 12,
-  fontFamily: 'Montserrat_600SemiBold',
-},
-usageLimitReachedText: {
-  color: "#ef4444", // Red
-},
-usageLoading: {
-  flexDirection: 'row',
-  alignItems: 'center',
-  gap: 8,
-  paddingVertical: 8,
-},
-// Add these to your styles object
-dropdownButtonDisabled: {
-  backgroundColor: '#334155',  // Darker grey background
-  borderColor: '#475569',
-},
-dropdownButtonTextDisabled: {
-  color: '#64748b',  // Grey text
-},
-dropdownMenu: {
-  backgroundColor: '#1e293b',
-  borderRadius: 12,
-  marginTop: 8,
-  borderWidth: 1,
-  borderColor: '#334155',
-  overflow: 'hidden',  // Ensures rounded corners clip the scroll
-  maxHeight: 150,  // NEW: Limits height to ~5-6 items visible at once (adjust as needed)
-},
-dropdownScrollView: {
-  maxHeight: 150,  // Matches the menu height for smooth scrolling
-},
 });

@@ -1,4 +1,4 @@
-// services/multiplayer-service.ts - FIXED DISCONNECT HANDLING
+// services/multiplayer-service.ts - WITH 20 PLAYER LIMIT
 import {
   addDoc,
   collection,
@@ -87,6 +87,7 @@ const STREAK_BONUS_PERCENT = 10;
 const SESSION_CODE_LENGTH = 6;
 const SESSION_EXPIRY_HOURS = 1;
 const INACTIVITY_THRESHOLD_SECONDS = 20; // Kick after 20 seconds of no heartbeat
+const MAX_PLAYERS_PER_SESSION = 20; // Maximum players allowed in a session
 
 const generateSessionCode = (): string => {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
@@ -180,6 +181,8 @@ export const joinSessionByCode = async (
     const playersSnapshot = await getDocs(
       collection(db, 'multiplayerSessions', sessionId, 'players')
     );
+    
+    // Check if player already exists
     const existingPlayer = playersSnapshot.docs.find(
       (doc) => doc.data().uid === userId
     );
@@ -190,6 +193,17 @@ export const joinSessionByCode = async (
         lastActive: serverTimestamp(),
       });
       return sessionId;
+    }
+
+    // Count active players (not kicked or disconnected)
+    const activePlayers = playersSnapshot.docs.filter(doc => {
+      const status = (doc.data() as SessionPlayer).status;
+      return status !== 'disconnected' && status !== 'kicked';
+    });
+
+    // Check if session is full
+    if (activePlayers.length >= MAX_PLAYERS_PER_SESSION) {
+      throw new Error(`Session is full (maximum ${MAX_PLAYERS_PER_SESSION} players)`);
     }
 
     const playerData: Partial<SessionPlayer> = {

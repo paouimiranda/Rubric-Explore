@@ -76,6 +76,8 @@ const QuizPlay = () => {
   const [selectedLeft, setSelectedLeft] = useState<number | null>(null);
   const [selectedRight, setSelectedRight] = useState<number | null>(null);
 
+  const animationRef = useRef<Animated.CompositeAnimation | null>(null);
+
   useEffect(() => {
     if (quizId && typeof quizId === 'string') {
       loadQuiz(quizId);
@@ -100,6 +102,24 @@ const QuizPlay = () => {
       }
     };
   }, [timeLeft, isPaused, isQuizCompleted]);
+
+  useEffect(() => {
+  if (isPaused) {
+    // Stop the animation when paused
+    animationRef.current?.stop();
+  } else if (!isQuizCompleted) {
+    // Resume animation when unpaused
+    // Calculate remaining time percentage
+    const remainingPercentage = timeLeft / (quiz?.questions[currentQuestionIndex]?.timeLimit || 30);
+    
+    animationRef.current = Animated.timing(progressAnim, {
+      toValue: 0,
+      duration: timeLeft * 1000,
+      useNativeDriver: false,
+    });
+    animationRef.current.start();
+  }
+}, [isPaused]);
 
   const loadQuiz = async (id: string) => {
     try {
@@ -136,37 +156,38 @@ const QuizPlay = () => {
   };
 
   const initializeQuestion = () => {
-    if (!quiz) return;
+  if (!quiz) return;
+  
+  const question = quiz.questions[currentQuestionIndex];
+  setTimeLeft(question.timeLimit || 30);
+  questionStartTime.current = Date.now();
+  
+  // Reset question-specific state
+  setSelectedAnswers([]);
+  setFillBlankText('');
+  setSelectedLeft(null);
+  setSelectedRight(null);
+  
+  // Initialize matching pairs for matching questions
+  if (question.type === 'matching') {
+    const pairs = question.matchPairs.map(pair => ({ left: pair.left, right: '' }));
+    setMatchingPairs(pairs);
     
-    const question = quiz.questions[currentQuestionIndex];
-    setTimeLeft(question.timeLimit || 30);
-    questionStartTime.current = Date.now();
-    
-    // Reset question-specific state
-    setSelectedAnswers([]);
-    setFillBlankText('');
-    setSelectedLeft(null);
-    setSelectedRight(null);
-    
-    // Initialize matching pairs for matching questions
-    if (question.type === 'matching') {
-      const pairs = question.matchPairs.map(pair => ({ left: pair.left, right: '' }));
-      setMatchingPairs(pairs);
-      
-      // Shuffle right-side items
-      const rightItems = question.matchPairs.map(pair => pair.right);
-      const shuffled = [...rightItems].sort(() => Math.random() - 0.5);
-      setShuffledRightItems(shuffled);
-    }
-    
-    // Start progress animation
-    progressAnim.setValue(1);
-    Animated.timing(progressAnim, {
-      toValue: 0,
-      duration: (question.timeLimit || 30) * 1000,
-      useNativeDriver: false,
-    }).start();
-  };
+    // Shuffle right-side items
+    const rightItems = question.matchPairs.map(pair => pair.right);
+    const shuffled = [...rightItems].sort(() => Math.random() - 0.5);
+    setShuffledRightItems(shuffled);
+  }
+  
+  // Start progress animation and store reference
+  progressAnim.setValue(1);
+  animationRef.current = Animated.timing(progressAnim, {
+    toValue: 0,
+    duration: (question.timeLimit || 30) * 1000,
+    useNativeDriver: false,
+  });
+  animationRef.current.start();
+};
 
   const startTimer = () => {
     if (timerRef.current) {

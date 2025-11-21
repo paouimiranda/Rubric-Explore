@@ -26,6 +26,15 @@ interface TodayTabProps {
   onCreatePlan: (date?: string) => void;
 }
 
+interface Particle {
+  id: number;
+  opacity: Animated.Value;
+  translateX: Animated.Value;
+  translateY: Animated.Value;
+  size: number;
+  color: string;
+}
+
 export default function TodayTab({
   plans,
   loading,
@@ -39,7 +48,9 @@ export default function TodayTab({
   const [completionProgress, setCompletionProgress] = useState(0);
   const [completedExpanded, setCompletedExpanded] = useState(false);
   const [exitingPlanId, setExitingPlanId] = useState<string | null>(null);
+  const [particles, setParticles] = useState<Particle[]>([]);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const particleIdRef = useRef(0);
   
   const progressWidthAnim = useRef(new Animated.Value(0)).current;
   const emptyStateScale = useRef(new Animated.Value(0)).current;
@@ -113,12 +124,58 @@ export default function TodayTab({
     }
   }, [pendingPlans.length, todayPlans.length]);
 
+  const createParticles = () => {
+    const newParticles: Particle[] = [];
+    const colors = ['#4ade80', '#22c55e', '#86efac', '#bbf7d0', '#dcfce7'];
+    
+    for (let i = 0; i < 30; i++) {
+      const angle = (Math.PI * 2 * i) / 30;
+      const velocity = 3 + Math.random() * 4;
+      const translateX = new Animated.Value(0);
+      const translateY = new Animated.Value(0);
+      const opacity = new Animated.Value(1);
+      
+      const particle: Particle = {
+        id: particleIdRef.current++,
+        opacity,
+        translateX,
+        translateY,
+        size: 4 + Math.random() * 6,
+        color: colors[Math.floor(Math.random() * colors.length)]
+      };
+      
+      Animated.parallel([
+        Animated.timing(translateX, {
+          toValue: Math.cos(angle) * (80 + Math.random() * 40),
+          duration: 800 + Math.random() * 400,
+          useNativeDriver: true,
+        }),
+        Animated.timing(translateY, {
+          toValue: Math.sin(angle) * (80 + Math.random() * 40) + 30,
+          duration: 800 + Math.random() * 400,
+          useNativeDriver: true,
+        }),
+        Animated.timing(opacity, {
+          toValue: 0,
+          duration: 800 + Math.random() * 400,
+          useNativeDriver: true,
+        }),
+      ]).start();
+      
+      newParticles.push(particle);
+    }
+    
+    setParticles(newParticles);
+    
+    setTimeout(() => {
+      setParticles([]);
+    }, 1500);
+  };
+
   const handleCheckboxPress = async (plan: Plan) => {
     if (plan.status === 'completed') {
-      // Undo completion - use the service method directly
       try {
         await PlannerService.togglePlanStatus(plan.id!);
-        // Call the original toggle handler to refresh UI
         onToggleStatus(plan);
       } catch (error) {
         console.error('Error uncompleting plan:', error);
@@ -127,7 +184,6 @@ export default function TodayTab({
       return;
     }
 
-    // If already completing this plan, undo it
     if (completingPlanId === plan.id) {
       if (timerRef.current) {
         clearInterval(timerRef.current);
@@ -138,7 +194,6 @@ export default function TodayTab({
       return;
     }
 
-    // Start the completion timer
     setCompletingPlanId(plan.id!);
     setCompletionProgress(0);
 
@@ -156,12 +211,13 @@ export default function TodayTab({
           timerRef.current = null;
         }
         
+        createParticles();
+        
         setExitingPlanId(plan.id!);
         
         setTimeout(async () => {
           try {
             await PlannerService.togglePlanStatus(plan.id!);
-            // Call the original toggle handler to refresh UI
             onToggleStatus(plan);
           } catch (error) {
             console.error('Error completing plan:', error);
@@ -278,7 +334,6 @@ export default function TodayTab({
     const circumference = 2 * Math.PI * 12;
     const progressStrokeDashoffset = circumference - (completionProgress / 100) * circumference;
 
-    // Check if notification is scheduled
     const hasReminder = plan.reminderMinutes !== undefined && plan.reminderMinutes >= 0;
     const planDateTime = moment(`${plan.date} ${plan.time}`, 'YYYY-MM-DD HH:mm');
     const isPastTime = planDateTime.isBefore(moment());
@@ -508,6 +563,28 @@ export default function TodayTab({
 
   return (
     <View style={styles.container}>
+      {/* Particle Layer */}
+      <View style={styles.particleContainer} pointerEvents="none">
+        {particles.map((particle) => (
+          <Animated.View
+            key={particle.id}
+            style={[
+              styles.particle,
+              {
+                width: particle.size,
+                height: particle.size,
+                backgroundColor: particle.color,
+                opacity: particle.opacity,
+                transform: [
+                  { translateX: particle.translateX },
+                  { translateY: particle.translateY },
+                ],
+              },
+            ]}
+          />
+        ))}
+      </View>
+
       <View style={styles.headerContainer}>
         <View style={styles.topRow}>
           <View style={styles.dateSection}>
@@ -592,7 +669,56 @@ export default function TodayTab({
             </Text>
           </View>
           
-          {pendingPlans.length === 0 ? (
+          {pendingPlans.length === 0 && todayPlans.length === 0 ? (
+            <View style={styles.bigEmptyState}>
+              <LinearGradient
+                colors={['#667eea', '#764ba2']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.bigEmptyIcon}
+              >
+                <Ionicons name="sparkles" size={48} color="#fff" />
+              </LinearGradient>
+              <Text style={styles.bigEmptyTitle}>Ready for a Productive Day?</Text>
+              <Text style={styles.bigEmptySubtitle}>
+                Start organizing your day by adding your first task. Every great achievement begins with a plan!
+              </Text>
+              
+              <View style={styles.featureGrid}>
+                <View style={styles.featureCard}>
+                  <Ionicons name="calendar" size={32} color="#4facfe" />
+                  <Text style={styles.featureTitle}>Plan Your Day</Text>
+                  <Text style={styles.featureText}>Schedule tasks and set priorities</Text>
+                </View>
+                <View style={styles.featureCard}>
+                  <Ionicons name="trending-up" size={32} color="#4ade80" />
+                  <Text style={styles.featureTitle}>Track Progress</Text>
+                  <Text style={styles.featureText}>Watch your completion rate grow</Text>
+                </View>
+                <View style={styles.featureCard}>
+                  <Ionicons name="star" size={32} color="#fbbf24" />
+                  <Text style={styles.featureTitle}>Stay Focused</Text>
+                  <Text style={styles.featureText}>Achieve goals one task at a time</Text>
+                </View>
+              </View>
+
+              <TouchableOpacity
+                onPress={() => onCreatePlan(today)}
+                style={styles.bigEmptyButton}
+                activeOpacity={0.7}
+              >
+                <LinearGradient
+                  colors={['#4facfe', '#00f2fe']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.bigEmptyButtonGradient}
+                >
+                  <Ionicons name="add" size={24} color="#fff" />
+                  <Text style={styles.bigEmptyButtonText}>Add Your First Plan</Text>
+                </LinearGradient>
+              </TouchableOpacity>
+            </View>
+          ) : pendingPlans.length === 0 ? (
             <Animated.View 
               style={[
                 styles.emptyState,
@@ -670,6 +796,20 @@ export default function TodayTab({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  particleContainer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 9999,
+  },
+  particle: {
+    position: 'absolute',
+    top: '50%',
+    left: '50%',
+    borderRadius: 100,
   },
   centerContainer: {
     flex: 1,
@@ -983,6 +1123,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#aaa',
     marginBottom: 20,
+    textAlign: 'center',
   },
   emptyButton: {
     overflow: 'hidden',
@@ -998,6 +1139,78 @@ const styles = StyleSheet.create({
   emptyButtonText: {
     color: '#fff',
     fontSize: 15,
+    fontWeight: '600',
+  },
+  bigEmptyState: {
+    alignItems: 'center',
+    paddingVertical: 40,
+    paddingHorizontal: 20,
+  },
+  bigEmptyIcon: {
+    width: 100,
+    height: 100,
+    borderRadius: 25,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  bigEmptyTitle: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#fff',
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  bigEmptySubtitle: {
+    fontSize: 15,
+    color: '#aaa',
+    marginBottom: 32,
+    textAlign: 'center',
+    lineHeight: 22,
+  },
+  featureGrid: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 32,
+    width: '100%',
+  },
+  featureCard: {
+    flex: 1,
+    backgroundColor: 'rgba(255, 255, 255, 0.03)',
+    borderRadius: 12,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+    alignItems: 'center',
+  },
+  featureTitle: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#fff',
+    marginTop: 8,
+    marginBottom: 4,
+    textAlign: 'center',
+  },
+  featureText: {
+    fontSize: 11,
+    color: '#888',
+    textAlign: 'center',
+    lineHeight: 16,
+  },
+  bigEmptyButton: {
+    overflow: 'hidden',
+    borderRadius: 14,
+  },
+  bigEmptyButtonGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 28,
+    paddingVertical: 14,
+  },
+  bigEmptyButtonText: {
+    color: '#fff',
+    fontSize: 16,
     fontWeight: '600',
   },
   lottieAnimation: {

@@ -563,6 +563,9 @@ const MultiplayerLobby = () => {
               <Ionicons name="people-outline" size={16} color="#94a3b8" />
               <Text style={styles.statText}>{players.length} Players</Text>
             </View>
+            <View style={styles.playerCount}>
+              <Text style={styles.playerCountText}>{players.length}/20</Text>
+            </View>
           </View>
         </View>
 
@@ -715,6 +718,7 @@ const styles = StyleSheet.create({
   quizStats: {
     flexDirection: 'row',
     gap: 16,
+    alignItems: 'center',
   },
   statItem: {
     flexDirection: 'row',
@@ -724,6 +728,20 @@ const styles = StyleSheet.create({
   statText: {
     color: '#94a3b8',
     fontSize: 14,
+  },
+  playerCount: {
+    marginLeft: 'auto',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    backgroundColor: 'rgba(139, 92, 246, 0.2)',
+    borderWidth: 1,
+    borderColor: 'rgba(139, 92, 246, 0.3)',
+  },
+  playerCountText: {
+    color: '#a78bfa',
+    fontSize: 12,
+    fontWeight: '600',
   },
   powerUpsCard: {
     marginHorizontal: 20,

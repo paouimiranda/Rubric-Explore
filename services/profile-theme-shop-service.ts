@@ -1,11 +1,11 @@
 // File: services/profile-theme-shop-service.ts
 import {
-    arrayUnion,
-    doc,
-    getDoc,
-    increment,
-    serverTimestamp,
-    updateDoc,
+  arrayUnion,
+  doc,
+  getDoc,
+  increment,
+  serverTimestamp,
+  updateDoc,
 } from 'firebase/firestore';
 import { auth, db } from '../firebase';
 import { clearUserProfileThemeCache } from './profile-theme-service';
@@ -65,28 +65,35 @@ export class ProfileThemeShopService {
    * Get user profile theme inventory from users collection
    */
   static async getUserInventory(): Promise<ProfileThemeInventory> {
-    try {
-      const userId = this.getCurrentUserId();
-      const userDoc = await getDoc(doc(db, 'users', userId));
-      
-      if (!userDoc.exists()) {
-        // Return default inventory if user doc doesn't exist
-        return {
-          ownedProfileThemes: ['default'], // Everyone starts with default theme
-          selectedProfileTheme: 'default',
-        };
-      }
-      
-      const userData = userDoc.data();
+  try {
+    const userId = this.getCurrentUserId();
+    const userDoc = await getDoc(doc(db, 'users', userId));
+    
+    if (!userDoc.exists()) {
+      // Return default inventory if user doc doesn't exist
       return {
-        ownedProfileThemes: userData.inventory?.ownedProfileThemes || ['default'],
-        selectedProfileTheme: userData.inventory?.selectedProfileTheme || 'default',
+        ownedProfileThemes: ['default'], // Everyone starts with default theme
+        selectedProfileTheme: 'default',
       };
-    } catch (error) {
-      console.error('Error fetching profile theme inventory:', error);
-      throw error;
     }
+    
+    const userData = userDoc.data();
+    const ownedProfileThemes = userData.inventory?.ownedProfileThemes || [];
+    
+    // Ensure 'default' is always included
+    const allOwnedThemes = ownedProfileThemes.includes('default') 
+      ? ownedProfileThemes 
+      : ['default', ...ownedProfileThemes];
+    
+    return {
+      ownedProfileThemes: allOwnedThemes,
+      selectedProfileTheme: userData.inventory?.selectedProfileTheme || 'default',
+    };
+  } catch (error) {
+    console.error('Error fetching profile theme inventory:', error);
+    throw error;
   }
+}
 
   /**
    * Check if user owns a specific profile theme
