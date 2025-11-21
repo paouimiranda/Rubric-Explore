@@ -39,6 +39,15 @@ export default function ChangePasswordScreen() {
   const auth = getAuth();
   const currentEmail = auth.currentUser?.email;
   const { addBacklogEvent } = useBacklogLogger();
+  // Password validation state (for real-time feedback, similar to registration)
+  const [passwordValidation, setPasswordValidation] = useState({
+    isValid: false,
+    message: ''
+  });
+  const [confirmPasswordValidation, setConfirmPasswordValidation] = useState({
+    isValid: false,
+    message: ''
+  });
 
   // Alert modal state
   const [alertModal, setAlertModal] = useState({
@@ -75,6 +84,8 @@ export default function ChangePasswordScreen() {
   const hideAlert = () => {
     setAlertModal(prev => ({ ...prev, visible: false }));
   };
+
+  
 
   // Fade in animation when step changes
   useEffect(() => {
@@ -115,6 +126,47 @@ export default function ChangePasswordScreen() {
       );
     }
   }, []);
+
+  // Real-time password validation (similar to registration)
+  useEffect(() => {
+    if (!newPassword.trim()) {
+      setPasswordValidation({ isValid: false, message: '' });
+      return;
+    }
+    const hasMinLength = newPassword.length >= 8;
+    const hasUppercase = /[A-Z]/.test(newPassword);
+    const hasLowercase = /[a-z]/.test(newPassword);
+    const hasDigit = /\d/.test(newPassword);
+    const hasSpecialChar = /[!@#$%^&*()_+\-=\$\${};':"\\|,.<>\/?]/.test(newPassword);
+    const isValid = hasMinLength && hasUppercase && hasLowercase && hasDigit && hasSpecialChar;
+    let message = '';
+    if (!isValid) {
+      const missing = [];
+      if (!hasMinLength) missing.push('8+ characters');
+      if (!hasUppercase) missing.push('1 uppercase');
+      if (!hasLowercase) missing.push('1 lowercase');
+      if (!hasDigit) missing.push('1 number');
+      if (!hasSpecialChar) missing.push('1 special characters (e.g. !@#$%^&*)');
+      message = `Needs: ${missing.join(', ')}`;
+    } else {
+      message = 'Password is strong!';
+    }
+    setPasswordValidation({ isValid, message });
+  }, [newPassword]);
+
+  // Real-time confirm password validation
+  useEffect(() => {
+    if (!confirmPassword.trim()) {
+      setConfirmPasswordValidation({ isValid: false, message: '' });
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setConfirmPasswordValidation({ isValid: false, message: 'Passwords don\'t match' });
+    } else {
+      setConfirmPasswordValidation({ isValid: true, message: 'Passwords match' });
+    }
+  }, [newPassword, confirmPassword]);
+
 
   // STEP 1: Send OTP to the current email
   const handleSendOtp = async () => {
@@ -199,11 +251,17 @@ export default function ChangePasswordScreen() {
       return;
     }
 
-    if (newPassword.length < 6) {
+    // Updated password validation to match registration standards
+    const hasMinLength = newPassword.length >= 8;
+    const hasUppercase = /[A-Z]/.test(newPassword);
+    const hasLowercase = /[a-z]/.test(newPassword);
+    const hasDigit = /\d/.test(newPassword);
+    const hasSpecialChar = /[!@#$%^&*()_+\-=\$\${};':"\\|,.<>\/?]/.test(newPassword);
+    if (!(hasMinLength && hasUppercase && hasLowercase && hasDigit && hasSpecialChar)) {
       showAlert(
         'error',
-        'Error',
-        'Password must be at least 6 characters',
+        'Weak Password',
+        'Password must be at least 8 characters with uppercase, lowercase, number, and special character.',
         [{ text: 'OK', onPress: hideAlert, style: 'primary' }]
       );
       addBacklogEvent("password_change_validation_error", { step: 2, error: "weak_password" });
@@ -404,64 +462,102 @@ export default function ChangePasswordScreen() {
           {/* STEP 2: Verify OTP and Change Password */}
           {step === 2 && (
             <View style={styles.formContainer}>
-              <View style={styles.inputContainer}>
-                <Ionicons name="key" size={20} color="#fa709a" style={styles.inputIcon} />
-                <TextInput
-                  style={styles.input}
-                  placeholder="Enter 6-digit OTP"
-                  placeholderTextColor="#666"
-                  value={otp}
-                  onChangeText={setOtp}
-                  keyboardType="number-pad"
-                  maxLength={6}
-                  editable={!isLoading}
-                />
+              <View style={styles.inputWrapper}>
+                <View style={styles.inputContainer}>
+                  <Ionicons name="key" size={20} color="#fa709a" style={styles.inputIcon} />
+                  <TextInput
+                    style={styles.input}
+                    placeholder="Enter 6-digit OTP"
+                    placeholderTextColor="#666"
+                    value={otp}
+                    onChangeText={setOtp}
+                    keyboardType="number-pad"
+                    maxLength={6}
+                    editable={!isLoading}
+                  />
+                </View>
               </View>
 
-              <View style={styles.inputContainer}>
-                <Ionicons name="lock-closed" size={20} color="#fa709a" style={styles.inputIcon} />
-                <TextInput
-                  style={styles.input}
-                  placeholder="Enter new password"
-                  placeholderTextColor="#666"
-                  secureTextEntry={!showPassword}
-                  value={newPassword}
-                  onChangeText={setNewPassword}
-                  editable={!isLoading}
-                />
-                <TouchableOpacity 
-                  onPress={() => setShowPassword(!showPassword)}
-                  style={styles.eyeIcon}
-                >
-                  <Ionicons 
-                    name={showPassword ? "eye-off" : "eye"} 
-                    size={20} 
-                    color="#666" 
+              <View style={styles.inputWrapper}>
+                <View style={styles.inputContainer}>
+                  <Ionicons name="lock-closed" size={20} color="#fa709a" style={styles.inputIcon} />
+                  <TextInput
+                    style={styles.input}
+                    placeholder="Enter new password"
+                    placeholderTextColor="#666"
+                    secureTextEntry={!showPassword}
+                    value={newPassword}
+                    onChangeText={setNewPassword}
+                    editable={!isLoading}
                   />
-                </TouchableOpacity>
+                  <TouchableOpacity 
+                    onPress={() => setShowPassword(!showPassword)}
+                    style={styles.eyeIcon}
+                  >
+                    <Ionicons 
+                      name={showPassword ? "eye-off" : "eye"} 
+                      size={20} 
+                      color="#666" 
+                    />
+                  </TouchableOpacity>
+                </View>
+                {/* Move validation feedback below the input container */}
+                {passwordValidation.message && (
+                  <View style={styles.validationFeedback}>
+                    <Ionicons 
+                      name={passwordValidation.isValid ? "checkmark-circle" : "close-circle"} 
+                      size={16} 
+                      color={passwordValidation.isValid ? "#5EEF96" : "#f87171"} 
+                    />
+                    <Text style={[
+                      styles.validationText,
+                      { color: passwordValidation.isValid ? "#5EEF96" : "#f87171" }
+                    ]}>
+                      {passwordValidation.message}
+                    </Text>
+                  </View>
+                )}
               </View>
 
-              <View style={styles.inputContainer}>
-                <Ionicons name="lock-closed" size={20} color="#fa709a" style={styles.inputIcon} />
-                <TextInput
-                  style={styles.input}
-                  placeholder="Confirm new password"
-                  placeholderTextColor="#666"
-                  secureTextEntry={!showConfirmPassword}
-                  value={confirmPassword}
-                  onChangeText={setConfirmPassword}
-                  editable={!isLoading}
-                />
-                <TouchableOpacity 
-                  onPress={() => setShowConfirmPassword(!showConfirmPassword)}
-                  style={styles.eyeIcon}
-                >
-                  <Ionicons 
-                    name={showConfirmPassword ? "eye-off" : "eye"} 
-                    size={20} 
-                    color="#666" 
+              <View style={styles.inputWrapper}>
+                <View style={styles.inputContainer}>
+                  <Ionicons name="lock-closed" size={20} color="#fa709a" style={styles.inputIcon} />
+                  <TextInput
+                    style={styles.input}
+                    placeholder="Confirm new password"
+                    placeholderTextColor="#666"
+                    secureTextEntry={!showConfirmPassword}
+                    value={confirmPassword}
+                    onChangeText={setConfirmPassword}
+                    editable={!isLoading}
                   />
-                </TouchableOpacity>
+                  <TouchableOpacity 
+                    onPress={() => setShowConfirmPassword(!showConfirmPassword)}
+                    style={styles.eyeIcon}
+                  >
+                    <Ionicons 
+                      name={showConfirmPassword ? "eye-off" : "eye"} 
+                      size={20} 
+                      color="#666" 
+                    />
+                  </TouchableOpacity>
+                </View>
+                {/* Move validation feedback below the input container */}
+                {confirmPasswordValidation.message && (
+                  <View style={styles.validationFeedback}>
+                    <Ionicons 
+                      name={confirmPasswordValidation.isValid ? "checkmark-circle" : "close-circle"} 
+                      size={16} 
+                      color={confirmPasswordValidation.isValid ? "#5EEF96" : "#f87171"} 
+                    />
+                    <Text style={[
+                      styles.validationText,
+                      { color: confirmPasswordValidation.isValid ? "#5EEF96" : "#f87171" }
+                    ]}>
+                      {confirmPasswordValidation.message}
+                    </Text>
+                  </View>
+                )}
               </View>
 
               <TouchableOpacity 
@@ -623,7 +719,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: "rgba(255, 255, 255, 0.08)",
     borderRadius: 12,
-    marginBottom: 16,
     paddingHorizontal: 16,
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.1)',
@@ -677,4 +772,21 @@ const styles = StyleSheet.create({
   resendTextDisabled: {
     color: "#666",
   },
+  validationFeedback: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 8,
+    paddingLeft: 4,
+    gap: 6,
+  },
+  validationText: {
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  inputWrapper: {
+    width: "100%",
+    marginBottom: 16,  // Adjust spacing as needed
+  },
+  
+  
 });
