@@ -68,6 +68,17 @@ const RegisterScreen = () => {
     isAvailable: null,
     message: ''
   });
+  // Add validation states for passwords
+  const [passwordValidation, setPasswordValidation] = useState<ValidationState>({
+    isChecking: false,
+    isAvailable: null,
+    message: ''
+  });
+  const [confirmPasswordValidation, setConfirmPasswordValidation] = useState<ValidationState>({
+    isChecking: false,
+    isAvailable: null,
+    message: ''
+  });
   
   // Debounce timers
   const emailDebounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -149,7 +160,7 @@ const RegisterScreen = () => {
       return;
     }
 
-    setEmailValidation({ isChecking: true, isAvailable: null, message: 'Checking...' });
+    setEmailValidation({ isChecking: true, isAvailable: null, message: 'Checking Email...' });
 
     emailDebounceTimer.current = setTimeout(async () => {
       try {
@@ -197,7 +208,7 @@ const RegisterScreen = () => {
       return;
     }
 
-    setUsernameValidation({ isChecking: true, isAvailable: null, message: 'Checking...' });
+    setUsernameValidation({ isChecking: true, isAvailable: null, message: 'Checking Username...' });
 
     usernameDebounceTimer.current = setTimeout(async () => {
       try {
@@ -222,6 +233,50 @@ const RegisterScreen = () => {
       }
     };
   }, [username]);
+
+  // Add real-time password validation with standard security checks
+  useEffect(() => {
+    if (!password.trim()) {
+      setPasswordValidation({ isChecking: false, isAvailable: null, message: '' });
+      return;
+    }
+    const hasMinLength = password.length >= 8; // Standard is often 8, but you had 6; I'll use 8 for better security
+    const hasUppercase = /[A-Z]/.test(password);
+    const hasLowercase = /[a-z]/.test(password);
+    const hasDigit = /\d/.test(password);
+    const hasSpecialChar = /[!@#$%^&*()_+\-=\$\${};':"\\|,.<>\/?]/.test(password);
+    const isValid = hasMinLength && hasUppercase && hasLowercase && hasDigit && hasSpecialChar;
+    let message = '';
+    if (!isValid) {
+      const missing = [];
+      if (!hasMinLength) missing.push('8+ characters');
+      if (!hasUppercase) missing.push('1 uppercase');
+      if (!hasLowercase) missing.push('1 lowercase');
+      if (!hasDigit) missing.push('1 number');
+      if (!hasSpecialChar) missing.push('1 special characters (e.g. !@#$%^&*)');
+      message = `Needs: ${missing.join(', ')}`;
+    } else {
+      message = 'Password is strong!';
+    }
+    setPasswordValidation({
+      isChecking: false,
+      isAvailable: isValid,
+      message
+    });
+  }, [password]);
+
+  // Add real-time confirm password validation
+  useEffect(() => {
+    if (!confirmPassword.trim()) {
+      setConfirmPasswordValidation({ isChecking: false, isAvailable: null, message: '' });
+      return;
+    }
+    if (password !== confirmPassword) {
+      setConfirmPasswordValidation({ isChecking: false, isAvailable: false, message: 'Passwords don\'t match' });
+    } else {
+      setConfirmPasswordValidation({ isChecking: false, isAvailable: true, message: 'Passwords match' });
+    }
+  }, [password, confirmPassword]);
 
   const handleTermsClose = () => {
     setShowTermsModal(false);
@@ -387,7 +442,7 @@ const RegisterScreen = () => {
   }, [usernameValidation.isAvailable]);
 
   useEffect(() => {
-    const isValid = password.length >= 6 && password === confirmPassword && confirmPassword.length > 0;
+    const isValid = password.length >= 8 && password === confirmPassword && confirmPassword.length > 0; // Updated to match new criteria
     Animated.spring(passwordMatchAnim, {
       toValue: isValid ? 1 : 0,
       tension: 50,
@@ -499,6 +554,15 @@ const RegisterScreen = () => {
     } else if (currentStep === 3) {
       if (!password) {
         showError('validation', 'Password Required', 'Please enter a password to continue.');
+        return false;
+      }
+      const hasMinLength = password.length >= 8;
+      const hasUppercase = /[A-Z]/.test(password);
+      const hasLowercase = /[a-z]/.test(password);
+      const hasDigit = /\d/.test(password);
+      const hasSpecialChar = /[!@#$%^&*()_+\-=\$\${};':"\\|,.<>\/?]/.test(password);
+      if (!(hasMinLength && hasUppercase && hasLowercase && hasDigit && hasSpecialChar)) {
+        showError('validation', 'Weak Password', 'Password must be at least 8 characters with uppercase, lowercase, number, and special character.');
         return false;
       }
       if (password.length < 6) {
@@ -928,6 +992,7 @@ const RegisterScreen = () => {
                   <Ionicons name={showPassword ? "eye-off" : "eye"} size={20} color="rgba(255, 255, 255, 0.6)" />
                 </TouchableOpacity>
               </View>
+              {renderValidationFeedback(passwordValidation)}
             </View>
             
             <View style={styles.inputWrapper}>
@@ -989,11 +1054,11 @@ const RegisterScreen = () => {
                   <Ionicons name="checkmark-circle" size={24} color="#5EEF96" />
                 </Animated.View> */}
               </View>
+              {renderValidationFeedback(confirmPasswordValidation)}
             </View>
           </Animated.View>
         );
-      
-      case 4:
+        case 4:
         return (
           <Animated.View style={[styles.stepContainer, { transform: [{ translateX: slideAnim }] }]}>
             <Text style={styles.stepTitle}>Almost there!</Text>
@@ -1074,13 +1139,11 @@ const RegisterScreen = () => {
               </Text>
             </View>
           </Animated.View>
-        );
-      
+        );  
       default:
         return null;
     }
   };
-
   return (
     <KeyboardAvoidingView 
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
