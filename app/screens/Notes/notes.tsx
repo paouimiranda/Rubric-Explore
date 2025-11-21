@@ -1,4 +1,4 @@
-// notes.tsx - Refined and Restructured UI - COMPLETE VERSION WITH ICON+TEXT BUTTONS
+// notes.tsx - Refactored Header Section
 import CreateNotebookModal from '@/components/Interface/create-notebook-modal';
 import { CustomAlertModal } from '@/components/Interface/custom-alert-modal';
 import { JoinNoteIconButton } from '@/components/Interface/join-button';
@@ -335,7 +335,7 @@ export default function NotesHome() {
   const getViewLabel = () => {
     switch (viewMode) {
       case 'list': return 'List';
-      case 'compact': return 'Compact';
+      case 'compact': return 'Card';
       case 'grid': return 'Grid';
     }
   };
@@ -636,49 +636,49 @@ export default function NotesHome() {
           showsVerticalScrollIndicator={false}
           ListHeaderComponent={
             <View style={styles.headerContainer}>
+              {/* REFACTORED HEADER - Title and buttons in single row */}
               <View style={styles.titleSection}>
-                <View style={styles.titleTextContainer}>
+                <View style={styles.titleAndButtonsRow}>
                   <Text style={styles.mainTitle} adjustsFontSizeToFit numberOfLines={1}>My Notebooks</Text>
-                  <Text style={styles.subtitle} adjustsFontSizeToFit numberOfLines={1}>Organize your thoughts and ideas</Text>
-                </View>
-                
-                <View style={styles.headerButtons}>
-                  <TouchableOpacity 
-                    activeOpacity={0.8}
-                    style={styles.actionButtonWrapper}
-                  >
-                    <LinearGradient
-                      colors={['#8b5cf6', '#7c3aed']}
-                      start={{ x: 0, y: 0 }}
-                      end={{ x: 1, y: 1 }}
-                      style={styles.actionButtonWithText}
-                    >
-                      <Ionicons name="link-outline" size={18} color="#ffffff" />
-                      <Text style={styles.actionButtonText}>Join</Text>
-                      <View style={styles.hiddenJoinButton}>
-                        <JoinNoteIconButton 
-                          style={styles.joinButtonOverride}
-                          onNoteJoined={(noteId, permission) => {}}
-                        />
-                      </View>
-                    </LinearGradient>
-                  </TouchableOpacity>
                   
-                  <TouchableOpacity 
-                    onPress={cycleViewMode}
-                    activeOpacity={0.8}
-                    style={styles.actionButtonWrapper}
-                  >
-                    <LinearGradient
-                      colors={['#f59e0b', '#d97706']}
-                      start={{ x: 0, y: 0 }}
-                      end={{ x: 1, y: 1 }}
-                      style={styles.actionButtonWithText}
+                  <View style={styles.actionButtonsRow}>
+                    <TouchableOpacity 
+                      activeOpacity={0.8}
+                      style={styles.actionButtonWrapper}
                     >
-                      <Ionicons name={getViewIcon()} size={18} color="#ffffff" />
-                      <Text style={styles.actionButtonText}>{getViewLabel()}</Text>
-                    </LinearGradient>
-                  </TouchableOpacity>
+                      <LinearGradient
+                        colors={['#8b5cf6', '#7c3aed']}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 1 }}
+                        style={styles.actionButton}
+                      >
+                        <Ionicons name="link-outline" size={16} color="#ffffff" />
+                        <Text style={styles.actionButtonText}>Join</Text>
+                        <View style={styles.hiddenJoinButton}>
+                          <JoinNoteIconButton 
+                            style={styles.joinButtonOverride}
+                            onNoteJoined={(noteId, permission) => {}}
+                          />
+                        </View>
+                      </LinearGradient>
+                    </TouchableOpacity>
+                    
+                    <TouchableOpacity 
+                      onPress={cycleViewMode}
+                      activeOpacity={0.8}
+                      style={styles.actionButtonWrapper}
+                    >
+                      <LinearGradient
+                        colors={['#f59e0b', '#d97706']}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 1 }}
+                        style={styles.actionButton}
+                      >
+                        <Ionicons name={getViewIcon()} size={16} color="#ffffff" />
+                        <Text style={styles.actionButtonText}>{getViewLabel()}</Text>
+                      </LinearGradient>
+                    </TouchableOpacity>
+                  </View>
                 </View>
               </View>
               
@@ -795,60 +795,55 @@ const styles = StyleSheet.create({
     flex: 1,
   },
 
-  // ========== HEADER SECTION ==========
+  // ========== REFACTORED HEADER SECTION ==========
   headerContainer: {
     marginBottom: 20,
   },
   titleSection: {
-    marginBottom: 24,
+    marginBottom: 20,
     paddingTop: 8,
+  },
+  // Single row with title and buttons aligned
+  titleAndButtonsRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-  },
-  titleTextContainer: {
-    flex: 1,
-    marginRight: 12,
   },
   mainTitle: {
     fontSize: 32,
     fontWeight: '800',
     color: '#ffffff',
-    marginBottom: 4,
     letterSpacing: -0.5,
+    flex: 1,
   },
-  subtitle: {
-    fontSize: 14,
-    color: '#94a3b8',
-    fontWeight: '500',
-  },
-  headerButtons: {
-    flexDirection: 'column',
-    gap: 10,
+  actionButtonsRow: {
+    flexDirection: 'row',
+    gap: 8,
   },
   actionButtonWrapper: {
-    borderRadius: 16,
+    borderRadius: 14,
     overflow: 'hidden',
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 8,
-    elevation: 6,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.2,
+    shadowRadius: 6,
+    elevation: 5,
   },
-  actionButtonWithText: {
+  actionButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    gap: 8,
-    minWidth: 90,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    gap: 6,
     position: 'relative',
+    minWidth: 78, // Fixed width for consistent button size
+    justifyContent: 'center',
   },
   actionButtonText: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '700',
     color: '#ffffff',
-    letterSpacing: 0.3,
+    letterSpacing: 0.2,
   },
   hiddenJoinButton: {
     position: 'absolute',

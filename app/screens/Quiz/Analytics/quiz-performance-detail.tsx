@@ -14,7 +14,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { BarChart, LineChart, yAxisSides } from 'react-native-gifted-charts';
+import { BarChart, LineChart } from 'react-native-gifted-charts';
 
 const { width: screenWidth } = Dimensions.get('window');
 const CHART_WIDTH = screenWidth - 80;
@@ -162,7 +162,7 @@ const QuizPerformanceDetail = () => {
             yAxisColor="rgba(255, 255, 255, 0.2)"
             yAxisTextStyle={styles.chartAxisText}
             xAxisLabelTextStyle={styles.chartAxisText}
-            yAxisSide={yAxisSides.RIGHT}
+            
           />
         </View>
         <Text style={styles.chartXLabel}>Attempt Number</Text>
@@ -263,7 +263,7 @@ const QuizPerformanceDetail = () => {
             yAxisColor="rgba(255, 255, 255, 0.2)"
             yAxisTextStyle={styles.chartAxisText}
             xAxisLabelTextStyle={styles.chartAxisText}
-            yAxisSide={yAxisSides.RIGHT}
+            
           />
         </View>
         <Text style={styles.chartXLabel}>Attempt Number (seconds per question)</Text>
@@ -561,9 +561,11 @@ const styles = StyleSheet.create({
     color: '#ffffff',
   },
   chartWrapper: {
-    alignItems: 'center',
-    paddingVertical: 8,
-  },
+  alignItems: 'center',
+  paddingVertical: 8,
+  overflow: 'hidden', // Prevent overflow
+  width: '100%', // Constrain to container width
+},
   chartAxisText: {
     color: '#94a3b8',
     fontSize: 10,

@@ -77,6 +77,7 @@ export class NotificationService {
    * @param body - Plan description (optional)
    * @param triggerDate - When to trigger the notification
    * @param category - Plan category for styling
+   * @param notificationType - Type of notification ('reminder' or 'main')
    * @returns Notification identifier or null if failed
    */
   static async schedulePlanNotification(
@@ -84,7 +85,8 @@ export class NotificationService {
     title: string,
     body: string | undefined,
     triggerDate: Date,
-    category: string = 'personal'
+    category: string = 'personal',
+    notificationType: 'reminder' | 'main' = 'main'
   ): Promise<string | null> {
     try {
       // Check if we have permissions
@@ -100,15 +102,20 @@ export class NotificationService {
         return null;
       }
 
-      // Cancel any existing notification for this plan
-      await this.cancelPlanNotification(planId);
+      // Use different identifiers for reminder vs main notification
+      const identifier = notificationType === 'reminder' 
+        ? `plan-${planId}-reminder` 
+        : `plan-${planId}-main`;
+
+      // Cancel any existing notification with this identifier
+      await Notifications.cancelScheduledNotificationAsync(identifier);
 
       // Schedule the notification
-      const identifier = await Notifications.scheduleNotificationAsync({
+      const scheduledId = await Notifications.scheduleNotificationAsync({
         content: {
           title: `📅 ${title}`,
           body: body || 'Time for your scheduled plan!',
-          data: { planId, category },
+          data: { planId, category, notificationType },
           sound: 'default',
           priority: Notifications.AndroidNotificationPriority.HIGH,
           ...(Platform.OS === 'android' && {
@@ -119,11 +126,11 @@ export class NotificationService {
           type: Notifications.SchedulableTriggerInputTypes.DATE,
           date: triggerDate,
         },
-        identifier: `plan-${planId}`, // Use consistent identifier
+        identifier,
       });
 
-      console.log(`Notification scheduled for plan ${planId}:`, identifier);
-      return identifier;
+      console.log(`${notificationType} notification scheduled for plan ${planId}:`, scheduledId);
+      return scheduledId;
     } catch (error) {
       console.error('Error scheduling notification:', error);
       return null;
@@ -131,14 +138,18 @@ export class NotificationService {
   }
 
   /**
-   * Schedule a notification with a reminder offset (e.g., 15 minutes before)
+   * Schedule DUAL notifications with a reminder offset
+   * Schedules TWO notifications:
+   * 1. Reminder notification (X minutes before plan time)
+   * 2. Main notification (at the actual plan time)
+   * 
    * @param planId - Unique identifier for the plan
    * @param title - Plan title
    * @param body - Plan description (optional)
    * @param planDateTime - The actual plan date/time
-   * @param reminderMinutes - Minutes before plan time to send notification (default: 15)
+   * @param reminderMinutes - Minutes before plan time to send reminder (default: 15)
    * @param category - Plan category for styling
-   * @returns Notification identifier or null if failed
+   * @returns Object with both notification IDs, or null if failed
    */
   static async schedulePlanNotificationWithReminder(
     planId: string,
@@ -148,26 +159,74 @@ export class NotificationService {
     reminderMinutes: number = 15,
     category: string = 'personal'
   ): Promise<string | null> {
-    // Calculate trigger time (plan time minus reminder minutes)
-    const triggerDate = new Date(planDateTime.getTime() - reminderMinutes * 60 * 1000);
-    
-    // Update body to indicate it's a reminder
-    const reminderBody = reminderMinutes > 0 
-      ? `Reminder: ${body || 'Your plan is coming up!'} (in ${reminderMinutes} min)`
-      : body || 'Time for your scheduled plan!';
+    try {
+      const scheduledIds: string[] = [];
 
-    return this.schedulePlanNotification(planId, title, reminderBody, triggerDate, category);
+      // Schedule REMINDER notification (if reminderMinutes > 0)
+      if (reminderMinutes > 0) {
+        const reminderDate = new Date(planDateTime.getTime() - reminderMinutes * 60 * 1000);
+        
+        // Only schedule reminder if it's in the future
+        if (reminderDate > new Date()) {
+          const reminderBody = `Reminder: ${body || 'Your plan is coming up!'} (in ${reminderMinutes} min)`;
+          
+          const reminderId = await this.schedulePlanNotification(
+            planId,
+            title,
+            reminderBody,
+            reminderDate,
+            category,
+            'reminder'
+          );
+          
+          if (reminderId) {
+            scheduledIds.push(reminderId);
+            console.log(`✅ Reminder notification scheduled for ${reminderDate.toLocaleString()}`);
+          }
+        }
+      }
+
+      // Schedule MAIN notification (at actual plan time)
+      if (planDateTime > new Date()) {
+        const mainBody = body || 'Time for your scheduled plan!';
+        
+        const mainId = await this.schedulePlanNotification(
+          planId,
+          title,
+          mainBody,
+          planDateTime,
+          category,
+          'main'
+        );
+        
+        if (mainId) {
+          scheduledIds.push(mainId);
+          console.log(`✅ Main notification scheduled for ${planDateTime.toLocaleString()}`);
+        }
+      }
+
+      // Return a combined identifier or null if no notifications were scheduled
+      return scheduledIds.length > 0 ? scheduledIds.join(',') : null;
+    } catch (error) {
+      console.error('Error scheduling dual notifications:', error);
+      return null;
+    }
   }
 
   /**
-   * Cancel a scheduled notification for a plan
+   * Cancel ALL notifications for a plan (both reminder and main)
    * @param planId - Unique identifier for the plan
    */
   static async cancelPlanNotification(planId: string): Promise<void> {
     try {
-      const identifier = `plan-${planId}`;
-      await Notifications.cancelScheduledNotificationAsync(identifier);
-      console.log(`Notification cancelled for plan ${planId}`);
+      // Cancel both reminder and main notifications
+      const reminderIdentifier = `plan-${planId}-reminder`;
+      const mainIdentifier = `plan-${planId}-main`;
+      
+      await Notifications.cancelScheduledNotificationAsync(reminderIdentifier);
+      await Notifications.cancelScheduledNotificationAsync(mainIdentifier);
+      
+      console.log(`Both notifications cancelled for plan ${planId}`);
     } catch (error) {
       console.error('Error cancelling notification:', error);
     }

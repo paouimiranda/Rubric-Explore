@@ -45,6 +45,7 @@ export default function PlanModal({
   const [planCategory, setPlanCategory] = useState<Plan['category']>('personal');
   const [planPriority, setPlanPriority] = useState<Plan['priority']>('medium');
   const [reminderMinutes, setReminderMinutes] = useState(15);
+  const [customReminderInput, setCustomReminderInput] = useState('');
   
   // Picker states
   const [timePickerVisible, setTimePickerVisible] = useState(false);
@@ -52,9 +53,10 @@ export default function PlanModal({
   const [categoryPickerVisible, setCategoryPickerVisible] = useState(false);
   const [priorityPickerVisible, setPriorityPickerVisible] = useState(false);
   const [reminderPickerVisible, setReminderPickerVisible] = useState(false);
+  const [showCustomReminderInput, setShowCustomReminderInput] = useState(false);
   
   // Validation states
-  const [errors, setErrors] = useState({ title: false, time: false });
+  const [errors, setErrors] = useState({ title: false, time: false, reminder: false });
   const [isSaving, setIsSaving] = useState(false);
   
   const slideAnim = React.useRef(new Animated.Value(SCREEN_HEIGHT)).current;
@@ -88,12 +90,11 @@ export default function PlanModal({
         setReminderMinutes(editingPlan.reminderMinutes ?? 15);
       } else {
         resetForm();
-        // If initialDate is provided, set it as the default date
         if (initialDate) {
           setPlanDate(new Date(initialDate));
         }
       }
-      setErrors({ title: false, time: false });
+      setErrors({ title: false, time: false, reminder: false });
     }
   }, [visible, editingPlan, initialDate]);
 
@@ -124,18 +125,56 @@ export default function PlanModal({
     setPlanCategory('personal');
     setPlanPriority('medium');
     setReminderMinutes(15);
+    setCustomReminderInput('');
+    setShowCustomReminderInput(false);
+  };
+
+  // Validate if reminder time is in the past
+  const validateReminderTime = () => {
+    if (!planTime) return true;
+
+    const [hours, minutes] = planTime.split(':').map(Number);
+    const planDateTime = new Date(planDate);
+    planDateTime.setHours(hours, minutes, 0, 0);
+    
+    const reminderTime = new Date(planDateTime.getTime() - reminderMinutes * 60000);
+    const now = new Date();
+    
+    if (reminderTime <= now) {
+      setErrors(prev => ({ ...prev, reminder: true }));
+      Alert.alert(
+        'Invalid Reminder Time',
+        'The reminder time would be in the past. Please choose a later plan time or a shorter reminder duration.',
+        [{ text: 'OK' }]
+      );
+      return false;
+    }
+    
+    setErrors(prev => ({ ...prev, reminder: false }));
+    return true;
   };
 
   const validateForm = () => {
     const newErrors = {
       title: !planTitle.trim(),
       time: !planTime,
+      reminder: false,
     };
     setErrors(newErrors);
-    return !newErrors.title && !newErrors.time;
+    
+    if (newErrors.title || newErrors.time) {
+      return false;
+    }
+    
+    return validateReminderTime();
   };
 
   const savePlanWithoutPermission = async () => {
+    if (!validateForm()) {
+      Alert.alert('Missing Information', 'Please fill out all required fields (*)');
+      return;
+    }
+
     setIsSaving(true);
     try {
       const planData = {
@@ -169,7 +208,6 @@ export default function PlanModal({
 
   const savePlan = async () => {
     if (!validateForm()) {
-      Alert.alert('Missing Information', 'Please fill out all required fields (*)');
       return;
     }
 
@@ -192,6 +230,22 @@ export default function PlanModal({
     }
 
     savePlanWithoutPermission();
+  };
+
+  const handleCustomReminderSubmit = () => {
+    const minutes = parseInt(customReminderInput);
+    if (isNaN(minutes) || minutes < 0) {
+      Alert.alert('Invalid Input', 'Please enter a valid number of minutes (0 or greater)');
+      return;
+    }
+    if (minutes > 10080) { // 7 days
+      Alert.alert('Invalid Input', 'Reminder cannot be more than 7 days (10,080 minutes) before the plan');
+      return;
+    }
+    setReminderMinutes(minutes);
+    setShowCustomReminderInput(false);
+    setReminderPickerVisible(false);
+    setCustomReminderInput('');
   };
 
   const getCategoryIcon = (category: string) => {
@@ -222,10 +276,14 @@ export default function PlanModal({
   };
 
   const getReminderLabel = (minutes: number) => {
-    if (minutes === 0) return 'At plan time';
+    if (minutes === 0) return 'None';
     if (minutes < 60) return `${minutes} min before`;
-    const hours = Math.floor(minutes / 60);
-    return hours === 1 ? '1 hour before' : `${hours} hours before`;
+    if (minutes < 1440) {
+      const hours = Math.floor(minutes / 60);
+      return hours === 1 ? '1 hour before' : `${hours} hours before`;
+    }
+    const days = Math.floor(minutes / 1440);
+    return days === 1 ? '1 day before' : `${days} days before`;
   };
 
   if (!visible) return null;
@@ -235,6 +293,7 @@ export default function PlanModal({
       <KeyboardAvoidingView 
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.modalOverlay}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
       >
         {/* Backdrop */}
         <Animated.View 
@@ -299,6 +358,7 @@ export default function PlanModal({
 
           <ScrollView 
             style={styles.modalBody}
+            contentContainerStyle={styles.scrollContent}
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
             bounces={false}
@@ -590,12 +650,19 @@ export default function PlanModal({
                     <Text style={styles.permissionBadgeText}>Disabled</Text>
                   </View>
                 )}
+                {errors.reminder && (
+                  <View style={[styles.permissionBadge, { backgroundColor: 'rgba(255, 107, 107, 0.1)' }]}>
+                    <Ionicons name="warning" size={12} color="#ff6b6b" />
+                    <Text style={[styles.permissionBadgeText, { color: '#ff6b6b' }]}>Invalid</Text>
+                  </View>
+                )}
               </View>
               
               <TouchableOpacity
                 style={[
                   styles.inputContainer,
-                  !hasPermission && styles.inputDisabled
+                  !hasPermission && styles.inputDisabled,
+                  errors.reminder && styles.inputError
                 ]}
                 onPress={() => {
                   if (!hasPermission) {
@@ -665,6 +732,7 @@ export default function PlanModal({
                   { minutes: 30, label: '30 minutes before', icon: 'notifications' },
                   { minutes: 60, label: '1 hour before', icon: 'notifications-circle' },
                   { minutes: 120, label: '2 hours before', icon: 'notifications-circle' },
+                  { minutes: 1440, label: '1 day before', icon: 'notifications-circle' },
                 ].map((option) => (
                   <TouchableOpacity
                     key={option.minutes}
@@ -675,6 +743,7 @@ export default function PlanModal({
                     onPress={() => {
                       setReminderMinutes(option.minutes);
                       setReminderPickerVisible(false);
+                      setShowCustomReminderInput(false);
                     }}
                     activeOpacity={0.7}
                   >
@@ -693,11 +762,66 @@ export default function PlanModal({
                     )}
                   </TouchableOpacity>
                 ))}
+                
+                {/* Custom Reminder Option */}
+                <TouchableOpacity
+                  style={[
+                    styles.pickerOption,
+                    showCustomReminderInput && styles.pickerOptionSelected
+                  ]}
+                  onPress={() => setShowCustomReminderInput(!showCustomReminderInput)}
+                  activeOpacity={0.7}
+                >
+                  <View style={styles.reminderOptionIcon}>
+                    <Ionicons 
+                      name="create-outline" 
+                      size={18} 
+                      color={showCustomReminderInput ? '#4facfe' : '#aaa'} 
+                    />
+                  </View>
+                  <Text style={styles.pickerText}>
+                    Custom time
+                  </Text>
+                  <Ionicons 
+                    name={showCustomReminderInput ? "chevron-up" : "chevron-down"} 
+                    size={18} 
+                    color="#aaa" 
+                  />
+                </TouchableOpacity>
+                
+                {/* Custom Reminder Input */}
+                {showCustomReminderInput && (
+                  <View style={styles.customReminderContainer}>
+                    <Text style={styles.customReminderLabel}>
+                      Enter minutes before plan time:
+                    </Text>
+                    <View style={styles.customReminderInputRow}>
+                      <TextInput
+                        style={styles.customReminderInput}
+                        placeholder="e.g., 45"
+                        placeholderTextColor="#666"
+                        keyboardType="number-pad"
+                        value={customReminderInput}
+                        onChangeText={setCustomReminderInput}
+                      />
+                      <TouchableOpacity
+                        style={styles.customReminderButton}
+                        onPress={handleCustomReminderSubmit}
+                        activeOpacity={0.7}
+                      >
+                        <Ionicons name="checkmark" size={20} color="#fff" />
+                      </TouchableOpacity>
+                    </View>
+                    <Text style={styles.customReminderHint}>
+                      Max: 10,080 minutes (7 days)
+                    </Text>
+                  </View>
+                )}
               </View>
             )}
 
-            {/* Bottom Spacing for Safe Area */}
-            <View style={{ height: 100 }} />
+            {/* Bottom Spacing */}
+            <View style={{ height: 120 }} />
           </ScrollView>
 
           {/* Fixed Bottom Action Buttons */}
@@ -819,8 +943,11 @@ const styles = StyleSheet.create({
   },
   modalBody: { 
     flex: 1,
+  },
+  scrollContent: {
     paddingHorizontal: 20,
     paddingTop: 15,
+    paddingBottom: 20,
   },
   section: {
     marginBottom: 20,
@@ -1067,5 +1194,44 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#4facfe',
     fontWeight: '600',
+  },
+  customReminderContainer: {
+    padding: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.02)',
+    borderRadius: 8,
+    marginTop: 4,
+  },
+  customReminderLabel: {
+    fontSize: 13,
+    color: '#aaa',
+    marginBottom: 10,
+    fontWeight: '500',
+  },
+  customReminderInputRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  customReminderInput: {
+    flex: 1,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    borderRadius: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 15,
+    color: '#fff',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  customReminderButton: {
+    width: 48,
+    backgroundColor: '#4facfe',
+    borderRadius: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  customReminderHint: {
+    fontSize: 11,
+    color: '#666',
+    marginTop: 8,
   },
 });

@@ -4,10 +4,22 @@ import { sharingService } from '@/services/sharing-service';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
-import React, { useState } from 'react';
+import {
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  limit,
+  orderBy,
+  query,
+  serverTimestamp,
+  setDoc,
+} from 'firebase/firestore';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Animated,
+  FlatList,
   Keyboard,
   Modal,
   StyleSheet,
@@ -17,6 +29,7 @@ import {
   TouchableWithoutFeedback,
   View,
 } from 'react-native';
+import { db } from '../../firebase';
 import { CustomAlertModal } from './custom-alert-modal';
 
 interface JoinNoteModalProps {
@@ -25,7 +38,16 @@ interface JoinNoteModalProps {
   onSuccess?: (noteId: string, permission: 'view' | 'edit') => void;
 }
 
-type InputMethod = 'code' | 'url';
+type InputMethod = 'code' | 'recent';
+
+interface RecentNote {
+  id: string;
+  noteId: string;
+  title: string;
+  permission: 'view' | 'edit';
+  visitedAt: Date;
+  ownerName?: string;
+}
 
 export default function JoinNoteModal({ 
   visible, 
@@ -36,10 +58,13 @@ export default function JoinNoteModal({
   const [inputMethod, setInputMethod] = useState<InputMethod>('code');
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
-  const [scaleAnim] = useState(new Animated.Value(0.9));
-  const [fadeAnim] = useState(new Animated.Value(0));
+  const [recentNotes, setRecentNotes] = useState<RecentNote[]>([]);
+  const [loadingRecent, setLoadingRecent] = useState(false);
   
-  // Alert modal states
+  const scaleAnim = useRef(new Animated.Value(0.9)).current;
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const isFirstRender = useRef(true);
+  
   const [alertConfig, setAlertConfig] = useState<{
     visible: boolean;
     type: 'info' | 'success' | 'error' | 'warning';
@@ -58,8 +83,43 @@ export default function JoinNoteModal({
     buttons: [],
   });
 
-  React.useEffect(() => {
+  const fetchRecentNotes = useCallback(async () => {
+    if (!user?.uid) return;
+    
+    setLoadingRecent(true);
+    try {
+      const recentRef = collection(db, 'users', user.uid, 'recentSharedNotes');
+      const q = query(recentRef, orderBy('visitedAt', 'desc'), limit(10));
+      const snapshot = await getDocs(q);
+      
+      const notes: RecentNote[] = [];
+      for (const docSnap of snapshot.docs) {
+        const data = docSnap.data();
+        const noteRef = doc(db, 'notes', data.noteId);
+        const noteSnap = await getDoc(noteRef);
+        
+        if (noteSnap.exists()) {
+          notes.push({
+            id: docSnap.id,
+            noteId: data.noteId,
+            title: noteSnap.data().title || 'Untitled Note',
+            permission: data.permission,
+            visitedAt: data.visitedAt?.toDate() || new Date(),
+            ownerName: data.ownerName,
+          });
+        }
+      }
+      setRecentNotes(notes);
+    } catch (error) {
+      console.error('Error fetching recent notes:', error);
+    } finally {
+      setLoadingRecent(false);
+    }
+  }, [user?.uid]);
+
+  useEffect(() => {
     if (visible) {
+      isFirstRender.current = true;
       Animated.parallel([
         Animated.spring(scaleAnim, {
           toValue: 1,
@@ -73,42 +133,66 @@ export default function JoinNoteModal({
           useNativeDriver: true,
         }),
       ]).start();
+      
+      if (user?.uid) {
+        fetchRecentNotes();
+      }
     } else {
       scaleAnim.setValue(0.9);
       fadeAnim.setValue(0);
     }
-  }, [visible]);
+  }, [visible, user?.uid, fetchRecentNotes, scaleAnim, fadeAnim]);
 
-  // Extract token from various input formats
+  // Animate modal when switching tabs (skip first render)
+  useEffect(() => {
+    if (isFirstRender.current) {
+      isFirstRender.current = false;
+      return;
+    }
+    
+    Animated.sequence([
+      Animated.timing(scaleAnim, {
+        toValue: 0.98,
+        duration: 100,
+        useNativeDriver: true,
+      }),
+      Animated.spring(scaleAnim, {
+        toValue: 1,
+        tension: 50,
+        friction: 7,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [inputMethod, scaleAnim]);
+
+  const trackVisitedNote = async (
+    noteId: string, 
+    noteTitle: string, 
+    permission: 'view' | 'edit',
+    ownerName?: string
+  ) => {
+    if (!user?.uid) return;
+    
+    try {
+      const recentRef = doc(db, 'users', user.uid, 'recentSharedNotes', noteId);
+      await setDoc(recentRef, {
+        noteId,
+        title: noteTitle,
+        permission,
+        visitedAt: serverTimestamp(),
+        ownerName: ownerName || null,
+      }, { merge: true });
+    } catch (error) {
+      console.error('Error tracking visited note:', error);
+    }
+  };
+
   const extractToken = (inputText: string): string | null => {
-    const trimmedInput = inputText.trim();
-    
+    const trimmedInput = inputText.trim().toUpperCase();
     if (!trimmedInput) return null;
-
-    // If it's already a clean token (8 chars for share code, 32+ for URL token)
     if (/^[A-Z0-9]{8}$/.test(trimmedInput)) {
-      return trimmedInput; // Share code
+      return trimmedInput;
     }
-    
-    if (/^[A-Za-z0-9]{20,}$/.test(trimmedInput)) {
-      return trimmedInput; // Direct token
-    }
-
-    // Extract from URLs
-    const urlPatterns = [
-      /(?:https?:\/\/)?(?:www\.)?yourapp\.com\/shared\/([A-Za-z0-9]+)/i,
-      /(?:https?:\/\/)?(?:localhost|127\.0\.0\.1)(?::\d+)?\/shared\/([A-Za-z0-9]+)/i,
-      /yourapp:\/\/shared\/([A-Za-z0-9]+)/i,
-      /\/shared\/([A-Za-z0-9]+)(?:[\/\?#]|$)/i,
-    ];
-
-    for (const pattern of urlPatterns) {
-      const match = trimmedInput.match(pattern);
-      if (match && match[1]) {
-        return match[1];
-      }
-    }
-
     return null;
   };
 
@@ -145,8 +229,8 @@ export default function JoinNoteModal({
       setAlertConfig({
         visible: true,
         type: 'error',
-        title: 'Invalid Input',
-        message: 'Please enter a valid share code or URL.\n\nExamples:\n• Share code: ABC12345\n• URL: https://yourapp.com/shared/abc123...',
+        title: 'Invalid Code',
+        message: 'Please enter a valid 8-character share code.\n\nExample: ABC12345',
         buttons: [
           {
             text: 'OK',
@@ -160,8 +244,13 @@ export default function JoinNoteModal({
 
     try {
       setLoading(true);
-      
       const result = await sharingService.useShareToken(token, user?.uid);
+      
+      await trackVisitedNote(
+        result.note.id, 
+        result.note.title, 
+        result.permission
+      );
       
       setAlertConfig({
         visible: true,
@@ -176,7 +265,6 @@ export default function JoinNoteModal({
               onClose();
               setInput('');
               
-              // Route based on permission
               if (result.permission === 'edit') {
                 router.push({
                   pathname: '/screens/Notes/note-editor',
@@ -216,12 +304,12 @@ export default function JoinNoteModal({
     } catch (error: any) {
       console.error('Error joining note:', error);
       
-      let errorMessage = 'Failed to join note. Please check your input and try again.';
+      let errorMessage = 'Failed to join note. Please check your code and try again.';
       
       if (error.message.includes('Invalid or expired')) {
-        errorMessage = 'This share link is invalid or has expired.';
+        errorMessage = 'This share code is invalid or has expired.';
       } else if (error.message.includes('usage limit')) {
-        errorMessage = 'This share link has reached its usage limit.';
+        errorMessage = 'This share code has reached its usage limit.';
       } else if (error.message.includes('no longer exists')) {
         errorMessage = 'The shared note no longer exists.';
       }
@@ -244,22 +332,88 @@ export default function JoinNoteModal({
     }
   };
 
+  const handleOpenRecentNote = async (note: RecentNote) => {
+    await trackVisitedNote(note.noteId, note.title, note.permission, note.ownerName);
+    
+    onClose();
+    
+    if (note.permission === 'edit') {
+      router.push({
+        pathname: '/screens/Notes/note-editor',
+        params: {
+          noteId: note.noteId,
+          isSharedAccess: 'true',
+          sharedPermission: 'edit',
+        }
+      });
+    } else {
+      router.push({
+        pathname: '/screens/Notes/shared-note-viewer',
+        params: {
+          noteId: note.noteId,
+          permission: 'view',
+          isSharedAccess: 'true',
+        }
+      });
+    }
+    
+    onSuccess?.(note.noteId, note.permission);
+  };
+
   const handleClose = () => {
     setInput('');
     setInputMethod('code');
     onClose();
   };
 
-  const getPlaceholderText = () => {
-    switch (inputMethod) {
-      case 'code':
-        return 'Enter 8-character code';
-      case 'url':
-        return 'Paste share URL here';
-      default:
-        return 'Enter code or URL';
-    }
+  const formatTimeAgo = (date: Date): string => {
+    const now = new Date();
+    const diff = now.getTime() - date.getTime();
+    const mins = Math.floor(diff / 60000);
+    const hours = Math.floor(diff / 3600000);
+    const days = Math.floor(diff / 86400000);
+    
+    if (mins < 1) return 'Just now';
+    if (mins < 60) return `${mins}m ago`;
+    if (hours < 24) return `${hours}h ago`;
+    if (days < 7) return `${days}d ago`;
+    return date.toLocaleDateString();
   };
+
+  const renderRecentNote = ({ item }: { item: RecentNote }) => (
+    <TouchableOpacity
+      style={styles.recentNoteItem}
+      onPress={() => handleOpenRecentNote(item)}
+      activeOpacity={0.7}
+    >
+      <View style={styles.recentNoteIcon}>
+        <Ionicons 
+          name={item.permission === 'edit' ? 'create-outline' : 'eye-outline'} 
+          size={20} 
+          color={item.permission === 'edit' ? '#6366f1' : '#10b981'} 
+        />
+      </View>
+      <View style={styles.recentNoteContent}>
+        <Text style={styles.recentNoteTitle} numberOfLines={1}>
+          {item.title}
+        </Text>
+        <View style={styles.recentNoteMeta}>
+          <View style={[
+            styles.permissionBadge,
+            item.permission === 'edit' ? styles.editBadge : styles.viewBadge
+          ]}>
+            <Text style={styles.permissionText}>
+              {item.permission === 'edit' ? 'Edit' : 'View'}
+            </Text>
+          </View>
+          <Text style={styles.recentNoteTime}>
+            {formatTimeAgo(item.visitedAt)}
+          </Text>
+        </View>
+      </View>
+      <Ionicons name="chevron-forward" size={20} color="#4b5563" />
+    </TouchableOpacity>
+  );
 
   return (
     <>
@@ -284,7 +438,6 @@ export default function JoinNoteModal({
                 colors={["#1a1f2e", "#0f1419"]} 
                 style={styles.modalContainer}
               >
-                {/* Decorative Top Bar */}
                 <LinearGradient
                   colors={['#6366f1', '#8b5cf6']}
                   start={{ x: 0, y: 0 }}
@@ -292,7 +445,6 @@ export default function JoinNoteModal({
                   style={styles.topBar}
                 />
 
-                {/* Header */}
                 <View style={styles.header}>
                   <View style={styles.iconContainer}>
                     <LinearGradient
@@ -304,7 +456,7 @@ export default function JoinNoteModal({
                   </View>
                   <Text style={styles.title}>Join Shared Note</Text>
                   <Text style={styles.subtitle}>
-                    Access notes shared with you
+                    Enter a code or revisit recent notes
                   </Text>
                   <TouchableOpacity onPress={handleClose} style={styles.closeButton}>
                     <Ionicons name="close-circle" size={28} color="#6b7280" />
@@ -312,18 +464,12 @@ export default function JoinNoteModal({
                 </View>
 
                 <View style={styles.content}>
-                  {/* Input Method Tabs */}
+                  {/* Tab Selection */}
                   <View style={styles.methodSelection}>
                     <View style={styles.tabsContainer}>
                       <TouchableOpacity
-                        style={[
-                          styles.tab,
-                          inputMethod === 'code' && styles.tabActive
-                        ]}
-                        onPress={() => {
-                          setInputMethod('code');
-                          setInput('');
-                        }}
+                        style={[styles.tab, inputMethod === 'code' && styles.tabActive]}
+                        onPress={() => setInputMethod('code')}
                         activeOpacity={0.7}
                       >
                         {inputMethod === 'code' && (
@@ -345,110 +491,125 @@ export default function JoinNoteModal({
                       </TouchableOpacity>
                       
                       <TouchableOpacity
-                        style={[
-                          styles.tab,
-                          inputMethod === 'url' && styles.tabActive
-                        ]}
-                        onPress={() => {
-                          setInputMethod('url');
-                          setInput('');
-                        }}
+                        style={[styles.tab, inputMethod === 'recent' && styles.tabActive]}
+                        onPress={() => setInputMethod('recent')}
                         activeOpacity={0.7}
                       >
-                        {inputMethod === 'url' && (
+                        {inputMethod === 'recent' && (
                           <LinearGradient
                             colors={['#6366f1', '#8b5cf6']}
                             style={styles.tabGradient}
                           />
                         )}
                         <Ionicons 
-                          name="link" 
+                          name="time" 
                           size={18} 
-                          color={inputMethod === 'url' ? '#fff' : '#6b7280'} 
+                          color={inputMethod === 'recent' ? '#fff' : '#6b7280'} 
                           style={styles.tabIcon}
                         />
                         <Text style={[
                           styles.tabText,
-                          inputMethod === 'url' && styles.tabTextActive
-                        ]}>URL</Text>
+                          inputMethod === 'recent' && styles.tabTextActive
+                        ]}>Recent</Text>
                       </TouchableOpacity>
                     </View>
                   </View>
 
-                  {/* Input Field */}
-                  <View style={styles.inputContainer}>
-                    <View style={styles.inputWrapper}>
-                      <View style={styles.inputIconContainer}>
-                        <Ionicons 
-                          name={inputMethod === 'code' ? 'keypad-outline' : 'link-outline'} 
-                          size={20} 
-                          color="#6366f1" 
-                        />
+                  {inputMethod === 'code' ? (
+                    <>
+                      {/* Code Input */}
+                      <View style={styles.inputContainer}>
+                        <View style={styles.inputWrapper}>
+                          <View style={styles.inputIconContainer}>
+                            <Ionicons name="keypad-outline" size={20} color="#6366f1" />
+                          </View>
+                          <TextInput
+                            style={styles.textInput}
+                            value={input}
+                            onChangeText={(text) => setInput(text.toUpperCase())}
+                            placeholder="Enter 8-character code"
+                            placeholderTextColor="#4b5563"
+                            autoCapitalize="characters"
+                            autoCorrect={false}
+                            maxLength={8}
+                          />
+                          {input.length > 0 && (
+                            <TouchableOpacity 
+                              onPress={() => setInput('')}
+                              style={styles.clearButton}
+                            >
+                              <Ionicons name="close-circle" size={20} color="#6b7280" />
+                            </TouchableOpacity>
+                          )}
+                        </View>
+                        
+                        <View style={styles.helperContainer}>
+                          <Ionicons name="information-circle-outline" size={14} color="#6b7280" />
+                          <Text style={styles.helperText}>
+                            8 characters (e.g., ABC12345)
+                          </Text>
+                          <Text style={styles.charCount}>{input.length}/8</Text>
+                        </View>
                       </View>
-                      <TextInput
-                        style={[
-                          styles.textInput,
-                          inputMethod === 'url' && styles.textInputMultiline
-                        ]}
-                        value={input}
-                        onChangeText={setInput}
-                        placeholder={getPlaceholderText()}
-                        placeholderTextColor="#4b5563"
-                        autoCapitalize={inputMethod === 'code' ? 'characters' : 'none'}
-                        autoCorrect={false}
-                        multiline={inputMethod === 'url'}
-                        numberOfLines={inputMethod === 'url' ? 3 : 1}
-                      />
-                      {input.length > 0 && (
-                        <TouchableOpacity 
-                          onPress={() => setInput('')}
-                          style={styles.clearButton}
-                        >
-                          <Ionicons name="close-circle" size={20} color="#6b7280" />
-                        </TouchableOpacity>
-                      )}
-                    </View>
-                    
-                    {/* Helper Text */}
-                    <View style={styles.helperContainer}>
-                      <Ionicons name="information-circle-outline" size={14} color="#6b7280" />
-                      <Text style={styles.helperText}>
-                        {inputMethod === 'code' 
-                          ? '8 characters (e.g., ABC12345)'
-                          : 'Full URL from message or browser'}
-                      </Text>
-                    </View>
-                  </View>
 
-                  {/* Action Button */}
-                  <TouchableOpacity
-                    style={[
-                      styles.joinButton,
-                      (!input.trim() || loading) && styles.joinButtonDisabled
-                    ]}
-                    onPress={handleJoinNote}
-                    disabled={!input.trim() || loading}
-                    activeOpacity={0.8}
-                  >
-                    <LinearGradient
-                      colors={(!input.trim() || loading) ? ['#374151', '#1f2937'] : ['#6366f1', '#8b5cf6']}
-                      start={{ x: 0, y: 0 }}
-                      end={{ x: 1, y: 0 }}
-                      style={styles.joinButtonGradient}
-                    >
-                      {loading ? (
-                        <>
-                          <ActivityIndicator size="small" color="#fff" />
-                          <Text style={styles.joinButtonText}>Joining...</Text>
-                        </>
+                      {/* Join Button */}
+                      <TouchableOpacity
+                        style={[
+                          styles.joinButton,
+                          (input.length !== 8 || loading) && styles.joinButtonDisabled
+                        ]}
+                        onPress={handleJoinNote}
+                        disabled={input.length !== 8 || loading}
+                        activeOpacity={0.8}
+                      >
+                        <LinearGradient
+                          colors={(input.length !== 8 || loading) ? ['#374151', '#1f2937'] : ['#6366f1', '#8b5cf6']}
+                          start={{ x: 0, y: 0 }}
+                          end={{ x: 1, y: 0 }}
+                          style={styles.joinButtonGradient}
+                        >
+                          {loading ? (
+                            <>
+                              <ActivityIndicator size="small" color="#fff" />
+                              <Text style={styles.joinButtonText}>Joining...</Text>
+                            </>
+                          ) : (
+                            <>
+                              <Ionicons name="arrow-forward-circle" size={22} color="#fff" />
+                              <Text style={styles.joinButtonText}>Join Note</Text>
+                            </>
+                          )}
+                        </LinearGradient>
+                      </TouchableOpacity>
+                    </>
+                  ) : (
+                    /* Recent Notes List */
+                    <View style={styles.recentContainer}>
+                      {loadingRecent ? (
+                        <View style={styles.loadingContainer}>
+                          <ActivityIndicator size="large" color="#6366f1" />
+                          <Text style={styles.loadingText}>Loading recent notes...</Text>
+                        </View>
+                      ) : recentNotes.length === 0 ? (
+                        <View style={styles.emptyContainer}>
+                          <Ionicons name="document-text-outline" size={48} color="#4b5563" />
+                          <Text style={styles.emptyTitle}>No Recent Notes</Text>
+                          <Text style={styles.emptyText}>
+                            Notes you join will appear here for quick access
+                          </Text>
+                        </View>
                       ) : (
-                        <>
-                          <Ionicons name="arrow-forward-circle" size={22} color="#fff" />
-                          <Text style={styles.joinButtonText}>Join Note</Text>
-                        </>
+                        <FlatList
+                          data={recentNotes}
+                          renderItem={renderRecentNote}
+                          keyExtractor={(item) => item.id}
+                          showsVerticalScrollIndicator={false}
+                          style={styles.recentList}
+                          contentContainerStyle={styles.recentListContent}
+                        />
                       )}
-                    </LinearGradient>
-                  </TouchableOpacity>
+                    </View>
+                  )}
 
                   {/* Info Cards */}
                   <View style={styles.infoCards}>
@@ -456,19 +617,19 @@ export default function JoinNoteModal({
                       <View style={styles.infoIconContainer}>
                         <Ionicons name="shield-checkmark" size={16} color="#10b981" />
                       </View>
-                      <Text style={styles.infoCardText}>Secure access</Text>
+                      <Text style={styles.infoCardText}>Secure</Text>
                     </View>
                     <View style={styles.infoCard}>
                       <View style={styles.infoIconContainer}>
                         <Ionicons name="time" size={16} color="#f59e0b" />
                       </View>
-                      <Text style={styles.infoCardText}>Real-time sync</Text>
+                      <Text style={styles.infoCardText}>Real-time</Text>
                     </View>
                     <View style={styles.infoCard}>
                       <View style={styles.infoIconContainer}>
                         <Ionicons name="people" size={16} color="#6366f1" />
                       </View>
-                      <Text style={styles.infoCardText}>Sharing</Text>
+                      <Text style={styles.infoCardText}>Collab</Text>
                     </View>
                   </View>
                 </View>
@@ -478,7 +639,6 @@ export default function JoinNoteModal({
         </TouchableWithoutFeedback>
       </Modal>
 
-      {/* Custom Alert Modal */}
       <CustomAlertModal
         visible={alertConfig.visible}
         type={alertConfig.type}
@@ -501,6 +661,7 @@ const styles = StyleSheet.create({
   modalWrapper: {
     width: '90%',
     maxWidth: 420,
+    maxHeight: '80%',
   },
   modalContainer: {
     borderRadius: 24,
@@ -511,9 +672,7 @@ const styles = StyleSheet.create({
     shadowRadius: 40,
     elevation: 25,
   },
-  topBar: {
-    height: 4,
-  },
+  topBar: { height: 4 },
   header: {
     alignItems: 'center',
     paddingTop: 32,
@@ -521,9 +680,7 @@ const styles = StyleSheet.create({
     paddingBottom: 24,
     position: 'relative',
   },
-  iconContainer: {
-    marginBottom: 16,
-  },
+  iconContainer: { marginBottom: 16 },
   iconGradient: {
     width: 56,
     height: 56,
@@ -558,9 +715,7 @@ const styles = StyleSheet.create({
     padding: 24,
     paddingTop: 8,
   },
-  methodSelection: {
-    marginBottom: 24,
-  },
+  methodSelection: { marginBottom: 24 },
   tabsContainer: {
     flexDirection: 'row',
     backgroundColor: '#0f1419',
@@ -579,9 +734,7 @@ const styles = StyleSheet.create({
     position: 'relative',
     overflow: 'hidden',
   },
-  tabActive: {
-    // Active state handled by gradient
-  },
+  tabActive: {},
   tabGradient: {
     position: 'absolute',
     top: 0,
@@ -589,20 +742,14 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
   },
-  tabIcon: {
-    marginRight: 6,
-  },
+  tabIcon: { marginRight: 6 },
   tabText: {
     color: '#6b7280',
     fontSize: 15,
     fontWeight: '600',
   },
-  tabTextActive: {
-    color: '#fff',
-  },
-  inputContainer: {
-    marginBottom: 24,
-  },
+  tabTextActive: { color: '#fff' },
+  inputContainer: { marginBottom: 24 },
   inputWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -619,15 +766,11 @@ const styles = StyleSheet.create({
   textInput: {
     flex: 1,
     color: '#fff',
-    fontSize: 16,
+    fontSize: 18,
+    fontWeight: '600',
+    letterSpacing: 2,
     paddingVertical: 16,
     paddingRight: 16,
-  },
-  textInputMultiline: {
-    paddingTop: 16,
-    paddingBottom: 16,
-    minHeight: 80,
-    textAlignVertical: 'top',
   },
   clearButton: {
     paddingRight: 16,
@@ -643,6 +786,12 @@ const styles = StyleSheet.create({
     color: '#6b7280',
     fontSize: 13,
     marginLeft: 6,
+    flex: 1,
+  },
+  charCount: {
+    color: '#6b7280',
+    fontSize: 13,
+    fontWeight: '600',
   },
   joinButton: {
     borderRadius: 12,
@@ -656,15 +805,95 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     paddingHorizontal: 24,
   },
-  joinButtonDisabled: {
-    opacity: 0.5,
-  },
+  joinButtonDisabled: { opacity: 0.5 },
   joinButtonText: {
     color: '#fff',
     fontSize: 17,
     fontWeight: '700',
     marginLeft: 10,
     letterSpacing: 0.2,
+  },
+  recentContainer: {
+    minHeight: 200,
+    maxHeight: 280,
+    marginBottom: 24,
+  },
+  recentList: { flex: 1 },
+  recentListContent: { gap: 8 },
+  recentNoteItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#0f1419',
+    borderRadius: 12,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: '#1f2937',
+  },
+  recentNoteIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    backgroundColor: '#1f2937',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  recentNoteContent: { flex: 1 },
+  recentNoteTitle: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  recentNoteMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  permissionBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  editBadge: { backgroundColor: 'rgba(99, 102, 241, 0.2)' },
+  viewBadge: { backgroundColor: 'rgba(16, 185, 129, 0.2)' },
+  permissionText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#9ca3af',
+  },
+  recentNoteTime: {
+    color: '#6b7280',
+    fontSize: 12,
+  },
+  loadingContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 40,
+  },
+  loadingText: {
+    color: '#9ca3af',
+    marginTop: 12,
+    fontSize: 14,
+  },
+  emptyContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 40,
+  },
+  emptyTitle: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+    marginTop: 12,
+    marginBottom: 4,
+  },
+  emptyText: {
+    color: '#6b7280',
+    fontSize: 13,
+    textAlign: 'center',
   },
   infoCards: {
     flexDirection: 'row',
@@ -681,9 +910,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#1f2937',
   },
-  infoIconContainer: {
-    marginRight: 6,
-  },
+  infoIconContainer: { marginRight: 6 },
   infoCardText: {
     color: '#9ca3af',
     fontSize: 12,

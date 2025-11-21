@@ -375,39 +375,50 @@ const QuizHome = () => {
       style={styles.container}
     >
       <SafeAreaView style={styles.container}>
-        {/* Enhanced Header */}
-        <View style={styles.header}>
-          <View style={styles.headerLeft}>
-            <Text style={styles.headerTitle}>My Quizzes</Text>
-            <Text style={styles.headerSubtitle}>{quizzes.length} total</Text>
-          </View>
-          
-          <View style={styles.headerActions}>
-            <TouchableOpacity 
-              style={styles.joinButton}
-              onPress={handleJoinMultiplayer}
-            >
-              <LinearGradient
-                colors={['#f59e0b', '#d97706']}
-                style={styles.buttonGradient}
-              >
-                <Ionicons name="people" size={18} color="#ffffff" />
-              </LinearGradient>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.addButton}
-              onPress={handleCreateNewQuiz}
-            >
-              <LinearGradient
-                colors={['#8b5cf6', '#7c3aed']}
-                style={styles.buttonGradient}
-              >
-                <Ionicons name="add" size={20} color="#ffffff" />
-              </LinearGradient>
-            </TouchableOpacity>
-          </View>
-        </View>
+        {/* Refactored Header - Title and buttons in single row */}
+<View style={styles.headerContainer}>
+  <View style={styles.titleSection}>
+    <View style={styles.titleAndButtonsRow}>
+      <Text style={styles.mainTitle} adjustsFontSizeToFit numberOfLines={1}>
+        My Quizzes
+      </Text>
+      
+      <View style={styles.actionButtonsRow}>
+        <TouchableOpacity 
+          onPress={handleJoinMultiplayer}
+          activeOpacity={0.8}
+          style={styles.actionButtonWrapper}
+        >
+          <LinearGradient
+            colors={['#f59e0b', '#d97706']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.actionButton}
+          >
+            <Ionicons name="people" size={16} color="#ffffff" />
+            <Text style={styles.actionButtonText}>Join</Text>
+          </LinearGradient>
+        </TouchableOpacity>
+        
+        <TouchableOpacity 
+          onPress={handleCreateNewQuiz}
+          activeOpacity={0.8}
+          style={styles.actionButtonWrapper}
+        >
+          <LinearGradient
+            colors={['#8b5cf6', '#7c3aed']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.actionButton}
+          >
+            <Ionicons name="add" size={16} color="#ffffff" />
+            <Text style={styles.actionButtonText}>New</Text>
+          </LinearGradient>
+        </TouchableOpacity>
+      </View>
+    </View>
+  </View>
+</View>
 
         {/* Quiz List */}
         <FlatList
@@ -452,51 +463,8 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 24,
-    paddingVertical: 20,
-    paddingTop: 24,
-  },
-  headerLeft: {
-    flex: 1,
-  },
-  headerTitle: {
-    fontSize: 32,
-    fontWeight: '800',
-    color: '#ffffff',
-    letterSpacing: -0.5,
-  },
-  headerSubtitle: {
-    fontSize: 14,
-    color: '#64748b',
-    marginTop: 2,
-    fontWeight: '500',
-  },
-  headerActions: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  joinButton: {
-    borderRadius: 14,
-    overflow: 'hidden',
-    elevation: 4,
-    shadowColor: '#f59e0b',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-  },
-  addButton: {
-    borderRadius: 14,
-    overflow: 'hidden',
-    elevation: 4,
-    shadowColor: '#8b5cf6',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-  },
+
+
   buttonGradient: {
     width: 48,
     height: 48,
@@ -633,6 +601,11 @@ const styles = StyleSheet.create({
     color: '#64748b',
     fontWeight: '500',
   },
+  iconText: {
+    fontSize: 12,
+    color: '#fff',
+    fontWeight: '500',
+  },
   playButtonCompact: {
     borderRadius: 12,
     overflow: 'hidden',
@@ -720,6 +693,56 @@ const styles = StyleSheet.create({
     width: 100,
     height: 100,
     marginBottom: 16,
+  },
+  headerContainer: {
+    paddingHorizontal: 24,
+    marginBottom: 8,
+  },
+  titleSection: {
+    marginBottom: 20,
+    paddingTop: 16,
+  },
+  titleAndButtonsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  mainTitle: {
+  fontSize: 32,
+  fontWeight: '800',
+  color: '#ffffff',
+  letterSpacing: -0.5,
+  flex: 1,
+  marginRight: 16, // Additional explicit margin for safety
+  maxWidth: '60%', // Ensures title doesn't take up too much space on small screens
+},
+  actionButtonsRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  actionButtonWrapper: {
+    borderRadius: 14,
+    overflow: 'hidden',
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.2,
+    shadowRadius: 6,
+    elevation: 5,
+  },
+  actionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    gap: 6,
+    minWidth: 78,
+    justifyContent: 'center',
+  },
+  actionButtonText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#ffffff',
+    letterSpacing: 0.2,
   },
 });
 
