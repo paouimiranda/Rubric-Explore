@@ -638,3 +638,31 @@ export const togglePinFriend = async (userId: string, friendId: string, isPinned
     throw new Error('Failed to toggle pin');
   }
 };
+// NEW: Cancel an outgoing friend request
+export const cancelFriendRequest = async (fromUserId: string, toUserId: string) => {
+  try {
+    const requestRef = collection(db, 'friendRequests');
+    const q = query(requestRef, where('fromUserId', '==', fromUserId), where('toUserId', '==', toUserId));
+    const snapshot = await getDocs(q);
+    if (!snapshot.empty) {
+      await deleteDoc(snapshot.docs[0].ref);
+    } else {
+      throw new Error('Friend request not found');
+    }
+  } catch (error) {
+    console.error('Error cancelling friend request:', error);
+    throw error;
+  }
+};
+// NEW: Get outgoing friend requests sent by the user (for persistence)
+export const getOutgoingFriendRequests = async (userId: string) => {
+  try {
+    const requestRef = collection(db, 'friendRequests');
+    const q = query(requestRef, where('fromUserId', '==', userId), where('status', '==', 'pending'));
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(doc => doc.data()); // Returns array of request objects
+  } catch (error) {
+    console.error('Error getting outgoing friend requests:', error);
+    throw error;
+  }
+};
