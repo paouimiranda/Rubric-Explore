@@ -11,10 +11,12 @@ import { BACKLOG_EVENTS } from "@/services/backlogEvents";
 import { getTotalUnreadCount } from '@/services/chat-service';
 import {
   acceptFriendRequest,
-  getFriendRequests,
+  cancelFriendRequest,
+  getFriendRequests, // NEW: For cancelling requests
+  getOutgoingFriendRequests,
   getUserFriends,
   getUserPreferences,
-  listenToFriendRequests,
+  listenToFriendRequests, // NEW: For loading sent requests
   rejectFriendRequest,
   removeFriend,
   SearchUser,
@@ -74,13 +76,13 @@ export default function Friendlist() {
   const [searchLoading, setSearchLoading] = useState(false);
   const [unreadChatCount, setUnreadChatCount] = useState(0);
   const { muteFriend, unmuteFriend, isFriendMuted } = useNotifications();
-  
+  const [sentRequests, setSentRequests] = useState<Set<string>>(new Set()); // NEW: Track sent friend requests
   const [menuVisible, setMenuVisible] = useState(false);
   const [selectedFriend, setSelectedFriend] = useState<Friend | null>(null);
   const [mutedFriends, setMutedFriends] = useState<Set<string>>(new Set());
   const [pinnedFriends, setPinnedFriends] = useState<Set<string>>(new Set());
   const [onlineFriends, setOnlineFriends] = useState<Set<string>>(new Set());
-
+  const [sendingRequest, setSendingRequest] = useState(false); // NEW: Track if a request is being sent/cancelled
   const [alertConfig, setAlertConfig] = useState<{
     visible: boolean;
     type: 'info' | 'success' | 'error' | 'warning';
@@ -398,12 +400,17 @@ export default function Friendlist() {
     }
   };
 
+  // MODIFIED: Now also loads outgoing requests to populate sentRequests
   const loadFriendRequests = async () => {
     if (!currentUser) return;
     
     try {
-      const requests = await getFriendRequests(currentUser.uid);
+      const requests = await getFriendRequests(currentUser.uid); // Incoming
       setFriendRequests(requests);
+      
+      // NEW: Load outgoing requests to populate sentRequests
+      const outgoing = await getOutgoingFriendRequests(currentUser.uid);
+      setSentRequests(new Set(outgoing.map(req => req.toUserId)));
     } catch (error) {
       console.error('Error loading friend requests:', error);
     }
@@ -436,8 +443,10 @@ export default function Friendlist() {
   };
 
   const handleSendFriendRequest = async (userId: string, username: string) => {
-    if (!currentUser) return;
-    
+  if (!currentUser || sendingRequest) return; // NEW: Early return if already sending
+  
+  setSendingRequest(true); // NEW: Start loading
+  try {
     if (friends.some(friend => friend.uid === userId)) {
       showAlert(
         'warning',
@@ -448,26 +457,47 @@ export default function Friendlist() {
       return;
     }
     
-    try {
+    const isAlreadySent = sentRequests.has(userId);
+    if (isAlreadySent) {
+      // Cancel the request
+      await cancelFriendRequest(currentUser.uid, userId);
+      setSentRequests(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(userId);
+        return newSet;
+      });
+      showAlert(
+        'success',
+        'Request Cancelled',
+        `Friend request to ${username} has been cancelled.`,
+        [{ text: 'OK', style: 'primary', onPress: () => closeAlert() }]
+      );
+    } else {
+      // Send the request
       await sendFriendRequest(currentUser.uid, userId);
+      setSentRequests(prev => new Set(prev).add(userId));
       showAlert(
         'success',
         'Request Sent',
         `Friend request sent to ${username}`,
         [{ text: 'OK', style: 'primary', onPress: () => closeAlert() }]
       );
-      setSearchResults(prev => prev.filter(user => user.uid !== userId));
       addBacklogEvent(BACKLOG_EVENTS.USER_SENT_FRIEND_REQUEST, { recipientUsername: username });
-    } catch (error) {
-      showAlert(
-        'error',
-        'Error',
-        'Failed to send friend request. Please try again.',
-        [{ text: 'OK', style: 'primary', onPress: () => closeAlert() }]
-      );
-      addBacklogEvent("friend_request_send_error", { recipientUsername: username, error: String(error) });
     }
-  };
+  } catch (error) {
+    showAlert(
+      'error',
+      'Error',
+      'Failed to send friend request. Please try again.',
+      [{ text: 'OK', style: 'primary', onPress: () => closeAlert() }]
+    );
+    addBacklogEvent("friend_request_send_error", { recipientUsername: username, error: String(error) });
+  } finally {
+    setSendingRequest(false); // NEW: Always reset loading state
+  }
+};
+
+
 
   const handleAcceptRequest = async (request: FriendRequest) => {
     try {
@@ -632,6 +662,8 @@ export default function Friendlist() {
                       user={user}
                       onSendRequest={handleSendFriendRequest}
                       onViewProfile={() => navigateToProfile(user.uid)}
+                      isRequestSent={sentRequests.has(user.uid)} // NEW: Pass sent state
+                      isSending={sendingRequest}
                     />
                   ))}
                 </View>
@@ -1011,10 +1043,13 @@ export default function Friendlist() {
 }
 
 // Search Result Card Component
-const SearchResultCard = ({ user, onSendRequest, onViewProfile }: { 
+// UPDATED: SearchResultCard with sent state
+const SearchResultCard = ({ user, onSendRequest, onViewProfile, isRequestSent, isSending }: { 
   user: SearchResult; 
   onSendRequest: (userId: string, username: string) => void;
   onViewProfile: () => void;
+  isRequestSent: boolean;
+  isSending: boolean; // NEW: Prop for loading state
 }) => {
   const avatarUrl = getAvatarUrl(user.avatarIndex ?? 0);
   
@@ -1044,27 +1079,36 @@ const SearchResultCard = ({ user, onSendRequest, onViewProfile }: {
           </View>
         </View>
         <TouchableOpacity 
-          style={styles.addButton}
+          style={[styles.addButton, (isRequestSent || isSending) && styles.sentButton]} // NEW: Apply sentButton style during sending too
           onPress={(e) => {
             e.stopPropagation();
-            onSendRequest(user.uid, user.username);
+            if (!isSending) onSendRequest(user.uid, user.username); // NEW: Only call if not sending
           }}
           activeOpacity={0.8}
+          disabled={isSending} // NEW: Disable only during sending
         >
           <LinearGradient
-            colors={['#4facfe', '#00f2fe']}
+            colors={isSending ? ['#6b7280', '#4b5563'] : (isRequestSent ? ['#6b7280', '#4b5563'] : ['#4facfe', '#00f2fe'])} // NEW: Grey during sending
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
             style={styles.addButtonGradient}
           >
-            <Ionicons name="person-add" size={16} color="#fff" />
-            <Text style={styles.addButtonText}>Add</Text>
+            <Ionicons 
+              name={isSending ? "sync" : (isRequestSent ? "checkmark" : "person-add")} // NEW: Spinner icon during sending
+              size={16} 
+              color="#fff" 
+            />
+            <Text style={styles.addButtonText}>
+              {isSending ? 'Sending...' : (isRequestSent ? 'Sent' : 'Add')}
+            </Text>
           </LinearGradient>
         </TouchableOpacity>
       </LinearGradient>
     </TouchableOpacity>
   );
 };
+
+
 
 // Friend Request Card Component
 const FriendRequestCard = ({ request, onAccept, onReject, onViewProfile }: {
@@ -1623,5 +1667,8 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     fontWeight: '500',
+  },
+    sentButton: { // NEW: Style for sent button (greyed out)
+    opacity: 0.6,
   },
 });
