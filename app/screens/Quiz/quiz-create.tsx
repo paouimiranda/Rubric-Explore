@@ -2,6 +2,7 @@
 import { convertAPIQuestionToInternalFormat, generateQuizFromAI } from '@/api/quizApi';
 import { TopicSelectionModal } from '@/components/Interface/ai-quiz-modal';
 import { CustomAlertModal } from '@/components/Interface/custom-alert-modal';
+import { OptionFocusModal } from '@/components/Interface/option-focus-modal';
 import { auth } from '@/firebase';
 import { useBacklogLogger } from '@/hooks/useBackLogLogger';
 import { BACKLOG_EVENTS } from '@/services/backlogEvents';
@@ -24,14 +25,16 @@ import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Image,
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
-  View,
+  View
 } from 'react-native';
 
 const QuizMaker = () => {
@@ -66,6 +69,11 @@ const QuizMaker = () => {
   const [uploadingImage, setUploadingImage] = useState(false);
   const [showQuestionFocusModal, setShowQuestionFocusModal] = useState(false);
   const [focusedQuestionText, setFocusedQuestionText] = useState('');
+
+  const [showOptionFocusModal, setShowOptionFocusModal] = useState(false);
+  const [focusedOptionIndex, setFocusedOptionIndex] = useState(0);
+  const [focusedOptionText, setFocusedOptionText] = useState('');
+  const [focusedOptionIsCorrect, setFocusedOptionIsCorrect] = useState(false);
 
   // Alert modal state
   const [alertModal, setAlertModal] = useState({
@@ -198,7 +206,7 @@ const QuizMaker = () => {
   };
 
   const handleOptionChange = (oIndex: number, text: string) => {
-    if (text.length > 50) return;
+    
     const updated = { ...questions[currentQuestionIndex] };
     updated.options[oIndex] = text;
     updateQuestion(currentQuestionIndex, updated);
@@ -683,6 +691,29 @@ const QuizMaker = () => {
     }
   };
 
+  const handleOpenOptionFocus = (optionIndex: number) => {
+    const currentQ = questions[currentQuestionIndex];
+    setFocusedOptionIndex(optionIndex);
+    setFocusedOptionText(currentQ.options[optionIndex]);
+    setFocusedOptionIsCorrect(currentQ.correctAnswers.includes(optionIndex));
+    setShowOptionFocusModal(true);
+  };
+
+  const handleSaveOptionFocus = (text: string, isCorrect: boolean) => {
+    const updated = { ...questions[currentQuestionIndex] };
+    updated.options[focusedOptionIndex] = text;
+    
+    if (isCorrect) {
+      updated.correctAnswers = [focusedOptionIndex];
+    } else if (updated.correctAnswers.includes(focusedOptionIndex)) {
+      // If unchecking and it was the correct answer, set first option as correct
+      updated.correctAnswers = [0];
+    }
+    
+    updateQuestion(currentQuestionIndex, updated);
+    setShowOptionFocusModal(false);
+  };
+
   const renderQuestionContent = () => {
     const currentQuestion = questions[currentQuestionIndex];
     if (!currentQuestion) return null;
@@ -690,41 +721,36 @@ const QuizMaker = () => {
     switch (currentQuestion.type) {
       case 'multiple_choice':
          return (
-          <View style={styles.answerGrid}>
-            {currentQuestion.options.map((opt, oIndex) => (
-              <TouchableOpacity
-                key={oIndex}
-                style={[
-                  styles.answerBtn, 
-                  answerColors[oIndex],
-                  currentQuestion.correctAnswers.includes(oIndex) && styles.selectedAnswer
-                ]}
-                onPress={() => handleSetCorrectAnswer(oIndex)}
-                activeOpacity={0.8}
-              >
-                <View style={styles.radioRow}>
-                  <View style={styles.radioCircleOuter}>
-                    {currentQuestion.correctAnswers.includes(oIndex) && (
-                      <View style={styles.radioCircleInner} />
-                    )}
-                  </View>
-                  <TextInput
-                    placeholder={`Answer ${oIndex + 1}`}
-                    placeholderTextColor="rgba(255, 255, 255, 0.6)"
-                    value={opt}
-                    onChangeText={(text) => handleOptionChange(oIndex, text)}
-                    style={styles.answerInput}
-                    maxLength={50}
-                    multiline={true}
-                    numberOfLines={4}
-                    textAlignVertical="center"
-                    
-                  />
-                </View>
-              </TouchableOpacity>
-            ))}
+    <View style={styles.answerGrid}>
+      {currentQuestion.options.map((opt, oIndex) => (
+        <TouchableOpacity
+          key={oIndex}
+          style={[
+            styles.answerBtn, 
+            answerColors[oIndex],
+            currentQuestion.correctAnswers.includes(oIndex) && styles.selectedAnswer
+          ]}
+          onPress={() => handleOpenOptionFocus(oIndex)}
+          activeOpacity={0.8}
+        >
+          <View style={styles.answerContent}>
+            {currentQuestion.correctAnswers.includes(oIndex) && (
+              <View style={styles.correctIndicator}>
+                <Ionicons name="checkmark-circle" size={20} color="#fff" />
+              </View>
+            )}
+            <Text 
+              style={styles.answerText}
+              numberOfLines={5}
+              ellipsizeMode="tail"
+            >
+              {opt || `Answer ${oIndex + 1}`}
+            </Text>
           </View>
-        );
+        </TouchableOpacity>
+      ))}
+    </View>
+  );
 
 
       case 'fill_blank':
@@ -756,6 +782,8 @@ const QuizMaker = () => {
                   value={pair.left}
                   onChangeText={(text) => handleMatchPairChange(pIndex, 'left', text)}
                   style={[styles.matchInput, styles.matchInputLeft]}
+                  multiline={true}  // Add this
+                  textAlignVertical="top"  // Add this
                 />
                 <Ionicons name="swap-horizontal" size={20} color="#fff" />
                 <TextInput
@@ -764,6 +792,8 @@ const QuizMaker = () => {
                   value={pair.right}
                   onChangeText={(text) => handleMatchPairChange(pIndex, 'right', text)}
                   style={[styles.matchInput, styles.matchInputRight]}
+                  multiline={true}  // Add this
+                  textAlignVertical="top"  // Add this
                 />
                 {currentQuestion.matchPairs.length > 2 && (
                   <TouchableOpacity
@@ -854,6 +884,11 @@ const QuizMaker = () => {
           </View>
         </View>
 
+      <KeyboardAvoidingView 
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            style={{ flex: 1 }}
+            keyboardVerticalOffset={40}
+          >
         <ScrollView style={styles.mainContent} showsVerticalScrollIndicator={false}>
           <View style={styles.questionInputContainer}>
             <TouchableOpacity 
@@ -941,6 +976,8 @@ const QuizMaker = () => {
           {renderQuestionContent()}
         </ScrollView>
 
+        </KeyboardAvoidingView>
+
         <View style={styles.bottomBar}>
           <ScrollView 
             horizontal 
@@ -970,14 +1007,22 @@ const QuizMaker = () => {
             ))}
           </ScrollView>
           
-          {!isFromOverview && (
-            <TouchableOpacity
-              style={styles.addQuestionBtn}
-              onPress={handleAddQuestion}
+          <View style={styles.addQuestionBtnContainer}>
+            <LinearGradient
+              colors={['rgba(0, 0, 0, 0)', 'rgba(0, 0, 0, 0.3)']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={styles.addQuestionBtnGradient}
             >
-              <Ionicons name="add" size={24} color="#fff" />
-            </TouchableOpacity>
-          )}
+              <TouchableOpacity
+                style={styles.addQuestionBtnOverlay}
+                onPress={handleAddQuestion}
+              >
+                <Ionicons name="add" size={24} color="#fff" />
+              </TouchableOpacity>
+            </LinearGradient>
+          </View>
+
         </View>
 
         <Modal
@@ -1065,9 +1110,9 @@ const QuizMaker = () => {
                 {topics.length === 0 ? (
                   <View style={styles.emptyTopicsInModal}>
                     <Ionicons name="pricetags-outline" size={48} color="#475569" />
-                    <Text style={styles.emptyTopicsInModalText}>No topics available</Text>
+                    <Text style={styles.emptyTopicsInModalText}>No tags available</Text>
                     <Text style={styles.emptyTopicsInModalSubtext}>
-                      Add topics in the quiz overview or create one above
+                      Add tags in the quiz overview or create one above
                     </Text>
                   </View>
                 ) : (
@@ -1301,6 +1346,20 @@ const QuizMaker = () => {
           buttons={alertModal.buttons}
           onClose={hideAlert}
         />
+
+        <OptionFocusModal
+          visible={showOptionFocusModal}
+          optionIndex={focusedOptionIndex}
+          optionText={focusedOptionText}
+          isCorrect={focusedOptionIsCorrect}
+          backgroundColor={
+            focusedOptionIndex === 0 ? '#ef4444' :
+            focusedOptionIndex === 1 ? '#f59e0b' :
+            focusedOptionIndex === 2 ? '#10b981' : '#3b82f6'
+          }
+          onClose={() => setShowOptionFocusModal(false)}
+          onSave={handleSaveOptionFocus}
+        />
       </SafeAreaView>
     </LinearGradient>
   );
@@ -1525,28 +1584,53 @@ ellipsisMenu: {
     gap: 12,
   },
   answerBtn: {
-    width: '48%',
-    minHeight: 80,
-    padding: 10,
-    borderRadius: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  selectedAnswer: {
-    borderWidth: 3,
-    borderColor: '#fff',
-    shadowOpacity: 0.4,
-  },
-  answerInput: {
+  width: '48%',
+  minHeight: 100,
+  padding: 16,
+  borderRadius: 16,
+  shadowColor: '#000',
+  shadowOffset: { width: 0, height: 2 },
+  shadowOpacity: 0.2,
+  shadowRadius: 4,
+  elevation: 3,
+  justifyContent: 'center',
+  alignItems: 'center',
+  overflow: 'visible', // Allow badge to exceed bounds
+},
+selectedAnswer: {
+  borderWidth: 3,
+  borderColor: '#fff',
+  shadowOpacity: 0.4,
+},
+answerContent: {
+  flex: 1,
+  width: '100%',
+  justifyContent: 'center',
+  alignItems: 'center',
+  position: 'relative',
+},
+correctIndicator: {
+  position: 'absolute',
+  top: -25,
+  right: -25,
+  backgroundColor: 'rgba(16, 185, 129, 0.95)',
+  borderRadius: 14,
+  padding: 5,
+  shadowColor: '#000',
+  shadowOffset: { width: 0, height: 2 },
+  shadowOpacity: 0.3,
+  shadowRadius: 4,
+  elevation: 5,
+  borderWidth: 2,
+  borderColor: '#fff',
+  zIndex: 10,
+},
+answerText: {
   color: '#fff',
   textAlign: 'center',
-  flex: 1,
   fontWeight: '600',
   fontSize: 15,
-  // Remove the dynamic font size calculation as multiline will handle wrapping
+  lineHeight: 20,
 },
   color0: { backgroundColor: '#ef4444' },
   color1: { backgroundColor: '#f59e0b' },
@@ -1650,22 +1734,22 @@ ellipsisMenu: {
     fontWeight: '600',
     fontSize: 14,
   },
-  bottomBar: {
-    backgroundColor: 'rgba(0, 0, 0, 0.3)',
-    paddingVertical: 12,
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(255, 255, 255, 0.1)',
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  questionNavBar: {
-    flex: 1,
-    marginRight: 10,
-  },
-  questionNavContent: {
-    paddingHorizontal: 16,
-    alignItems: 'center',
-  },
+  // bottomBar: {
+  //   backgroundColor: 'rgba(0, 0, 0, 0.3)',
+  //   paddingVertical: 12,
+  //   borderTopWidth: 1,
+  //   borderTopColor: 'rgba(255, 255, 255, 0.1)',
+  //   flexDirection: 'row',
+  //   alignItems: 'center',
+  // },
+  // questionNavBar: {
+  //   flex: 1,
+  //   marginRight: 10,
+  // },
+  // questionNavContent: {
+  //   paddingHorizontal: 16,
+  //   alignItems: 'center',
+  // },
   questionNavItem: {
     width: 40,
     height: 40,
@@ -2016,4 +2100,70 @@ ellipsisMenu: {
     color: 'rgba(255, 255, 255, 0.5)',
     fontSize: 14,
   },
+  bottomBar: {
+  backgroundColor: 'rgba(0, 0, 0, 0.3)',
+  paddingVertical: 12,
+  borderTopWidth: 1,
+  borderTopColor: 'rgba(255, 255, 255, 0.1)',
+  flexDirection: 'row',
+  alignItems: 'center',
+  position: 'relative', // Add this
+  height: 64,
+},
+questionNavBar: {
+  flex: 1,
+},
+questionNavContent: {
+  paddingHorizontal: 16,
+  paddingRight: 60, // Add padding to prevent scrolled items from going under button
+  alignItems: 'center',
+},
+// addQuestionBtnOverlay: {
+//   position: 'absolute',
+//   right: 16,
+//   top: 12, // Position from top of bottomBar
+//   width: 40,
+//   height: 40,
+//   borderRadius: 20,
+//   backgroundColor: '#8b5cf6',
+//   justifyContent: 'center',
+//   alignItems: 'center',
+//   shadowColor: '#000',
+//   shadowOffset: { width: 0, height: 2 },
+//   shadowOpacity: 0.3,
+//   shadowRadius: 4,
+//   elevation: 5,
+//   zIndex: 10,
+// },
+addQuestionBtnGradient: {
+  flex: 1,
+  width: '100%',
+  justifyContent: 'center',
+  alignItems: 'flex-end',
+  paddingRight: 16,
+},
+addQuestionBtnOverlay: {
+  width: 40,
+  height: 40,
+  borderRadius: 20,
+  backgroundColor: '#8b5cf6',
+  justifyContent: 'center',
+  alignItems: 'center',
+  shadowColor: '#000',
+  shadowOffset: { width: 0, height: 2 },
+  shadowOpacity: 0.3,
+  shadowRadius: 4,
+  elevation: 5,
+},
+addQuestionBtnContainer: {
+  position: 'absolute',
+  right: 0,
+  top: 0,
+  bottom: 0,
+  width: 100, // Width of gradient area
+  justifyContent: 'center',
+  alignItems: 'flex-end',
+  pointerEvents: 'box-none', // Allows clicks to pass through gradient
+  zIndex: 10,
+},
 });

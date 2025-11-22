@@ -139,15 +139,14 @@ export const OptionFocusModal: React.FC<OptionFocusModalProps> = ({
             style={styles.input}
             multiline
             autoFocus
-            maxLength={50}
             textAlignVertical="center"
           />
 
-          <View style={styles.charCount}>
+          {/* <View style={styles.charCount}>
             <Text style={styles.charCountText}>
-              {text.length}/50
+              {text.length} characters
             </Text>
-          </View>
+          </View> */}
 
           <View style={styles.divider} />
 
@@ -181,14 +180,7 @@ export const OptionFocusModal: React.FC<OptionFocusModalProps> = ({
             </View>
           </TouchableOpacity>
 
-          {correct && (
-            <View style={styles.correctBadge}>
-              <Ionicons name="star" size={16} color="#fbbf24" />
-              <Text style={styles.correctBadgeText}>
-                This will be the correct answer
-              </Text>
-            </View>
-          )}
+          
         </Animated.View>
       </Animated.View>
     </Modal>
