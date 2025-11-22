@@ -82,6 +82,8 @@ const QuizOverview: React.FC = () => {
   const [uploadingImage, setUploadingImage] = useState(false);
   const [showImagePickerModal, setShowImagePickerModal] = useState(false);
 
+  const [showUntaggedWarningModal, setShowUntaggedWarningModal] = useState(false);
+
   const [alert, setAlert] = useState<AlertState>({
     visible: false,
     type: 'info',
@@ -155,87 +157,97 @@ const QuizOverview: React.FC = () => {
     }
   };
 
-  const handleSaveQuiz = async () => {
-    if (!quizTitle.trim()) {
-      showAlert('warning', 'Validation Error', 'Please enter a quiz title.');
-      return;
-    }
+  const handleSaveQuiz = async (skipUntaggedCheck = false) => {
+  if (!quizTitle.trim()) {
+    showAlert('warning', 'Validation Error', 'Please enter a quiz title.');
+    return;
+  }
 
-    if (questions.length === 0) {
-      showAlert('warning', 'Validation Error', 'Please add at least one question.');
-      return;
-    }
+  if (questions.length === 0) {
+    showAlert('warning', 'Validation Error', 'Please add at least one question.');
+    return;
+  }
 
-    const quiz: Omit<Quiz, 'uid' | 'id' | 'createdAt' | 'updatedAt'> = {
-      title: quizTitle,
-      questions,
-      coverImage: quizImage,
-      topics,
-      isPublic
-    };
+  // Check for untagged questions (only if not skipping the check)
+  const untaggedQuestions = questions.filter(q => !q.topic || q.topic.trim() === '');
+  
+  if (!skipUntaggedCheck && untaggedQuestions.length > 0) {
+    setShowUntaggedWarningModal(true);
+    return;
+  }
 
-    const validation = QuizService.validateQuiz(quiz);
-    if (!validation.isValid) {
-      showAlert('error', 'Validation Error', validation.errors.join('\n'));
-      return;
-    }
-
-    try {
-      setLoading(true, 'Saving quiz...');
-      let savedQuizId: string;
-      
-      if (quizId && typeof quizId === 'string') {
-        await QuizService.updateQuiz(quizId, quiz);
-        savedQuizId = quizId;
-        addBacklogEvent(BACKLOG_EVENTS.USER_UPDATED_QUIZ, {
-          quizId: savedQuizId,
-          title: quizTitle,
-          questionCount: questions.length,
-          isPublic,
-          userId: auth.currentUser?.uid,
-        });
-      } else {
-        savedQuizId = await QuizService.createQuiz(quiz);
-        addBacklogEvent(BACKLOG_EVENTS.USER_CREATED_QUIZ, {
-          quizId: savedQuizId,
-          title: quizTitle,
-          questionCount: questions.length,
-          isPublic,
-          userId: auth.currentUser?.uid,
-        });
-      }
-
-      showAlert(
-        'success',
-        'Success',
-        'Quiz saved successfully!',
-        [
-          {
-            text: 'Continue Editing',
-            onPress: () => setAlert(prev => ({ ...prev, visible: false })),
-            style: 'cancel'
-          },
-          {
-            text: 'Preview Quiz',
-            onPress: () => {
-              setAlert(prev => ({ ...prev, visible: false }));
-              resetToDefaults();
-              router.push({
-                pathname: './quiz-preview',
-                params: { quizId: savedQuizId }
-              });
-            },
-            style: 'primary'
-          }
-        ]
-      );
-    } catch (error: any) {
-      showAlert('error', 'Error', error.message || 'Failed to save quiz. Please try again.');
-      
-    } finally {
-      setLoading(false);
-    }
+  const quiz: Omit<Quiz, 'uid' | 'id' | 'createdAt' | 'updatedAt'> = {
+    title: quizTitle,
+    questions,
+    coverImage: quizImage,
+    topics,
+    isPublic
   };
+
+  const validation = QuizService.validateQuiz(quiz);
+  if (!validation.isValid) {
+    showAlert('error', 'Validation Error', validation.errors.join('\n'));
+    return;
+  }
+
+  try {
+    setLoading(true, 'Saving quiz...');
+    let savedQuizId: string;
+    
+    if (quizId && typeof quizId === 'string') {
+      await QuizService.updateQuiz(quizId, quiz);
+      savedQuizId = quizId;
+      addBacklogEvent(BACKLOG_EVENTS.USER_UPDATED_QUIZ, {
+        quizId: savedQuizId,
+        title: quizTitle,
+        questionCount: questions.length,
+        isPublic,
+        userId: auth.currentUser?.uid,
+      });
+    } else {
+      savedQuizId = await QuizService.createQuiz(quiz);
+      addBacklogEvent(BACKLOG_EVENTS.USER_CREATED_QUIZ, {
+        quizId: savedQuizId,
+        title: quizTitle,
+        questionCount: questions.length,
+        isPublic,
+        userId: auth.currentUser?.uid,
+      });
+    }
+
+    showAlert(
+      'success',
+      'Success',
+      'Quiz saved successfully!',
+      [
+        {
+          text: 'Continue Editing',
+          onPress: () => setAlert(prev => ({ ...prev, visible: false })),
+          style: 'cancel'
+        },
+        {
+          text: 'Preview Quiz',
+          onPress: () => {
+            setAlert(prev => ({ ...prev, visible: false }));
+            resetToDefaults();
+            router.push({
+              pathname: './quiz-preview',
+              params: { quizId: savedQuizId }
+            });
+          },
+          style: 'primary'
+        }
+      ]
+    );
+  } catch (error: any) {
+    showAlert('error', 'Error', error.message || 'Failed to save quiz. Please try again.');
+  } finally {
+    setLoading(false);
+  }
+};
+  const getUntaggedQuestionsCount = () => {
+  return questions.filter(q => !q.topic || q.topic.trim() === '').length;
+};
 
   const handleImagePicker = () => {
   setShowImagePickerModal(true);
@@ -658,7 +670,7 @@ const handleRemoveImage = async () => {
           
           <TouchableOpacity
             style={[styles.saveButton, { opacity: isLoading || uploadingImage ? 0.6 : 1 }]}
-            onPress={handleSaveQuiz}
+            onPress={() =>handleSaveQuiz()}
             disabled={isLoading || uploadingImage}
           >
             <Ionicons name="checkmark" size={20} color="#ffffff" />
@@ -1041,6 +1053,28 @@ const handleRemoveImage = async () => {
               ]
         }
         onClose={() => setShowImagePickerModal(false)}
+      />
+      <CustomAlertModal
+        visible={showUntaggedWarningModal}
+        type="warning"
+        title="Untagged Questions"
+        message={`${getUntaggedQuestionsCount()} question${getUntaggedQuestionsCount() > 1 ? 's' : ''} ${getUntaggedQuestionsCount() > 1 ? 'have' : 'has'} no tags assigned. These will be saved as "Uncategorized". Do you want to continue?`}
+        buttons={[
+          {
+            text: 'Cancel',
+            onPress: () => setShowUntaggedWarningModal(false),
+            style: 'cancel'
+          },
+          {
+            text: 'Save Anyway',
+            onPress: () => {
+              setShowUntaggedWarningModal(false);
+              handleSaveQuiz(true); // Skip the untagged check
+            },
+            style: 'primary'
+          }
+        ]}
+        onClose={() => setShowUntaggedWarningModal(false)}
       />
       </SafeAreaView>
     </LinearGradient>

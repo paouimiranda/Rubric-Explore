@@ -689,7 +689,7 @@ const QuizMaker = () => {
     
     switch (currentQuestion.type) {
       case 'multiple_choice':
-        return (
+         return (
           <View style={styles.answerGrid}>
             {currentQuestion.options.map((opt, oIndex) => (
               <TouchableOpacity
@@ -713,17 +713,19 @@ const QuizMaker = () => {
                     placeholderTextColor="rgba(255, 255, 255, 0.6)"
                     value={opt}
                     onChangeText={(text) => handleOptionChange(oIndex, text)}
-                    style={[
-                      styles.answerInput,
-                      { fontSize: calculateFontSize(opt) }
-                    ]}
+                    style={styles.answerInput}
                     maxLength={50}
+                    multiline={true}
+                    numberOfLines={4}
+                    textAlignVertical="center"
+                    
                   />
                 </View>
               </TouchableOpacity>
             ))}
           </View>
         );
+
 
       case 'fill_blank':
         return (
@@ -1525,7 +1527,7 @@ ellipsisMenu: {
   answerBtn: {
     width: '48%',
     minHeight: 80,
-    padding: 16,
+    padding: 10,
     borderRadius: 16,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
@@ -1539,11 +1541,13 @@ ellipsisMenu: {
     shadowOpacity: 0.4,
   },
   answerInput: {
-    color: '#fff',
-    textAlign: 'center',
-    flex: 1,
-    fontWeight: '600',
-  },
+  color: '#fff',
+  textAlign: 'center',
+  flex: 1,
+  fontWeight: '600',
+  fontSize: 15,
+  // Remove the dynamic font size calculation as multiline will handle wrapping
+},
   color0: { backgroundColor: '#ef4444' },
   color1: { backgroundColor: '#f59e0b' },
   color2: { backgroundColor: '#10b981' },

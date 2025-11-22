@@ -537,9 +537,7 @@ export class QuizService {
       }
 
       // Validate topic field
-      if (!question.topic || !question.topic.trim()) {
-        errors.push(`Question ${index + 1} must have a tag assigned for analytics.`);
-      } else if (question.topic.length > 50) {
+     if (question.topic && question.topic.length > 50) {
         errors.push(`Question ${index + 1} tag must be 50 characters or less.`);
       }
 
@@ -742,7 +740,7 @@ export class QuizService {
 
   static isQuestionComplete(question: Question): boolean {
     if (!question.question.trim()) return false;
-    if (!question.topic || !question.topic.trim()) return false; // Topic is now required
+    // if (!question.topic || !question.topic.trim()) return false; // Topic is now required
 
     switch (question.type) {
       case 'multiple_choice':

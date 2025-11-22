@@ -679,26 +679,26 @@ export default function TodayTab({
               >
                 <Ionicons name="sparkles" size={48} color="#fff" />
               </LinearGradient>
-              <Text style={styles.bigEmptyTitle}>Ready for a Productive Day?</Text>
-              <Text style={styles.bigEmptySubtitle}>
+              <Text style={styles.bigEmptyTitle} adjustsFontSizeToFit numberOfLines={1}>Ready for a Productive Day?</Text>
+              <Text style={styles.bigEmptySubtitle} adjustsFontSizeToFit numberOfLines={2}>
                 Start organizing your day by adding your first task. Every great achievement begins with a plan!
               </Text>
               
               <View style={styles.featureGrid}>
                 <View style={styles.featureCard}>
                   <Ionicons name="calendar" size={32} color="#4facfe" />
-                  <Text style={styles.featureTitle}>Plan Your Day</Text>
-                  <Text style={styles.featureText}>Schedule tasks and set priorities</Text>
+                  <Text style={styles.featureTitle}>Plan  Ahead</Text>
+                  
                 </View>
                 <View style={styles.featureCard}>
                   <Ionicons name="trending-up" size={32} color="#4ade80" />
-                  <Text style={styles.featureTitle}>Track Progress</Text>
-                  <Text style={styles.featureText}>Watch your completion rate grow</Text>
+                  <Text style={styles.featureTitle} adjustsFontSizeToFit numberOfLines={2}>{'Track\nGoals'}</Text>
+                  
                 </View>
                 <View style={styles.featureCard}>
                   <Ionicons name="star" size={32} color="#fbbf24" />
                   <Text style={styles.featureTitle}>Stay Focused</Text>
-                  <Text style={styles.featureText}>Achieve goals one task at a time</Text>
+                  
                 </View>
               </View>
 
@@ -714,7 +714,7 @@ export default function TodayTab({
                   style={styles.bigEmptyButtonGradient}
                 >
                   <Ionicons name="add" size={24} color="#fff" />
-                  <Text style={styles.bigEmptyButtonText}>Add Your First Plan</Text>
+                  <Text style={styles.bigEmptyButtonText}>Add A New Plan</Text>
                 </LinearGradient>
               </TouchableOpacity>
             </View>
@@ -1190,6 +1190,7 @@ const styles = StyleSheet.create({
     marginTop: 8,
     marginBottom: 4,
     textAlign: 'center',
+    flexShrink: 1,
   },
   featureText: {
     fontSize: 11,

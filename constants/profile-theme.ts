@@ -14,7 +14,7 @@ export interface ProfileTheme {
   hasParticles?: boolean;
   hasAnimatedBackground?: boolean;
   particleConfig?: {
-    type: 'stars' | 'bubbles' | 'fireflies' | 'snow' | 'confetti' | 'leaves' | 'sparkles' | 'rain' | 'smoke';
+    type: 'stars' | 'bubbles' | 'fireflies' | 'snow' | 'confetti' | 'leaves' | 'sparkles' | 'rain' | 'smoke' | 'orbs' | 'dust' | 'waves' | 'feathers' | 'petals' | 'lightning' | 'plasma' | 'crystals';
     color: string;
     count: number;
   };
@@ -400,7 +400,7 @@ export const PROFILE_THEMES: Record<string, ProfileTheme> = {
     },
     hasParticles: true,
     particleConfig: {
-      type: 'sparkles',
+      type: 'waves',
       color: '#00ffff',
       count: 65,
     },

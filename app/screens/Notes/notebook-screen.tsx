@@ -1,6 +1,8 @@
 // app/screens/Notes/notebook-screen.tsx - Enhanced with Dynamic Colors
 import { useAuth } from '@/app/contexts/AuthContext';
 import { CustomAlertModal } from '@/components/Interface/custom-alert-modal';
+import EditNotebookModal from '@/components/Interface/edit-notebook-modal';
+import NotebookSettingsModal from '@/components/Interface/notebook-settings-modal';
 import { db } from "@/firebase";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
@@ -15,11 +17,9 @@ import {
   Dimensions,
   FlatList,
   Image,
-  Modal,
   RefreshControl,
   SafeAreaView,
   StyleSheet,
-  Switch,
   Text,
   TouchableOpacity,
   View
@@ -105,6 +105,8 @@ export default function NotebookScreen() {
   const [settingsModalVisible, setSettingsModalVisible] = useState(false);
   const [isPublicToggle, setIsPublicToggle] = useState(false);
   const [savingSettings, setSavingSettings] = useState(false);
+
+  const [editModalVisible, setEditModalVisible] = useState(false);
 
   const [alertState, setAlertState] = useState<AlertState>({
     visible: false,
@@ -369,54 +371,111 @@ export default function NotebookScreen() {
     );
   };
 
-  const handleSaveSettings = async () => {
-    if (!notebookId || !uid || !notebook) return;
-    
-    setSavingSettings(true);
-    try {
-      await updateNotebook(
-        notebookId as string,
-        { isPublic: isPublicToggle },
-        uid
-      );
-      
-      if (notebook) {
-        setNotebook({ ...notebook, isPublic: isPublicToggle });
-      }
-      
-      setSettingsModalVisible(false);
-      showAlert(
-        'success',
-        'Settings Updated',
-        `Notebook is now ${isPublicToggle ? 'public' : 'private'}`,
-        [
-          {
-            text: 'OK',
-            onPress: closeAlert,
-            style: 'primary',
-          },
-        ]
-      );
-      addBacklogEvent(BACKLOG_EVENTS.USER_UPDATED_NOTEBOOK_SETTINGS, { notebookId, isPublic: isPublicToggle });
-    } catch (error) {
-      console.error("Error updating notebook settings:", error);
-      showAlert(
-        'error',
-        'Error',
-        'Failed to update notebook settings',
-        [
-          {
-            text: 'OK',
-            onPress: closeAlert,
-            style: 'primary',
-          },
-        ]
-      );
-      addBacklogEvent("notebook_settings_error", { notebookId, error: String(error) });
-    } finally {
-      setSavingSettings(false);
-    }
-  };
+  const handleSaveSettings = async (settings: {
+  isPublic: boolean;
+  title?: string;
+  description?: string;
+  coverImage?: string;
+  color?: string;
+  tags?: string[];
+  properties?: NotebookProperty[];
+}) => {
+  if (!notebookId || !uid || !notebook) return;
+
+  setSavingSettings(true);
+  try {
+    await updateNotebook(
+      notebookId as string,
+      {
+        isPublic: settings.isPublic,
+        title: settings.title || notebook.title,
+        coverImage: settings.coverImage || notebook.coverImage,
+        color: settings.color || notebook.color,
+        tags: settings.tags || notebook.tags,
+        properties: settings.properties || notebook.properties,
+      },
+      uid
+    );
+
+    setNotebook({
+      ...notebook,
+      isPublic: settings.isPublic,
+      title: settings.title || notebook.title,
+      coverImage: settings.coverImage || notebook.coverImage,
+      color: settings.color || notebook.color,
+      tags: settings.tags || notebook.tags,
+      properties: settings.properties || notebook.properties,
+    });
+
+    setIsPublicToggle(settings.isPublic);
+
+    setEditModalVisible(false);
+    setSettingsModalVisible(false);
+    showAlert(
+      'success',
+      'Notebook Updated',
+      'Your notebook has been updated successfully',
+      [
+        {
+          text: 'OK',
+          onPress: closeAlert,
+          style: 'primary',
+        },
+      ]
+    );
+    addBacklogEvent(BACKLOG_EVENTS.USER_UPDATED_NOTEBOOK_SETTINGS, {
+      notebookId,
+      isPublic: settings.isPublic,
+      title: settings.title,
+    });
+  } catch (error) {
+    console.error("Error updating notebook settings:", error);
+    showAlert(
+      'error',
+      'Error',
+      'Failed to update notebook',
+      [
+        {
+          text: 'OK',
+          onPress: closeAlert,
+          style: 'primary',
+        },
+      ]
+    );
+    addBacklogEvent("notebook_settings_error", { notebookId, error: String(error) });
+  } finally {
+    setSavingSettings(false);
+  }
+};
+
+const handleQuickPublicToggle = async (value: boolean) => {
+  if (!notebookId || !uid || !notebook) return;
+
+  try {
+    await updateNotebook(
+      notebookId as string,
+      { isPublic: value },
+      uid
+    );
+
+    setNotebook({ ...notebook, isPublic: value });
+    setIsPublicToggle(value);
+  } catch (error) {
+    console.error("Error updating public status:", error);
+    showAlert(
+      'error',
+      'Error',
+      'Failed to update notebook',
+      [
+        {
+          text: 'OK',
+          onPress: closeAlert,
+          style: 'primary',
+        },
+      ]
+    );
+  }
+};
 
   const handleSyncProperties = async () => {
     if (!notebookId || !uid || !notebook) return;
@@ -824,108 +883,28 @@ export default function NotebookScreen() {
           </LinearGradient>
         </TouchableOpacity>
 
-        {/* Settings Modal with Dynamic Colors */}
-        <Modal
-          animationType="fade"
-          transparent
-          visible={settingsModalVisible}
-          onRequestClose={() => setSettingsModalVisible(false)}
-        >
-          <View style={styles.modalOverlay}>
-            <View style={[styles.settingsModalContent, {
-              borderColor: colorScheme.border
-            }]}>
-              <View style={styles.modalHeader}>
-                <Text style={styles.modalTitle}>Notebook Settings</Text>
-                <TouchableOpacity 
-                  onPress={() => setSettingsModalVisible(false)}
-                  style={styles.modalCloseButton}
-                >
-                  <Ionicons name="close" size={24} color="#9ca3af" />
-                </TouchableOpacity>
-              </View>
+        {/* Settings View Modal */}
+<NotebookSettingsModal
+  visible={settingsModalVisible}
+  notebook={notebook}
+  isPublicToggle={isPublicToggle}
+  onClose={() => setSettingsModalVisible(false)}
+  onPublicToggle={handleQuickPublicToggle}
+  onSyncProperties={handleSyncProperties}
+  onEdit={() => setEditModalVisible(true)}
+  colorScheme={colorScheme}
+/>
 
-              <View style={styles.settingsSection}>
-                <View style={styles.settingItem}>
-                  <View style={styles.settingInfo}>
-                    <View style={[styles.settingIconContainer, {
-                      backgroundColor: colorScheme.overlay,
-                      borderColor: colorScheme.border
-                    }]}>
-                      <Ionicons 
-                        name={isPublicToggle ? "globe" : "lock-closed"} 
-                        size={20} 
-                        color={isPublicToggle ? "#52C72B" : colorScheme.light} 
-                      />
-                    </View>
-                    <View style={styles.settingTextContainer}>
-                      <Text style={styles.settingTitle}>Public Notebook</Text>
-                      <Text style={styles.settingDescription}>
-                        {isPublicToggle 
-                          ? "Anyone can view this notebook on your profile" 
-                          : "Only you can see this notebook"}
-                      </Text>
-                    </View>
-                  </View>
-                  <Switch
-                    value={isPublicToggle}
-                    onValueChange={setIsPublicToggle}
-                    trackColor={{ false: "#374151", true: colorScheme.primary }}
-                    thumbColor={isPublicToggle ? "#ffffff" : "#9ca3af"}
-                    ios_backgroundColor="#374151"
-                  />
-                </View>
-
-                {isPublicToggle && (
-                  <View style={styles.warningBox}>
-                    <Ionicons name="information-circle-outline" size={20} color="#f59e0b" />
-                    <Text style={styles.warningText}>
-                      Public notebooks will be visible on your profile. Individual notes still need to be set to public separately.
-                    </Text>
-                  </View>
-                )}
-                
-                {/* Sync Properties Button */}
-                {notebook.properties && notebook.properties.length > 0 && (
-                  <TouchableOpacity
-                    style={[styles.syncButton, {
-                      backgroundColor: colorScheme.overlay,
-                      borderColor: colorScheme.border
-                    }]}
-                    onPress={handleSyncProperties}
-                  >
-                    <Ionicons name="sync-outline" size={20} color={colorScheme.primary} />
-                    <Text style={[styles.syncButtonText, { color: colorScheme.light }]}>
-                      Sync Properties to All Notes
-                    </Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-
-              <View style={styles.modalActions}>
-                <TouchableOpacity
-                  style={[styles.modalButton, styles.cancelButton]}
-                  onPress={() => setSettingsModalVisible(false)}
-                >
-                  <Text style={styles.cancelButtonText}>Cancel</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[
-                    styles.modalButton, 
-                    { backgroundColor: colorScheme.primary },
-                    savingSettings && styles.disabledButton
-                  ]}
-                  onPress={handleSaveSettings}
-                  disabled={savingSettings}
-                >
-                  <Text style={styles.saveButtonText}>
-                    {savingSettings ? "Saving..." : "Save Changes"}
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          </View>
-        </Modal>
+{/* Edit Notebook Modal */}
+<EditNotebookModal
+  visible={editModalVisible}
+  notebook={notebook}
+  isPublicToggle={isPublicToggle}
+  onClose={() => setEditModalVisible(false)}
+  onSaveSettings={handleSaveSettings}
+  savingSettings={savingSettings}
+  colorScheme={colorScheme}
+/>
 
         {/* Custom Alert Modal */}
         <CustomAlertModal
