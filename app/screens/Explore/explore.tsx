@@ -30,6 +30,7 @@ const TABS = [
 
 const ExploreScreen = ({ navigation }: any) => {
   const [activeTab, setActiveTab] = useState('journey');
+  const [pendingLevelNavigation, setPendingLevelNavigation] = useState(false);
   const fadeAnim = useRef(new Animated.Value(0)).current;
   
   // Tab content animations
@@ -83,6 +84,7 @@ const ExploreScreen = ({ navigation }: any) => {
         shards: userStats?.shards,
         energy: userStats?.energy,
       });
+      setPendingLevelNavigation(false); // Reset when returning to this screen
       reload();
       
       // Return cleanup function
@@ -202,10 +204,14 @@ const ExploreScreen = ({ navigation }: any) => {
   };
 
   const handleLevelPress = (level: Level) => {
-    if (!level.unlocked) {
-      Alert.alert('Locked', 'Complete previous levels to unlock this one!');
+    if (!level.unlocked || pendingLevelNavigation) {
+      if (!level.unlocked) {
+        Alert.alert('Locked', 'Complete previous levels to unlock this one!');
+      }
       return;
     }
+
+    setPendingLevelNavigation(true);
 
     console.log('=== NAVIGATING TO QUIZ ===', {
       levelId: level.id,
@@ -419,6 +425,7 @@ const ExploreScreen = ({ navigation }: any) => {
                     level={level}
                     index={index}
                     isLast={index === levels.length - 1}
+                    disabled={pendingLevelNavigation}
                     onPress={() => handleLevelPress(level)}
                   />
                 ))}
@@ -442,10 +449,11 @@ interface LevelNodeProps {
   level: Level;
   index: number;
   isLast: boolean;
+  disabled?: boolean;
   onPress: () => void;
 }
 
-const LevelNode: React.FC<LevelNodeProps> = ({ level, index, isLast, onPress }) => {
+const LevelNode: React.FC<LevelNodeProps> = ({ level, index, isLast, disabled, onPress }) => {
   const scaleAnim = useRef(new Animated.Value(0)).current;
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const floatAnim = useRef(new Animated.Value(0)).current;
@@ -535,8 +543,8 @@ const LevelNode: React.FC<LevelNodeProps> = ({ level, index, isLast, onPress }) 
         ]}
       >
         <TouchableOpacity
-          disabled={!level.unlocked}
-          activeOpacity={0.8}
+          disabled={!level.unlocked || disabled}
+          activeOpacity={!level.unlocked || disabled ? 1 : 0.8}
           onPress={onPress}
           style={styles.levelTouchable}
         >

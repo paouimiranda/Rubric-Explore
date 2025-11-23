@@ -8,13 +8,21 @@ import { createMultiplayerSession } from '@/services/multiplayer-service';
 import { QuizService, type Question, type Quiz } from '@/services/quiz-service';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useLocalSearchParams, useRouter } from 'expo-router';
-import React, { useEffect, useState } from 'react';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   FlatList,
   Image,
   SafeAreaView,
   ScrollView,
+
+
+
+
+
+
+
+
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -28,6 +36,7 @@ const QuizPreview = () => {
   const [quiz, setQuiz] = useState<Quiz | null>(null);
   const [loading, setLoading] = useState(true);
   const [expandedQuestion, setExpandedQuestion] = useState<number | null>(null);
+  const [pendingStartQuiz, setPendingStartQuiz] = useState(false);
   
   // Alert modal state
   const [alertModal, setAlertModal] = useState({
@@ -66,6 +75,13 @@ const QuizPreview = () => {
       buttons,
     });
   };
+
+  useFocusEffect(
+    useCallback(() => {
+      setPendingStartQuiz(false);
+      
+    }, [])
+  );
 
   const hideAlert = () => {
     setAlertModal(prev => ({ ...prev, visible: false }));
@@ -139,12 +155,15 @@ const QuizPreview = () => {
   };
 
   const handleStartQuiz = () => {
-    if (!quiz?.id) return;
-    addBacklogEvent(BACKLOG_EVENTS.USER_STARTED_QUIZ, { quizId: quiz?.id });
-    router.push({
-      pathname: './quiz-play',
-      params: { quizId: quiz.id },
-    });
+   {
+  if (!quiz?.id || pendingStartQuiz) return;
+  setPendingStartQuiz(true);
+  addBacklogEvent(BACKLOG_EVENTS.USER_STARTED_QUIZ, { quizId: quiz?.id });
+  router.push({
+    pathname: './quiz-play',
+    params: { quizId: quiz.id },
+  });
+};
   };
 
   const handleHostMultiplayer = async () => {

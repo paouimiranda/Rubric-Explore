@@ -9,7 +9,7 @@ import {
   Alert,
   Animated,
   Dimensions,
-  KeyboardAvoidingView,
+  Keyboard,
   Modal,
   Platform,
   ScrollView,
@@ -17,10 +17,10 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  View,
+  View
 } from 'react-native';
 
-const { height: SCREEN_HEIGHT } = Dimensions.get('window');
+const { height: SCREEN_HEIGHT, width: SCREEN_WIDTH } = Dimensions.get('window');
 
 interface PlanModalProps {
   visible: boolean;
@@ -59,27 +59,12 @@ export default function PlanModal({
   const [errors, setErrors] = useState({ title: false, time: false, reminder: false });
   const [isSaving, setIsSaving] = useState(false);
   
-  const slideAnim = React.useRef(new Animated.Value(SCREEN_HEIGHT)).current;
-  const backdropAnim = React.useRef(new Animated.Value(0)).current;
+  const shakeAnim = React.useRef(new Animated.Value(0)).current;
 
   const { hasPermission, requestPermission, isRequestingPermission } = usePushNotification();
 
   useEffect(() => {
     if (visible) {
-      Animated.parallel([
-        Animated.spring(slideAnim, {
-          toValue: 0,
-          tension: 65,
-          friction: 11,
-          useNativeDriver: true,
-        }),
-        Animated.timing(backdropAnim, {
-          toValue: 1,
-          duration: 300,
-          useNativeDriver: true,
-        }),
-      ]).start();
-
       if (editingPlan) {
         setPlanTitle(editingPlan.title);
         setPlanDescription(editingPlan.description || '');
@@ -98,23 +83,18 @@ export default function PlanModal({
     }
   }, [visible, editingPlan, initialDate]);
 
+  const shakeError = () => {
+    Animated.sequence([
+      Animated.timing(shakeAnim, { toValue: 10, duration: 50, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: -10, duration: 50, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: 10, duration: 50, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: 0, duration: 50, useNativeDriver: true }),
+    ]).start();
+  };
+
   const handleClose = () => {
-    Animated.parallel([
-      Animated.timing(slideAnim, {
-        toValue: SCREEN_HEIGHT,
-        duration: 250,
-        useNativeDriver: true,
-      }),
-      Animated.timing(backdropAnim, {
-        toValue: 0,
-        duration: 250,
-        useNativeDriver: true,
-      }),
-    ]).start(() => {
-      onClose();
-      slideAnim.setValue(SCREEN_HEIGHT);
-      backdropAnim.setValue(0);
-    });
+    Keyboard.dismiss();
+    onClose();
   };
 
   const resetForm = () => {
@@ -129,7 +109,6 @@ export default function PlanModal({
     setShowCustomReminderInput(false);
   };
 
-  // Validate if reminder time is in the past
   const validateReminderTime = () => {
     if (!planTime) return true;
 
@@ -163,6 +142,7 @@ export default function PlanModal({
     setErrors(newErrors);
     
     if (newErrors.title || newErrors.time) {
+      shakeError();
       return false;
     }
     
@@ -211,7 +191,6 @@ export default function PlanModal({
       return;
     }
 
-    // Check notification permission before saving
     if (!hasPermission && !isRequestingPermission) {
       Alert.alert(
         'Enable Notifications?',
@@ -238,7 +217,7 @@ export default function PlanModal({
       Alert.alert('Invalid Input', 'Please enter a valid number of minutes (0 or greater)');
       return;
     }
-    if (minutes > 10080) { // 7 days
+    if (minutes > 10080) {
       Alert.alert('Invalid Input', 'Reminder cannot be more than 7 days (10,080 minutes) before the plan');
       return;
     }
@@ -269,14 +248,14 @@ export default function PlanModal({
   };
 
   const getReminderIcon = (minutes: number) => {
-    if (minutes === 0) return 'notifications-off';
-    if (minutes <= 5) return 'alarm';
-    if (minutes <= 15) return 'notifications';
-    return 'notifications-circle';
+    if (minutes === 0) return 'notifications-off-outline';
+    if (minutes <= 5) return 'alarm-outline';
+    if (minutes <= 15) return 'notifications-outline';
+    return 'time-outline';
   };
 
   const getReminderLabel = (minutes: number) => {
-    if (minutes === 0) return 'None';
+    if (minutes === 0) return 'No reminder';
     if (minutes < 60) return `${minutes} min before`;
     if (minutes < 1440) {
       const hours = Math.floor(minutes / 60);
@@ -289,577 +268,549 @@ export default function PlanModal({
   if (!visible) return null;
 
   return (
-    <Modal visible={visible} transparent animationType="none">
-      <KeyboardAvoidingView 
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={styles.modalOverlay}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
-      >
+    <Modal 
+      visible={visible} 
+      transparent 
+      animationType="fade"
+      onRequestClose={handleClose}
+    >
+      <View style={styles.modalOverlay}>
         {/* Backdrop */}
-        <Animated.View 
-          style={[
-            styles.backdrop,
-            { opacity: backdropAnim }
-          ]}
-        >
-          <TouchableOpacity 
-            style={StyleSheet.absoluteFill}
-            activeOpacity={1} 
-            onPress={handleClose}
-          />
-        </Animated.View>
+        <TouchableOpacity 
+          style={StyleSheet.absoluteFill}
+          activeOpacity={1} 
+          onPress={() => {
+            Keyboard.dismiss();
+            handleClose();
+          }}
+        />
         
-        {/* Sliding Content */}
-        <Animated.View
-          style={[
-            styles.modalContent,
-            {
-              transform: [{ translateY: slideAnim }]
-            }
-          ]}
-        >
-          {/* Drag Indicator */}
-          <View style={styles.dragIndicatorContainer}>
-            <View style={styles.dragIndicator} />
-          </View>
-
-          {/* Header */}
-          <LinearGradient
-            colors={['#667eea', '#764ba2']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.modalHeader}
-          >
-            <View style={styles.headerContent}>
-              <View style={styles.headerLeft}>
-                {editingPlan && (
-                  <View style={styles.headerIconContainer}>
-                    <Ionicons name="create-outline" size={24} color="#fff" />
+        {/* Content */}
+        <View style={styles.modalContent}>
+          <View style={styles.keyboardView}>
+            {/* Compact Header */}
+            <View style={styles.compactHeader}>
+              <View style={styles.dragIndicator} />
+              <View style={styles.headerRow}>
+                <View style={styles.headerTitleContainer}>
+                  <LinearGradient
+                    colors={['#667eea', '#764ba2']}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={styles.headerIconBadge}
+                  >
+                    <Ionicons 
+                      name={editingPlan ? "create-outline" : "add-circle-outline"} 
+                      size={20} 
+                      color="#fff" 
+                    />
+                  </LinearGradient>
+                  <View>
+                    <Text style={styles.compactTitle}>
+                      {editingPlan ? 'Edit Plan' : 'New Plan'}
+                    </Text>
+                    <Text style={styles.compactSubtitle}>
+                      {moment(planDate).format('MMM DD, YYYY')}
+                    </Text>
                   </View>
-                )}
-                <View>
-                  <Text style={styles.modalTitle}>
-                    {editingPlan ? 'Edit Plan' : 'Create New Plan'}
-                  </Text>
-                  <Text style={styles.modalSubtitle}>
-                    {editingPlan ? 'Update your plan details' : 'Fill in the details below'}
-                  </Text>
                 </View>
+                <TouchableOpacity 
+                  onPress={handleClose}
+                  style={styles.closeButton}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                >
+                  <Ionicons name="close" size={24} color="#aaa" />
+                </TouchableOpacity>
               </View>
-              <TouchableOpacity 
-                onPress={handleClose} 
-                style={styles.closeButton}
-                activeOpacity={0.7}
-              >
-                <Ionicons name="close" size={26} color="#fff" />
-              </TouchableOpacity>
             </View>
-          </LinearGradient>
 
-          <ScrollView 
-            style={styles.modalBody}
-            contentContainerStyle={styles.scrollContent}
-            showsVerticalScrollIndicator={false}
-            keyboardShouldPersistTaps="handled"
-            bounces={false}
-          >
-            {/* Title Section */}
-            <View style={styles.section}>
-              <View style={styles.labelContainer}>
-                <Ionicons name="document-text" size={16} color="#4facfe" />
-                <Text style={styles.sectionLabel}>
-                  Title <Text style={styles.required}>*</Text>
-                </Text>
-              </View>
-              <View style={[
-                styles.inputContainer, 
-                errors.title && styles.inputError
-              ]}>
+            <ScrollView 
+              style={styles.scrollView}
+              contentContainerStyle={styles.scrollContent}
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+              keyboardDismissMode="on-drag"
+            >
+              {/* Title Input Card */}
+              <View style={styles.card}>
+                <View style={styles.cardHeader}>
+                  <Ionicons name="text-outline" size={18} color="#4facfe" />
+                  <Text style={styles.cardTitle}>What's the plan?</Text>
+                  <Text style={styles.requiredDot}>*</Text>
+                </View>
                 <TextInput
-                  placeholder="What do you want to do?"
-                  placeholderTextColor="#666"
-                  style={styles.input}
+                  placeholder="Enter plan title..."
+                  placeholderTextColor="#555"
+                  style={[styles.titleInput, errors.title && styles.inputError]}
                   value={planTitle}
                   onChangeText={(text) => {
                     setPlanTitle(text);
                     if (text.trim()) setErrors(prev => ({ ...prev, title: false }));
                   }}
+                  maxLength={100}
+                  autoCorrect={false}
+                  multiline
+                  numberOfLines={2}
+                  scrollEnabled={false}
+                  textAlignVertical="top"
                 />
+                {errors.title && (
+                  <View style={styles.errorRow}>
+                    <Ionicons name="alert-circle" size={14} color="#ff6b6b" />
+                    <Text style={styles.errorText}>Title is required</Text>
+                  </View>
+                )}
               </View>
-              {errors.title && (
-                <View style={styles.errorContainer}>
-                  <Ionicons name="alert-circle" size={14} color="#ff6b6b" />
-                  <Text style={styles.errorText}>Title is required</Text>
-                </View>
-              )}
-            </View>
 
-            {/* Description Section */}
-            <View style={styles.section}>
-              <View style={styles.labelContainer}>
-                <Ionicons name="list" size={16} color="#4facfe" />
-                <Text style={styles.sectionLabel}>Description</Text>
-              </View>
-              <View style={[styles.inputContainer, styles.textAreaContainer]}>
+              {/* Description Card */}
+              <View style={styles.card}>
+                <View style={styles.cardHeader}>
+                  <Ionicons name="document-text-outline" size={18} color="#4facfe" />
+                  <Text style={styles.cardTitle}>Description</Text>
+                  <Text style={styles.optionalBadge}>Optional</Text>
+                </View>
                 <TextInput
-                  placeholder="Add more details..."
-                  placeholderTextColor="#666"
-                  style={[styles.input, styles.textArea]}
+                  placeholder="Add details about your plan..."
+                  placeholderTextColor="#555"
+                  style={styles.descriptionInput}
                   value={planDescription}
                   onChangeText={setPlanDescription}
                   multiline
-                  numberOfLines={4}
+                  numberOfLines={3}
                   maxLength={500}
+                  textAlignVertical="top"
                 />
-              </View>
-              <Text style={styles.charCount}>
-                {planDescription.length}/500 characters
-              </Text>
-            </View>
-
-            {/* Date & Time Section */}
-            <View style={styles.section}>
-              <View style={styles.labelContainer}>
-                <Ionicons name="time" size={16} color="#4facfe" />
-                <Text style={styles.sectionLabel}>
-                  When <Text style={styles.required}>*</Text>
+                <Text style={styles.charCounter}>
+                  {planDescription.length}/500
                 </Text>
               </View>
-              <View style={styles.rowContainer}>
-                <TouchableOpacity
-                  style={[styles.inputContainer, styles.halfWidth]}
-                  onPress={() => setDatePickerVisible(true)}
-                  activeOpacity={0.7}
-                >
-                  <Ionicons name="calendar-outline" size={20} color="#4facfe" />
-                  <Text style={styles.inputText}>
-                    {moment(planDate).format('MMM DD, YYYY')}
-                  </Text>
-                </TouchableOpacity>
 
-                <TouchableOpacity
-                  style={[
-                    styles.inputContainer, 
-                    styles.halfWidth,
-                    errors.time && styles.inputError
-                  ]}
-                  onPress={() => setTimePickerVisible(true)}
-                  activeOpacity={0.7}
-                >
-                  <Ionicons name="time-outline" size={20} color="#4facfe" />
-                  <Text style={[
-                    styles.inputText,
-                    !planTime && styles.placeholderText
-                  ]}>
-                    {planTime || 'Set time'}
-                  </Text>
-                </TouchableOpacity>
-              </View>
-              {errors.time && (
-                <View style={styles.errorContainer}>
-                  <Ionicons name="alert-circle" size={14} color="#ff6b6b" />
-                  <Text style={styles.errorText}>Time is required</Text>
+              {/* Date & Time Card */}
+              <View style={styles.card}>
+                <View style={styles.cardHeader}>
+                  <Ionicons name="calendar-outline" size={18} color="#4facfe" />
+                  <Text style={styles.cardTitle}>Date & Time</Text>
+                  <Text style={styles.requiredDot}>*</Text>
                 </View>
-              )}
-            </View>
-
-            {datePickerVisible && (
-              <DateTimePicker
-                value={planDate}
-                mode="date"
-                display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-                onChange={(e, d) => {
-                  setDatePickerVisible(false);
-                  if (d) setPlanDate(d);
-                }}
-                minimumDate={new Date()}
-              />
-            )}
-
-            {timePickerVisible && (
-              <DateTimePicker
-                value={planDate}
-                mode="time"
-                is24Hour
-                display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-                onChange={(e, t) => {
-                  setTimePickerVisible(false);
-                  if (t) {
-                    const h = t.getHours().toString().padStart(2, '0');
-                    const m = t.getMinutes().toString().padStart(2, '0');
-                    setPlanTime(`${h}:${m}`);
-                    setErrors(prev => ({ ...prev, time: false }));
-                  }
-                }}
-              />
-            )}
-
-            {/* Category & Priority Row */}
-            <View style={styles.rowContainer}>
-              {/* Category Section */}
-              <View style={[styles.section, styles.halfWidth, styles.noMargin]}>
-                <View style={styles.labelContainer}>
-                  <Ionicons name="apps" size={16} color="#4facfe" />
-                  <Text style={styles.sectionLabel}>Category</Text>
-                </View>
-                <TouchableOpacity
-                  style={styles.inputContainer}
-                  onPress={() => setCategoryPickerVisible(!categoryPickerVisible)}
-                  activeOpacity={0.7}
-                >
-                  <LinearGradient
-                    colors={PlannerService.getCategoryColor(planCategory) as any}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 1 }}
-                    style={styles.categoryIconContainer}
-                  >
-                    <Ionicons 
-                      name={getCategoryIcon(planCategory) as any} 
-                      size={16} 
-                      color="#fff" 
-                    />
-                  </LinearGradient>
-                  <Text style={styles.inputTextCompact} numberOfLines={1}>
-                    {planCategory.charAt(0).toUpperCase() + planCategory.slice(1)}
-                  </Text>
-                  <Ionicons 
-                    name={categoryPickerVisible ? "chevron-up" : "chevron-down"} 
-                    size={18} 
-                    color="#aaa" 
-                  />
-                </TouchableOpacity>
-              </View>
-
-              {/* Priority Section */}
-              <View style={[styles.section, styles.halfWidth, styles.noMargin]}>
-                <View style={styles.labelContainer}>
-                  <Ionicons name="flag" size={16} color="#4facfe" />
-                  <Text style={styles.sectionLabel}>Priority</Text>
-                </View>
-                <TouchableOpacity
-                  style={styles.inputContainer}
-                  onPress={() => setPriorityPickerVisible(!priorityPickerVisible)}
-                  activeOpacity={0.7}
-                >
-                  <View style={[
-                    styles.priorityIndicator,
-                    { backgroundColor: PlannerService.getPriorityColor(planPriority) }
-                  ]}>
-                    <Ionicons 
-                      name={getPriorityIcon(planPriority) as any} 
-                      size={14} 
-                      color="#fff" 
-                    />
-                  </View>
-                  <Text style={styles.inputTextCompact} numberOfLines={1}>
-                    {planPriority.charAt(0).toUpperCase() + planPriority.slice(1)}
-                  </Text>
-                  <Ionicons 
-                    name={priorityPickerVisible ? "chevron-up" : "chevron-down"} 
-                    size={18} 
-                    color="#aaa" 
-                  />
-                </TouchableOpacity>
-              </View>
-            </View>
-
-            {/* Category Picker */}
-            {categoryPickerVisible && (
-              <View style={[styles.pickerContainer, styles.fullWidth]}>
-                {(['work', 'personal', 'health', 'education', 'other'] as const).map((cat) => (
+                <View style={styles.dateTimeRow}>
                   <TouchableOpacity
-                    key={cat}
-                    style={[
-                      styles.pickerOption,
-                      planCategory === cat && styles.pickerOptionSelected
-                    ]}
-                    onPress={() => {
-                      setPlanCategory(cat);
-                      setCategoryPickerVisible(false);
-                    }}
+                    style={styles.dateTimeButton}
+                    onPress={() => setDatePickerVisible(true)}
                     activeOpacity={0.7}
                   >
-                    <LinearGradient
-                      colors={PlannerService.getCategoryColor(cat) as any}
-                      start={{ x: 0, y: 0 }}
-                      end={{ x: 1, y: 1 }}
-                      style={styles.pickerIconBadge}
+                    <Ionicons name="calendar" size={20} color="#fff" />
+                    <View style={styles.dateTimeTextContainer}>
+                      <Text style={styles.dateTimeLabel}>Date</Text>
+                      <Text style={styles.dateTimeValue}>
+                        {moment(planDate).format('MMM DD')}
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[styles.dateTimeButton, errors.time && styles.inputError]}
+                    onPress={() => setTimePickerVisible(true)}
+                    activeOpacity={0.7}
+                  >
+                    <Ionicons name="time" size={20} color="#fff" />
+                    <View style={styles.dateTimeTextContainer}>
+                      <Text style={styles.dateTimeLabel}>Time</Text>
+                      <Text style={[
+                        styles.dateTimeValue,
+                        !planTime && styles.placeholderValue
+                      ]}>
+                        {planTime || 'Set time'}
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+                </View>
+                {errors.time && (
+                  <View style={styles.errorRow}>
+                    <Ionicons name="alert-circle" size={14} color="#ff6b6b" />
+                    <Text style={styles.errorText}>Time is required</Text>
+                  </View>
+                )}
+              </View>
+
+              {datePickerVisible && (
+                <DateTimePicker
+                  value={planDate}
+                  mode="date"
+                  display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                  onChange={(e, d) => {
+                    setDatePickerVisible(false);
+                    if (d) setPlanDate(d);
+                  }}
+                  minimumDate={new Date()}
+                />
+              )}
+
+              {timePickerVisible && (
+                <DateTimePicker
+                  value={planDate}
+                  mode="time"
+                  is24Hour
+                  display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                  onChange={(e, t) => {
+                    setTimePickerVisible(false);
+                    if (t) {
+                      const h = t.getHours().toString().padStart(2, '0');
+                      const m = t.getMinutes().toString().padStart(2, '0');
+                      setPlanTime(`${h}:${m}`);
+                      setErrors(prev => ({ ...prev, time: false }));
+                    }
+                  }}
+                />
+              )}
+
+              {/* Category & Priority Card */}
+              <View style={styles.card}>
+                <View style={styles.cardHeader}>
+                  <Ionicons name="options-outline" size={18} color="#4facfe" />
+                  <Text style={styles.cardTitle}>OTHERS</Text>
+                </View>
+                <View style={styles.optionsRow}>
+                  {/* Category */}
+                  <View style={styles.optionContainer}>
+                    <Text style={styles.optionLabel}>Category</Text>
+                    <TouchableOpacity
+                      style={styles.optionButton}
+                      onPress={() => setCategoryPickerVisible(!categoryPickerVisible)}
+                      activeOpacity={0.7}
                     >
-                      <Ionicons 
-                        name={getCategoryIcon(cat) as any} 
-                        size={16} 
-                        color="#fff" 
-                      />
-                    </LinearGradient>
-                    <Text style={styles.pickerText}>
-                      {cat.charAt(0).toUpperCase() + cat.slice(1)}
-                    </Text>
-                    {planCategory === cat && (
-                      <Ionicons name="checkmark-circle" size={20} color="#4facfe" />
-                    )}
-                  </TouchableOpacity>
-                ))}
-              </View>
-            )}
-
-            {/* Priority Picker */}
-            {priorityPickerVisible && (
-              <View style={[styles.pickerContainer, styles.fullWidth]}>
-                {(['low', 'medium', 'high'] as const).map((pri) => (
-                  <TouchableOpacity
-                    key={pri}
-                    style={[
-                      styles.pickerOption,
-                      planPriority === pri && styles.pickerOptionSelected
-                    ]}
-                    onPress={() => {
-                      setPlanPriority(pri);
-                      setPriorityPickerVisible(false);
-                    }}
-                    activeOpacity={0.7}
-                  >
-                    <View style={[
-                      styles.priorityColorBadge,
-                      { backgroundColor: PlannerService.getPriorityColor(pri) }
-                    ]}>
-                      <Ionicons 
-                        name={getPriorityIcon(pri) as any} 
-                        size={16} 
-                        color="#fff" 
-                      />
-                    </View>
-                    <Text style={styles.pickerText}>
-                      {pri.charAt(0).toUpperCase() + pri.slice(1)} Priority
-                    </Text>
-                    {planPriority === pri && (
-                      <Ionicons name="checkmark-circle" size={20} color="#4facfe" />
-                    )}
-                  </TouchableOpacity>
-                ))}
-              </View>
-            )}
-
-            {/* Reminder Settings Section */}
-            <View style={styles.section}>
-              <View style={styles.labelContainer}>
-                <Ionicons name="notifications" size={16} color="#4facfe" />
-                <Text style={styles.sectionLabel}>Reminder</Text>
-                {!hasPermission && (
-                  <View style={styles.permissionBadge}>
-                    <Ionicons name="alert-circle" size={12} color="#fbbf24" />
-                    <Text style={styles.permissionBadgeText}>Disabled</Text>
+                      <LinearGradient
+                        colors={PlannerService.getCategoryColor(planCategory) as any}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 1 }}
+                        style={styles.optionIconBadge}
+                      >
+                        <Ionicons 
+                          name={getCategoryIcon(planCategory) as any} 
+                          size={16} 
+                          color="#fff" 
+                        />
+                      </LinearGradient>
+                      <Text style={styles.optionText} numberOfLines={1}>
+                        {planCategory.charAt(0).toUpperCase() + planCategory.slice(1)}
+                      </Text>
+                      <Ionicons name="chevron-down" size={16} color="#666" />
+                    </TouchableOpacity>
                   </View>
-                )}
-                {errors.reminder && (
-                  <View style={[styles.permissionBadge, { backgroundColor: 'rgba(255, 107, 107, 0.1)' }]}>
-                    <Ionicons name="warning" size={12} color="#ff6b6b" />
-                    <Text style={[styles.permissionBadgeText, { color: '#ff6b6b' }]}>Invalid</Text>
+
+                  {/* Priority */}
+                  <View style={styles.optionContainer}>
+                    <Text style={styles.optionLabel}>Priority</Text>
+                    <TouchableOpacity
+                      style={styles.optionButton}
+                      onPress={() => setPriorityPickerVisible(!priorityPickerVisible)}
+                      activeOpacity={0.7}
+                    >
+                      <View style={[
+                        styles.optionIconBadge,
+                        { backgroundColor: PlannerService.getPriorityColor(planPriority) }
+                      ]}>
+                        <Ionicons 
+                          name={getPriorityIcon(planPriority) as any} 
+                          size={16} 
+                          color="#fff" 
+                        />
+                      </View>
+                      <Text style={styles.optionText} numberOfLines={1}>
+                        {planPriority.charAt(0).toUpperCase() + planPriority.slice(1)}
+                      </Text>
+                      <Ionicons name="chevron-down" size={16} color="#666" />
+                    </TouchableOpacity>
                   </View>
-                )}
-              </View>
-              
-              <TouchableOpacity
-                style={[
-                  styles.inputContainer,
-                  !hasPermission && styles.inputDisabled,
-                  errors.reminder && styles.inputError
-                ]}
-                onPress={() => {
-                  if (!hasPermission) {
-                    Alert.alert(
-                      'Notifications Disabled',
-                      'Enable notifications to receive reminders for your plans.',
-                      [
-                        { text: 'Cancel', style: 'cancel' },
-                        { 
-                          text: 'Enable', 
-                          onPress: async () => {
-                            await requestPermission();
-                          }
-                        },
-                      ]
-                    );
-                  } else {
-                    setReminderPickerVisible(!reminderPickerVisible);
-                  }
-                }}
-                activeOpacity={0.7}
-              >
-                <View style={[
-                  styles.reminderIconContainer,
-                  { backgroundColor: hasPermission ? '#4facfe15' : '#66666615' }
-                ]}>
-                  <Ionicons 
-                    name={getReminderIcon(reminderMinutes) as any} 
-                    size={18} 
-                    color={hasPermission ? '#4facfe' : '#666'} 
-                  />
                 </View>
-                <Text style={[
-                  styles.inputText,
-                  !hasPermission && styles.inputTextDisabled
-                ]}>
-                  {getReminderLabel(reminderMinutes)}
-                </Text>
-                <Ionicons 
-                  name={reminderPickerVisible ? "chevron-up" : "chevron-down"} 
-                  size={18} 
-                  color="#aaa" 
-                />
-              </TouchableOpacity>
-              
-              {!hasPermission && (
-                <TouchableOpacity 
-                  style={styles.enableNotificationsButton}
-                  onPress={requestPermission}
-                  activeOpacity={0.7}
-                >
-                  <Ionicons name="notifications-outline" size={16} color="#4facfe" />
-                  <Text style={styles.enableNotificationsText}>
-                    Enable Notifications
-                  </Text>
-                </TouchableOpacity>
-              )}
-            </View>
 
-            {/* Reminder Picker */}
-            {reminderPickerVisible && hasPermission && (
-              <View style={[styles.pickerContainer, styles.fullWidth]}>
-                {[
-                  { minutes: 0, label: 'None', icon: 'notifications-off' },
-                  { minutes: 5, label: '5 minutes before', icon: 'alarm' },
-                  { minutes: 15, label: '15 minutes before', icon: 'notifications' },
-                  { minutes: 30, label: '30 minutes before', icon: 'notifications' },
-                  { minutes: 60, label: '1 hour before', icon: 'notifications-circle' },
-                  { minutes: 120, label: '2 hours before', icon: 'notifications-circle' },
-                  { minutes: 1440, label: '1 day before', icon: 'notifications-circle' },
-                ].map((option) => (
-                  <TouchableOpacity
-                    key={option.minutes}
-                    style={[
-                      styles.pickerOption,
-                      reminderMinutes === option.minutes && styles.pickerOptionSelected
-                    ]}
-                    onPress={() => {
-                      setReminderMinutes(option.minutes);
-                      setReminderPickerVisible(false);
-                      setShowCustomReminderInput(false);
-                    }}
-                    activeOpacity={0.7}
-                  >
-                    <View style={styles.reminderOptionIcon}>
-                      <Ionicons 
-                        name={option.icon as any} 
-                        size={18} 
-                        color={reminderMinutes === option.minutes ? '#4facfe' : '#aaa'} 
-                      />
-                    </View>
-                    <Text style={styles.pickerText}>
-                      {option.label}
-                    </Text>
-                    {reminderMinutes === option.minutes && (
-                      <Ionicons name="checkmark-circle" size={20} color="#4facfe" />
-                    )}
-                  </TouchableOpacity>
-                ))}
-                
-                {/* Custom Reminder Option */}
-                <TouchableOpacity
-                  style={[
-                    styles.pickerOption,
-                    showCustomReminderInput && styles.pickerOptionSelected
-                  ]}
-                  onPress={() => setShowCustomReminderInput(!showCustomReminderInput)}
-                  activeOpacity={0.7}
-                >
-                  <View style={styles.reminderOptionIcon}>
-                    <Ionicons 
-                      name="create-outline" 
-                      size={18} 
-                      color={showCustomReminderInput ? '#4facfe' : '#aaa'} 
-                    />
-                  </View>
-                  <Text style={styles.pickerText}>
-                    Custom time
-                  </Text>
-                  <Ionicons 
-                    name={showCustomReminderInput ? "chevron-up" : "chevron-down"} 
-                    size={18} 
-                    color="#aaa" 
-                  />
-                </TouchableOpacity>
-                
-                {/* Custom Reminder Input */}
-                {showCustomReminderInput && (
-                  <View style={styles.customReminderContainer}>
-                    <Text style={styles.customReminderLabel}>
-                      Enter minutes before plan time:
-                    </Text>
-                    <View style={styles.customReminderInputRow}>
-                      <TextInput
-                        style={styles.customReminderInput}
-                        placeholder="e.g., 45"
-                        placeholderTextColor="#666"
-                        keyboardType="number-pad"
-                        value={customReminderInput}
-                        onChangeText={setCustomReminderInput}
-                      />
+                {/* Category Picker */}
+                {categoryPickerVisible && (
+                  <View style={styles.pickerDropdown}>
+                    {(['work', 'personal', 'health', 'education', 'other'] as const).map((cat) => (
                       <TouchableOpacity
-                        style={styles.customReminderButton}
-                        onPress={handleCustomReminderSubmit}
+                        key={cat}
+                        style={[
+                          styles.pickerItem,
+                          planCategory === cat && styles.pickerItemSelected
+                        ]}
+                        onPress={() => {
+                          setPlanCategory(cat);
+                          setCategoryPickerVisible(false);
+                        }}
                         activeOpacity={0.7}
                       >
-                        <Ionicons name="checkmark" size={20} color="#fff" />
+                        <LinearGradient
+                          colors={PlannerService.getCategoryColor(cat) as any}
+                          start={{ x: 0, y: 0 }}
+                          end={{ x: 1, y: 1 }}
+                          style={styles.pickerItemIcon}
+                        >
+                          <Ionicons 
+                            name={getCategoryIcon(cat) as any} 
+                            size={16} 
+                            color="#fff" 
+                          />
+                        </LinearGradient>
+                        <Text style={styles.pickerItemText}>
+                          {cat.charAt(0).toUpperCase() + cat.slice(1)}
+                        </Text>
+                        {planCategory === cat && (
+                          <Ionicons name="checkmark" size={20} color="#4facfe" style={styles.checkmark} />
+                        )}
                       </TouchableOpacity>
-                    </View>
-                    <Text style={styles.customReminderHint}>
-                      Max: 10,080 minutes (7 days)
-                    </Text>
+                    ))}
+                  </View>
+                )}
+
+                {/* Priority Picker */}
+                {priorityPickerVisible && (
+                  <View style={styles.pickerDropdown}>
+                    {(['low', 'medium', 'high'] as const).map((pri) => (
+                      <TouchableOpacity
+                        key={pri}
+                        style={[
+                          styles.pickerItem,
+                          planPriority === pri && styles.pickerItemSelected
+                        ]}
+                        onPress={() => {
+                          setPlanPriority(pri);
+                          setPriorityPickerVisible(false);
+                        }}
+                        activeOpacity={0.7}
+                      >
+                        <View style={[
+                          styles.pickerItemIcon,
+                          { backgroundColor: PlannerService.getPriorityColor(pri) }
+                        ]}>
+                          <Ionicons 
+                            name={getPriorityIcon(pri) as any} 
+                            size={16} 
+                            color="#fff" 
+                          />
+                        </View>
+                        <Text style={styles.pickerItemText}>
+                          {pri.charAt(0).toUpperCase() + pri.slice(1)} Priority
+                        </Text>
+                        {planPriority === pri && (
+                          <Ionicons name="checkmark" size={20} color="#4facfe" style={styles.checkmark} />
+                        )}
+                      </TouchableOpacity>
+                    ))}
                   </View>
                 )}
               </View>
-            )}
 
-            {/* Bottom Spacing */}
-            <View style={{ height: 120 }} />
-          </ScrollView>
+              {/* Reminder Card */}
+              <View style={styles.card}>
+                <View style={styles.cardHeader}>
+                  <Ionicons name="notifications-outline" size={18} color="#4facfe" />
+                  <Text style={styles.cardTitle}>Reminder</Text>
+                  {!hasPermission && (
+                    <View style={styles.disabledBadge}>
+                      <Ionicons name="close-circle" size={12} color="#ff6b6b" />
+                      <Text style={styles.disabledBadgeText}>OFF</Text>
+                    </View>
+                  )}
+                </View>
+                
+                <TouchableOpacity
+                  style={[
+                    styles.reminderButton,
+                    !hasPermission && styles.reminderButtonDisabled,
+                    errors.reminder && styles.inputError
+                  ]}
+                  onPress={() => {
+                    if (!hasPermission) {
+                      Alert.alert(
+                        'Enable Notifications',
+                        'Turn on notifications to receive reminders for your plans.',
+                        [
+                          { text: 'Cancel', style: 'cancel' },
+                          { 
+                            text: 'Enable', 
+                            onPress: async () => {
+                              await requestPermission();
+                            }
+                          },
+                        ]
+                      );
+                    } else {
+                      setReminderPickerVisible(!reminderPickerVisible);
+                    }
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <View style={styles.reminderButtonLeft}>
+                    <View style={[
+                      styles.reminderIconContainer,
+                      !hasPermission && styles.reminderIconDisabled
+                    ]}>
+                      <Ionicons 
+                        name={getReminderIcon(reminderMinutes) as any} 
+                        size={20} 
+                        color={hasPermission ? '#4facfe' : '#555'} 
+                      />
+                    </View>
+                    <Text style={[
+                      styles.reminderButtonText,
+                      !hasPermission && styles.reminderButtonTextDisabled
+                    ]}>
+                      {getReminderLabel(reminderMinutes)}
+                    </Text>
+                  </View>
+                  <Ionicons 
+                    name={reminderPickerVisible ? "chevron-up" : "chevron-down"} 
+                    size={18} 
+                    color="#666" 
+                  />
+                </TouchableOpacity>
 
-          {/* Fixed Bottom Action Buttons */}
-          <View style={styles.bottomBar}>
-            <TouchableOpacity
-              style={[styles.cancelButton, { marginRight: 12 }]}
-              onPress={handleClose}
-              activeOpacity={0.7}
-              disabled={isSaving}
-            >
-              <Text style={styles.cancelText}>Cancel</Text>
-            </TouchableOpacity>
+                {!hasPermission && (
+                  <TouchableOpacity 
+                    style={styles.enableButton}
+                    onPress={requestPermission}
+                    activeOpacity={0.7}
+                  >
+                    <Ionicons name="notifications" size={16} color="#4facfe" />
+                    <Text style={styles.enableButtonText}>Enable Notifications</Text>
+                  </TouchableOpacity>
+                )}
 
-            <TouchableOpacity
-              style={styles.saveButtonContainer}
-              onPress={savePlan}
-              activeOpacity={0.8}
-              disabled={isSaving}
-            >
-              <LinearGradient
-                colors={isSaving ? ['#666', '#888'] : ['#4facfe', '#00f2fe']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={styles.saveButton}
+                {/* Reminder Picker */}
+                {reminderPickerVisible && hasPermission && (
+                  <View style={styles.pickerDropdown}>
+                    {[
+                      { minutes: 0, label: 'No reminder', icon: 'notifications-off-outline' },
+                      { minutes: 5, label: '5 minutes before', icon: 'alarm-outline' },
+                      { minutes: 15, label: '15 minutes before', icon: 'notifications-outline' },
+                      { minutes: 30, label: '30 minutes before', icon: 'notifications-outline' },
+                      { minutes: 60, label: '1 hour before', icon: 'time-outline' },
+                      { minutes: 120, label: '2 hours before', icon: 'time-outline' },
+                      { minutes: 1440, label: '1 day before', icon: 'calendar-outline' },
+                    ].map((option) => (
+                      <TouchableOpacity
+                        key={option.minutes}
+                        style={[
+                          styles.pickerItem,
+                          reminderMinutes === option.minutes && styles.pickerItemSelected
+                        ]}
+                        onPress={() => {
+                          setReminderMinutes(option.minutes);
+                          setReminderPickerVisible(false);
+                          setShowCustomReminderInput(false);
+                        }}
+                        activeOpacity={0.7}
+                      >
+                        <View style={styles.reminderPickerIcon}>
+                          <Ionicons 
+                            name={option.icon as any} 
+                            size={18} 
+                            color={reminderMinutes === option.minutes ? '#4facfe' : '#666'} 
+                          />
+                        </View>
+                        <Text style={styles.pickerItemText}>{option.label}</Text>
+                        {reminderMinutes === option.minutes && (
+                          <Ionicons name="checkmark" size={20} color="#4facfe" style={styles.checkmark} />
+                        )}
+                      </TouchableOpacity>
+                    ))}
+                    
+                    {/* Custom Option */}
+                    <TouchableOpacity
+                      style={[
+                        styles.pickerItem,
+                        showCustomReminderInput && styles.pickerItemSelected
+                      ]}
+                      onPress={() => setShowCustomReminderInput(!showCustomReminderInput)}
+                      activeOpacity={0.7}
+                    >
+                      <View style={styles.reminderPickerIcon}>
+                        <Ionicons 
+                          name="create-outline" 
+                          size={18} 
+                          color={showCustomReminderInput ? '#4facfe' : '#666'} 
+                        />
+                      </View>
+                      <Text style={styles.pickerItemText}>Custom time</Text>
+                      <Ionicons 
+                        name={showCustomReminderInput ? "chevron-up" : "chevron-down"} 
+                        size={18} 
+                        color="#666" 
+                      />
+                    </TouchableOpacity>
+                    
+                    {showCustomReminderInput && (
+                      <View style={styles.customInputContainer}>
+                        <Text style={styles.customInputLabel}>Minutes before plan:</Text>
+                        <View style={styles.customInputRow}>
+                          <TextInput
+                            style={styles.customInput}
+                            placeholder="e.g., 45"
+                            placeholderTextColor="#555"
+                            keyboardType="number-pad"
+                            value={customReminderInput}
+                            onChangeText={setCustomReminderInput}
+                          />
+                          <TouchableOpacity
+                            style={styles.customSubmitButton}
+                            onPress={handleCustomReminderSubmit}
+                            activeOpacity={0.7}
+                          >
+                            <Ionicons name="checkmark" size={20} color="#fff" />
+                          </TouchableOpacity>
+                        </View>
+                        <Text style={styles.customInputHint}>Maximum: 10,080 min (7 days)</Text>
+                      </View>
+                    )}
+                  </View>
+                )}
+              </View>
+
+              <View style={{ height: 100 }} />
+            </ScrollView>
+
+            {/* Bottom Action Bar */}
+            <View style={styles.bottomActionBar}>
+              <TouchableOpacity
+                style={styles.cancelButton}
+                onPress={handleClose}
+                activeOpacity={0.7}
+                disabled={isSaving}
               >
-                <Ionicons 
-                  name={isSaving ? "hourglass-outline" : "checkmark-circle"} 
-                  size={20} 
-                  color="#fff" 
-                />
-                <Text style={styles.saveText}>
-                  {isSaving ? 'Saving...' : (editingPlan ? 'Update' : 'Create')}
-                </Text>
-              </LinearGradient>
-            </TouchableOpacity>
+                <Text style={styles.cancelButtonText}>Cancel</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={savePlan}
+                activeOpacity={0.8}
+                disabled={isSaving}
+                style={styles.saveButtonWrapper}
+              >
+                <LinearGradient
+                  colors={isSaving ? ['#555', '#666'] : ['#667eea', '#764ba2']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.saveButton}
+                >
+                  {isSaving ? (
+                    <>
+                      <Ionicons name="hourglass-outline" size={20} color="#fff" />
+                      <Text style={styles.saveButtonText}>Saving...</Text>
+                    </>
+                  ) : (
+                    <>
+                      <Ionicons name="checkmark-circle" size={20} color="#fff" />
+                      <Text style={styles.saveButtonText}>
+                        {editingPlan ? 'Update Plan' : 'Create Plan'}
+                      </Text>
+                    </>
+                  )}
+                </LinearGradient>
+              </TouchableOpacity>
+            </View>
           </View>
-        </Animated.View>
-      </KeyboardAvoidingView>
+        </View>
+      </View>
     </Modal>
   );
 }
@@ -867,351 +818,368 @@ export default function PlanModal({
 const styles = StyleSheet.create({
   modalOverlay: { 
     flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.75)',
+    justifyContent: 'flex-end',
   },
-  backdrop: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
-  },
-  modalContent: { 
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    height: SCREEN_HEIGHT * 0.92,
-    backgroundColor: '#1a2744',
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
+  modalContent: {
+    height: SCREEN_HEIGHT * 0.70,
+    backgroundColor: '#0f1729',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
     overflow: 'hidden',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 20,
-    elevation: 20,
+    shadowOffset: { width: 0, height: -8 },
+    shadowOpacity: 0.4,
+    shadowRadius: 16,
+    elevation: 24,
   },
-  dragIndicatorContainer: {
-    paddingTop: 12,
-    paddingBottom: 8,
-    alignItems: 'center',
+  keyboardView: {
+    flex: 1,
+  },
+  compactHeader: {
+    backgroundColor: '#1a2744',
+    paddingTop: 8,
+    paddingBottom: 16,
+    paddingHorizontal: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.06)',
   },
   dragIndicator: {
-    width: 40,
+    width: 36,
     height: 4,
-    backgroundColor: 'rgba(255, 255, 255, 0.3)',
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
     borderRadius: 2,
+    alignSelf: 'center',
+    marginBottom: 12,
   },
-  modalHeader: { 
-    paddingHorizontal: 20,
-    paddingVertical: 20,
-  },
-  headerContent: {
+  headerRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
-  headerLeft: {
+  headerTitleContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 14,
+    gap: 12,
     flex: 1,
   },
-  headerIconContainer: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
-    backgroundColor: 'rgba(255, 255, 255, 0.15)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  closeButton: {
+  headerIconBadge: {
     width: 40,
     height: 40,
     borderRadius: 10,
-    backgroundColor: 'rgba(255, 255, 255, 0.15)',
     justifyContent: 'center',
     alignItems: 'center',
   },
-  modalTitle: { 
-    fontSize: 22, 
-    fontWeight: '700', 
+  compactTitle: {
+    fontSize: 18,
+    fontWeight: '700',
     color: '#fff',
     marginBottom: 2,
   },
-  modalSubtitle: {
-    fontSize: 13,
-    color: 'rgba(255, 255, 255, 0.7)',
-    fontWeight: '400',
+  compactSubtitle: {
+    fontSize: 12,
+    color: '#888',
+    fontWeight: '500',
   },
-  modalBody: { 
+  closeButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 8,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  scrollView: {
     flex: 1,
   },
   scrollContent: {
-    paddingHorizontal: 20,
-    paddingTop: 15,
-    paddingBottom: 20,
+    padding: 20,
+    paddingBottom: 40,
   },
-  section: {
-    marginBottom: 20,
+  card: {
+    backgroundColor: 'rgba(255, 255, 255, 0.04)',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.06)',
   },
-  noMargin: {
-    marginBottom: 0,
-  },
-  labelContainer: {
+  cardHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    marginBottom: 10,
+    marginBottom: 12,
   },
-  sectionLabel: {
-    fontSize: 13,
+  cardTitle: {
+    fontSize: 14,
     fontWeight: '600',
     color: '#aaa',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
+    flex: 1,
   },
-  required: {
+  requiredDot: {
+    fontSize: 16,
     color: '#ff6b6b',
+    fontWeight: '700',
   },
-  inputContainer: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    backgroundColor: 'rgba(255, 255, 255, 0.06)', 
-    borderRadius: 12, 
-    paddingHorizontal: 14, 
-    paddingVertical: 13, 
-    borderWidth: 1.5, 
-    borderColor: 'rgba(255, 255, 255, 0.08)', 
-    gap: 10,
+  optionalBadge: {
+    fontSize: 10,
+    color: '#666',
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+  },
+  titleInput: {
+    fontSize: 16,
+    color: '#fff',
+    fontWeight: '500',
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderWidth: 1.5,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
+    minHeight: 48,
+    maxHeight: 80,
+  },
+  descriptionInput: {
+    fontSize: 15,
+    color: '#fff',
+    fontWeight: '400',
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderWidth: 1.5,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
+    minHeight: 90,
+  },
+  charCounter: {
+    fontSize: 11,
+    color: '#555',
+    textAlign: 'right',
+    marginTop: 6,
   },
   inputError: {
     borderColor: 'rgba(255, 107, 107, 0.5)',
     backgroundColor: 'rgba(255, 107, 107, 0.05)',
   },
-  textAreaContainer: { 
-    alignItems: 'flex-start',
-    minHeight: 100,
-    paddingTop: 13,
+  errorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 8,
   },
-  input: { 
-    flex: 1, 
-    fontSize: 15, 
-    color: '#fff', 
-    fontWeight: '400',
-  },
-  textArea: { 
-    minHeight: 80, 
-    textAlignVertical: 'top',
-  },
-  inputText: { 
-    flex: 1, 
-    fontSize: 15, 
-    color: '#fff', 
+  errorText: {
+    fontSize: 12,
+    color: '#ff6b6b',
     fontWeight: '500',
   },
-  inputTextCompact: {
+  dateTimeRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  dateTimeButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderRadius: 10,
+    padding: 14,
+    borderWidth: 1.5,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
+  },
+  dateTimeTextContainer: {
+    flex: 1,
+  },
+  dateTimeLabel: {
+    fontSize: 11,
+    color: '#666',
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    marginBottom: 2,
+  },
+  dateTimeValue: {
+    fontSize: 15,
+    color: '#fff',
+    fontWeight: '600',
+  },
+  placeholderValue: {
+    color: '#555',
+    fontWeight: '400',
+  },
+  optionsRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  optionContainer: {
+    flex: 1,
+  },
+  optionLabel: {
+    fontSize: 11,
+    color: '#666',
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    marginBottom: 8,
+  },
+  optionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderRadius: 10,
+    padding: 12,
+    borderWidth: 1.5,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
+  },
+  optionIconBadge: {
+    width: 28,
+    height: 28,
+    borderRadius: 7,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  optionText: {
     flex: 1,
     fontSize: 14,
     color: '#fff',
     fontWeight: '500',
   },
-  placeholderText: {
-    color: '#666',
-    fontWeight: '400',
-  },
-  charCount: {
-    fontSize: 11,
-    color: '#666',
-    textAlign: 'right',
-    marginTop: 6,
-  },
-  errorContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    marginTop: 8,
-    marginLeft: 2,
-  },
-  errorText: {
-    fontSize: 12,
-    color: '#ff6b6b',
-  },
-  rowContainer: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  halfWidth: {
-    flex: 1,
-  },
-  fullWidth: {
+  pickerDropdown: {
     marginTop: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.03)',
+    borderRadius: 12,
+    padding: 4,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.06)',
   },
-  categoryIconContainer: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
-    justifyContent: 'center',
+  pickerItem: {
+    flexDirection: 'row',
     alignItems: 'center',
-  },
-  priorityIndicator: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  pickerContainer: { 
-    backgroundColor: 'rgba(255, 255, 255, 0.04)', 
-    borderRadius: 12, 
-    padding: 4, 
-    marginBottom: 12,
-    borderWidth: 1, 
-    borderColor: 'rgba(255, 255, 255, 0.08)',
-  },
-  pickerOption: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    padding: 12, 
-    borderRadius: 8, 
     gap: 12,
+    padding: 12,
+    borderRadius: 8,
   },
-  pickerOptionSelected: {
-    backgroundColor: 'rgba(79, 172, 254, 0.12)',
+  pickerItemSelected: {
+    backgroundColor: 'rgba(79, 172, 254, 0.1)',
   },
-  pickerIconBadge: { 
-    width: 32, 
-    height: 32, 
-    borderRadius: 8, 
-    justifyContent: 'center', 
-    alignItems: 'center',
-  },
-  priorityColorBadge: { 
-    width: 32, 
-    height: 32, 
+  pickerItemIcon: {
+    width: 32,
+    height: 32,
     borderRadius: 8,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  pickerText: { 
-    flex: 1, 
-    fontSize: 14, 
-    color: '#fff', 
+  pickerItemText: {
+    flex: 1,
+    fontSize: 14,
+    color: '#fff',
     fontWeight: '500',
   },
-  bottomBar: {
-    flexDirection: 'row',
-    padding: 20,
-    paddingBottom: Platform.OS === 'ios' ? 34 : 20,
-    backgroundColor: '#1a2744',
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(255, 255, 255, 0.08)',
-  },
-  saveButtonContainer: { 
-    flex: 2,
-  },
-  saveButton: { 
-    height: 52, 
-    borderRadius: 12, 
-    flexDirection: 'row', 
-    justifyContent: 'center', 
-    alignItems: 'center', 
-    gap: 8, 
-    shadowColor: '#4facfe', 
-    shadowOffset: { width: 0, height: 4 }, 
-    shadowOpacity: 0.3, 
-    shadowRadius: 8, 
-    elevation: 6,
-  },
-  saveText: { 
-    color: '#fff', 
-    fontSize: 16, 
-    fontWeight: '700',
-  },
-  cancelButton: { 
-    flex: 1,
-    alignItems: 'center', 
-    justifyContent: 'center',
-    paddingVertical: 14,
-    borderRadius: 12,
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
-    borderWidth: 1.5,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
-  },
-  cancelText: { 
-    color: '#aaa', 
-    fontSize: 15, 
-    fontWeight: '600',
-  },
-  permissionBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: 'rgba(251, 191, 36, 0.1)',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
+  checkmark: {
     marginLeft: 'auto',
   },
-  permissionBadgeText: {
-    fontSize: 10,
-    color: '#fbbf24',
-    fontWeight: '600',
-    textTransform: 'uppercase',
+  reminderButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderRadius: 10,
+    padding: 14,
+    borderWidth: 1.5,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
   },
-  inputDisabled: {
+  reminderButtonDisabled: {
     opacity: 0.5,
   },
-  inputTextDisabled: {
-    color: '#666',
+  reminderButtonLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    flex: 1,
   },
   reminderIconContainer: {
     width: 36,
     height: 36,
     borderRadius: 8,
+    backgroundColor: 'rgba(79, 172, 254, 0.15)',
     justifyContent: 'center',
     alignItems: 'center',
   },
-  reminderOptionIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 8,
-    backgroundColor: 'rgba(79, 172, 254, 0.1)',
-    justifyContent: 'center',
-    alignItems: 'center',
+  reminderIconDisabled: {
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
   },
-  enableNotificationsButton: {
+  reminderButtonText: {
+    fontSize: 14,
+    color: '#fff',
+    fontWeight: '500',
+    flex: 1,
+  },
+  reminderButtonTextDisabled: {
+    color: '#555',
+  },
+  disabledBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(255, 107, 107, 0.1)',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  disabledBadgeText: {
+    fontSize: 10,
+    color: '#ff6b6b',
+    fontWeight: '700',
+    textTransform: 'uppercase',
+  },
+  enableButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
     marginTop: 10,
     paddingVertical: 10,
-    paddingHorizontal: 16,
     backgroundColor: 'rgba(79, 172, 254, 0.1)',
-    borderRadius: 10,
+    borderRadius: 8,
     borderWidth: 1,
     borderColor: 'rgba(79, 172, 254, 0.3)',
   },
-  enableNotificationsText: {
+  enableButtonText: {
     fontSize: 13,
     color: '#4facfe',
     fontWeight: '600',
   },
-  customReminderContainer: {
+  reminderPickerIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 8,
+    backgroundColor: 'rgba(79, 172, 254, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  customInputContainer: {
     padding: 12,
     backgroundColor: 'rgba(255, 255, 255, 0.02)',
     borderRadius: 8,
     marginTop: 4,
   },
-  customReminderLabel: {
-    fontSize: 13,
-    color: '#aaa',
+  customInputLabel: {
+    fontSize: 12,
+    color: '#888',
     marginBottom: 10,
     fontWeight: '500',
   },
-  customReminderInputRow: {
+  customInputRow: {
     flexDirection: 'row',
     gap: 10,
   },
-  customReminderInput: {
+  customInput: {
     flex: 1,
     backgroundColor: 'rgba(255, 255, 255, 0.08)',
     borderRadius: 8,
@@ -1221,17 +1189,63 @@ const styles = StyleSheet.create({
     color: '#fff',
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.1)',
+    fontWeight: '500',
   },
-  customReminderButton: {
+  customSubmitButton: {
     width: 48,
     backgroundColor: '#4facfe',
     borderRadius: 8,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  customReminderHint: {
+  customInputHint: {
     fontSize: 11,
-    color: '#666',
+    color: '#555',
     marginTop: 8,
+  },
+  bottomActionBar: {
+    flexDirection: 'row',
+    padding: 16,
+    paddingBottom: Platform.OS === 'ios' ? 32 : 16,
+    backgroundColor: '#1a2744',
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255, 255, 255, 0.06)',
+    gap: 12,
+  },
+  cancelButton: {
+    flex: 1,
+    paddingVertical: 15,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cancelButtonText: {
+    color: '#aaa',
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  saveButtonWrapper: {
+    flex: 2,
+  },
+  saveButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 15,
+    borderRadius: 12,
+    shadowColor: '#667eea',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  saveButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '700',
   },
 });

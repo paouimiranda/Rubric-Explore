@@ -1,4 +1,6 @@
-// app/Quiz/multiplayer-lobby.tsx with Avatars & Themes & Animations
+
+// app/Quiz/multiplayer-lobby.tsx with Custom Alert Modal
+import { CustomAlertModal } from '@/components/Interface/custom-alert-modal';
 import ThemeAnimations from '@/components/Interface/theme-animations';
 import { getAvatarUrl } from '@/constants/avatars';
 import { getTheme } from '@/constants/friend-card-themes';
@@ -25,7 +27,6 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { doc, getDoc } from 'firebase/firestore';
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  Alert,
   Animated,
   Clipboard,
   FlatList,
@@ -42,6 +43,19 @@ import {
 interface EnhancedSessionPlayer extends SessionPlayer {
   avatarIndex?: number;
   themeId?: string;
+}
+
+// Alert modal state interface
+interface AlertState {
+  visible: boolean;
+  type: 'info' | 'success' | 'error' | 'warning' | 'question';
+  title: string;
+  message: string;
+  buttons: Array<{
+    text: string;
+    onPress: () => void;
+    style?: 'default' | 'cancel' | 'primary' | 'delete';
+  }>;
 }
 
 // PlayerCard component - defined outside to ensure proper hook initialization
@@ -229,6 +243,35 @@ const MultiplayerLobby = () => {
   const [isCreator, setIsCreator] = useState(false);
   const isStartingRef = useRef(false);
 
+  // Alert modal state
+  const [alertState, setAlertState] = useState<AlertState>({
+    visible: false,
+    type: 'info',
+    title: '',
+    message: '',
+    buttons: [],
+  });
+
+  // Helper function to show alert
+  const showAlert = (
+    type: AlertState['type'],
+    title: string,
+    message: string,
+    buttons: AlertState['buttons'] = [{ text: 'OK', onPress: () => {}, style: 'primary' }]
+  ) => {
+    setAlertState({
+      visible: true,
+      type,
+      title,
+      message,
+      buttons,
+    });
+  };
+
+  const closeAlert = () => {
+    setAlertState((prev) => ({ ...prev, visible: false }));
+  };
+
   // Load quiz and create session if needed
   useEffect(() => {
     initializeLobby();
@@ -316,8 +359,13 @@ const MultiplayerLobby = () => {
       const user = await getCurrentUserData();
       if (!user) {
         console.log('No user found');
-        Alert.alert('Error', 'Please login to continue');
-        router.back();
+        showAlert('error', 'Error', 'Please login to continue', [
+          {
+            text: 'OK',
+            onPress: () => router.back(),
+            style: 'primary',
+          },
+        ]);
         return;
       }
       console.log('User loaded:', user.uid);
@@ -333,8 +381,13 @@ const MultiplayerLobby = () => {
         
         const sessionDoc = await getDoc(doc(db, 'multiplayerSessions', normalizedSessionId));
         if (!sessionDoc.exists()) {
-          Alert.alert('Error', 'Session not found');
-          router.back();
+          showAlert('error', 'Error', 'Session not found', [
+            {
+              text: 'OK',
+              onPress: () => router.back(),
+              style: 'primary',
+            },
+          ]);
           return;
         }
         
@@ -344,8 +397,13 @@ const MultiplayerLobby = () => {
         console.log('Loading quiz from session:', sessionQuizId);
         const quizData = await QuizService.getQuizById(sessionQuizId, true);
         if (!quizData) {
-          Alert.alert('Error', 'Quiz not found');
-          router.back();
+          showAlert('error', 'Error', 'Quiz not found', [
+            {
+              text: 'OK',
+              onPress: () => router.back(),
+              style: 'primary',
+            },
+          ]);
           return;
         }
         
@@ -363,8 +421,13 @@ const MultiplayerLobby = () => {
         const quizData = await QuizService.getQuizById(normalizedQuizId, false);
         if (!quizData) {
           console.log('Quiz not found');
-          Alert.alert('Error', 'Quiz not found');
-          router.back();
+          showAlert('error', 'Error', 'Quiz not found', [
+            {
+              text: 'OK',
+              onPress: () => router.back(),
+              style: 'primary',
+            },
+          ]);
           return;
         }
         console.log('Quiz loaded:', quizData.title);
@@ -393,14 +456,24 @@ const MultiplayerLobby = () => {
         }
       } else {
         console.log('Invalid params - quizId:', normalizedQuizId, 'sessionId:', normalizedSessionId);
-        Alert.alert('Error', 'Invalid session parameters');
-        router.back();
+        showAlert('error', 'Error', 'Invalid session parameters', [
+          {
+            text: 'OK',
+            onPress: () => router.back(),
+            style: 'primary',
+          },
+        ]);
       }
     } catch (error) {
       console.error('Error initializing lobby:', error);
-      Alert.alert('Error', `Failed to initialize lobby: ${error}`);
+      showAlert('error', 'Error', `Failed to initialize lobby: ${error}`, [
+        {
+          text: 'OK',
+          onPress: () => router.back(),
+          style: 'primary',
+        },
+      ]);
       logError(error, 'initializeLobby', currentUser?.email);
-      router.back();
     } finally {
       setLoading(false);
     }
@@ -432,7 +505,7 @@ const MultiplayerLobby = () => {
       });
     } catch (error) {
       console.error('Error toggling ready:', error);
-      Alert.alert('Error', 'Failed to update ready status');
+      showAlert('error', 'Error', 'Failed to update ready status');
     }
   };
 
@@ -443,7 +516,7 @@ const MultiplayerLobby = () => {
       await togglePowerUps(sessionId, enabled);
     } catch (error) {
       console.error('Error toggling power-ups:', error);
-      Alert.alert('Error', 'Failed to toggle power-ups');
+      showAlert('error', 'Error', 'Failed to toggle power-ups');
     }
   };
 
@@ -460,7 +533,7 @@ const MultiplayerLobby = () => {
       });
     } catch (error) {
       console.error('Error starting quiz:', error);
-      Alert.alert('Error', 'Failed to start quiz');
+      showAlert('error', 'Error', 'Failed to start quiz');
       isStartingRef.current = false;
     }
   };
@@ -468,19 +541,20 @@ const MultiplayerLobby = () => {
   const handleCopyCode = () => {
     if (session?.sessionCode) {
       Clipboard.setString(session.sessionCode);
-      Alert.alert('Copied!', 'Session code copied to clipboard');
+      showAlert('success', 'Copied!', 'Session code copied to clipboard');
     }
   };
 
   const handleLeave = () => {
-    Alert.alert(
+    showAlert(
+      'question',
       'Leave Lobby',
       'Are you sure you want to leave?',
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: 'Cancel', onPress: () => {}, style: 'cancel' },
         {
           text: 'Leave',
-          style: 'destructive',
+          style: 'delete',
           onPress: async () => {
             if (sessionId && currentUser) {
               await leaveSession(sessionId, currentUser.uid);
@@ -631,6 +705,16 @@ const MultiplayerLobby = () => {
             </View>
           )}
         </View>
+
+        {/* Custom Alert Modal */}
+        <CustomAlertModal
+          visible={alertState.visible}
+          type={alertState.type}
+          title={alertState.title}
+          message={alertState.message}
+          buttons={alertState.buttons}
+          onClose={closeAlert}
+        />
       </SafeAreaView>
     </LinearGradient>
   );

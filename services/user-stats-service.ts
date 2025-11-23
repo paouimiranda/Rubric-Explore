@@ -9,6 +9,7 @@ export interface UserStats {
   totalNotebooksCreated: number;
   publicQuizzes: number;
   publicNotes: number;
+  publicNotebooks: number;
   quizzesTaken: number;
   averageQuizScore: number;
   bestQuizScore: number;
@@ -16,11 +17,11 @@ export interface UserStats {
 }
 
 /**
- * Calculate comprehensive user statistics
+ * Calculate comprehensive user statistics for ANY user
  */
 export async function getUserStats(uid: string): Promise<UserStats> {
   try {
-    // Fetch all data in parallel
+    // Fetch all data in parallel using the new methods that accept uid
     const [
       allQuizzes,
       allNotes,
@@ -28,11 +29,11 @@ export async function getUserStats(uid: string): Promise<UserStats> {
       publicContent,
       quizAttempts,
     ] = await Promise.all([
-      QuizService.getAllQuizzes(), // Gets user's own quizzes
+      QuizService.getAllQuizzesForUser(uid), // NEW: Gets specified user's quizzes
       getNotes(uid),
       getNotebooks(uid),
       countPublicContent(uid),
-      QuizService.getUserQuizAttempts(), // Gets user's quiz attempts
+      QuizService.getQuizAttemptsForUser(uid), // NEW: Gets specified user's attempts
     ]);
 
     // Calculate quiz statistics
@@ -54,6 +55,7 @@ export async function getUserStats(uid: string): Promise<UserStats> {
       totalNotebooksCreated: allNotebooks.length,
       publicQuizzes,
       publicNotes: publicContent.publicNotes,
+      publicNotebooks: publicContent.publicNotebooks || 0,
       quizzesTaken: totalAttempts,
       averageQuizScore: Math.round(averageScore),
       bestQuizScore: Math.round(bestScore),
@@ -68,6 +70,7 @@ export async function getUserStats(uid: string): Promise<UserStats> {
       totalNotebooksCreated: 0,
       publicQuizzes: 0,
       publicNotes: 0,
+      publicNotebooks: 0,
       quizzesTaken: 0,
       averageQuizScore: 0,
       bestQuizScore: 0,
@@ -78,10 +81,12 @@ export async function getUserStats(uid: string): Promise<UserStats> {
 
 /**
  * Get stats for another user's profile (public content only)
+ * DEPRECATED: Use getUserStats() instead which now works for any user
  */
 export async function getPublicUserStats(uid: string): Promise<{
   publicQuizzes: number;
   publicNotes: number;
+  publicNotebooks: number;
   memberSince: Date | null;
 }> {
   try {
@@ -98,6 +103,7 @@ export async function getPublicUserStats(uid: string): Promise<{
     return {
       publicQuizzes: publicQuizCount,
       publicNotes: publicContent.publicNotes,
+      publicNotebooks: publicContent.publicNotebooks || 0,
       memberSince: userDoc,
     };
   } catch (error) {
@@ -105,6 +111,7 @@ export async function getPublicUserStats(uid: string): Promise<{
     return {
       publicQuizzes: 0,
       publicNotes: 0,
+      publicNotebooks: 0,
       memberSince: null,
     };
   }

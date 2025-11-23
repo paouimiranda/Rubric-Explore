@@ -2,14 +2,14 @@
 import { Ionicons } from '@expo/vector-icons';
 import React, { useEffect, useRef } from 'react';
 import {
-    Animated,
-    Dimensions,
-    Modal,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  Animated,
+  Dimensions,
+  Modal,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 
 interface OptionFocusModalProps {
@@ -40,9 +40,11 @@ export const OptionFocusModal: React.FC<OptionFocusModalProps> = ({
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
+  if (visible) {
     setText(optionText);
     setCorrect(isCorrect);
-  }, [optionText, isCorrect]);
+  }
+}, [visible, optionText, isCorrect]);
 
   useEffect(() => {
     if (visible) {

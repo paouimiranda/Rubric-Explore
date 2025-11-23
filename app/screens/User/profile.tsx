@@ -11,7 +11,7 @@ import { getThemeById } from '@/constants/profile-theme';
 import { db } from '@/firebase';
 import { getPublicNotebooks } from '@/services/notes-service';
 import { Quiz, QuizService } from '@/services/quiz-service';
-import { getPublicUserStats, getUserStats } from '@/services/user-stats-service';
+import { getUserStats } from '@/services/user-stats-service';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
@@ -59,7 +59,6 @@ export default function ProfileScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [editModalVisible, setEditModalVisible] = useState(false);
-  const [previewMode, setPreviewMode] = useState(false);
   const [themeModalVisible, setThemeModalVisible] = useState(false);
   const [currentThemeId, setCurrentThemeId] = useState<string>('default');
   const [ownedThemes, setOwnedThemes] = useState<string[]>(['default']);
@@ -77,12 +76,6 @@ export default function ProfileScreen() {
       }
     }, [viewingUserId])
   );
-
-  useEffect(() => {
-    if (viewingUserId && isOwnProfile) {
-      loadProfileData();
-    }
-  }, [previewMode]);
 
   const loadProfileData = async () => {
     try {
@@ -106,13 +99,9 @@ export default function ProfileScreen() {
       setCurrentThemeId(selectedTheme);
       setOwnedThemes(userOwnedThemes);
       
-      if (isOwnProfile && !previewMode) {
-        const userStats = await getUserStats(viewingUserId!);
-        setStats(userStats);
-      } else {
-        const publicStats = await getPublicUserStats(viewingUserId!);
-        setStats(publicStats);
-      }
+      // Load stats for the user being viewed (works for any user now)
+      const userStats = await getUserStats(viewingUserId!);
+      setStats(userStats);
       
       const [quizzes, notebooks] = await Promise.all([
         QuizService.getPublicQuizzes(viewingUserId!),
@@ -201,119 +190,77 @@ export default function ProfileScreen() {
   const renderOverviewTab = () => (
     <View style={styles.tabContent}>
       <View style={styles.statsGrid}>
-        {isOwnProfile && !previewMode ? (
-          <>
-            <View style={styles.statCard}>
-              <LinearGradient
-                colors={['#FF999A', '#EE007F']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={styles.statGradient}
-              />
-              <View style={styles.statContent}>
-                <View style={styles.statIconContainer}>
-                  <Ionicons name="create" size={20} color="#fff" />
-                </View>
-                <View style={styles.statInfo}>
-                  <Text style={styles.statNumber}>{stats.totalQuizzesCreated}</Text>
-                  <Text style={styles.statLabel} adjustsFontSizeToFit numberOfLines={1}>Quizzes</Text>
-                </View>
-              </View>
+        <View style={styles.statCard}>
+          <LinearGradient
+            colors={['#FF999A', '#EE007F']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.statGradient}
+          />
+          <View style={styles.statContent}>
+            <View style={styles.statIconContainer}>
+              <Ionicons name="create" size={20} color="#fff" />
             </View>
+            <View style={styles.statInfo}>
+              <Text style={styles.statNumber}>{stats.totalQuizzesCreated}</Text>
+              <Text style={styles.statLabel} adjustsFontSizeToFit numberOfLines={1}>Quizzes</Text>
+            </View>
+          </View>
+        </View>
 
-            <View style={styles.statCard}>
-              <LinearGradient
-                colors={['#6ADBCE', '#568CD2']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={styles.statGradient}
-              />
-              <View style={styles.statContent}>
-                <View style={styles.statIconContainer}>
-                  <Ionicons name="book" size={20} color="#fff" />
-                </View>
-                <View style={styles.statInfo}>
-                  <Text style={styles.statNumber}>{stats.totalNotebooksCreated || 0}</Text>
-                  <Text style={styles.statLabel} adjustsFontSizeToFit numberOfLines={1}>Notebooks</Text>
-                </View>
-              </View>
+        <View style={styles.statCard}>
+          <LinearGradient
+            colors={['#6ADBCE', '#568CD2']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.statGradient}
+          />
+          <View style={styles.statContent}>
+            <View style={styles.statIconContainer}>
+              <Ionicons name="book" size={20} color="#fff" />
             </View>
+            <View style={styles.statInfo}>
+              <Text style={styles.statNumber}>{stats.totalNotebooksCreated || 0}</Text>
+              <Text style={styles.statLabel} adjustsFontSizeToFit numberOfLines={1}>Notebooks</Text>
+            </View>
+          </View>
+        </View>
 
-            <View style={styles.statCard}>
-              <LinearGradient
-                colors={['#63DC9A', '#52C72B']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={styles.statGradient}
-              />
-              <View style={styles.statContent}>
-                <View style={styles.statIconContainer}>
-                  <Ionicons name="checkmark-circle" size={20} color="#fff" />
-                </View>
-                <View style={styles.statInfo}>
-                  <Text style={styles.statNumber}>{stats.quizzesTaken}</Text>
-                  <Text style={styles.statLabel} adjustsFontSizeToFit numberOfLines={1}>Completed</Text>
-                </View>
-              </View>
+        <View style={styles.statCard}>
+          <LinearGradient
+            colors={['#63DC9A', '#52C72B']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.statGradient}
+          />
+          <View style={styles.statContent}>
+            <View style={styles.statIconContainer}>
+              <Ionicons name="checkmark-circle" size={20} color="#fff" />
             </View>
+            <View style={styles.statInfo}>
+              <Text style={styles.statNumber}>{stats.quizzesTaken}</Text>
+              <Text style={styles.statLabel} adjustsFontSizeToFit numberOfLines={1}>Completed</Text>
+            </View>
+          </View>
+        </View>
 
-            <View style={styles.statCard}>
-              <LinearGradient
-                colors={['#F2CD41', '#E77F00']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={styles.statGradient}
-              />
-              <View style={styles.statContent}>
-                <View style={styles.statIconContainer}>
-                  <Ionicons name="trophy" size={20} color="#fff" />
-                </View>
-                <View style={styles.statInfo}>
-                  <Text style={styles.statNumber}>{stats.averageQuizScore}%</Text>
-                  <Text style={styles.statLabel} adjustsFontSizeToFit numberOfLines={1}>Avg Score</Text>
-                </View>
-              </View>
+        <View style={styles.statCard}>
+          <LinearGradient
+            colors={['#F2CD41', '#E77F00']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.statGradient}
+          />
+          <View style={styles.statContent}>
+            <View style={styles.statIconContainer}>
+              <Ionicons name="trophy" size={20} color="#fff" />
             </View>
-          </>
-        ) : (
-          <>
-            <View style={styles.statCard}>
-              <LinearGradient
-                colors={['#FF999A', '#EE007F']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={styles.statGradient}
-              />
-              <View style={styles.statContent}>
-                <View style={styles.statIconContainer}>
-                  <Ionicons name="game-controller" size={20} color="#fff" />
-                </View>
-                <View style={styles.statInfo}>
-                  <Text style={styles.statNumber}>{stats.publicQuizzes}</Text>
-                  <Text style={styles.statLabel}>Public Quizzes</Text>
-                </View>
-              </View>
+            <View style={styles.statInfo}>
+              <Text style={styles.statNumber}>{stats.averageQuizScore}%</Text>
+              <Text style={styles.statLabel} adjustsFontSizeToFit numberOfLines={1}>Avg Score</Text>
             </View>
-
-            <View style={styles.statCard}>
-              <LinearGradient
-                colors={['#6ADBCE', '#568CD2']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={styles.statGradient}
-              />
-              <View style={styles.statContent}>
-                <View style={styles.statIconContainer}>
-                  <Ionicons name="book" size={20} color="#fff" />
-                </View>
-                <View style={styles.statInfo}>
-                  <Text style={styles.statNumber}>{stats.publicNotebooks || 0}</Text>
-                  <Text style={styles.statLabel}>Public Notebooks</Text>
-                </View>
-              </View>
-            </View>
-          </>
-        )}
+          </View>
+        </View>
       </View>
     </View>
   );
@@ -391,7 +338,7 @@ export default function ProfileScreen() {
         <View style={styles.emptyState}>
           <View style={styles.emptyIconContainer}>
             <LinearGradient
-              colors={['#FF999A', '#EE007F']}
+              colors={currentTheme.gradient.accent as any}
               style={styles.emptyIconGradient}
             >
               <Ionicons name="game-controller-outline" size={32} color="#fff" />
@@ -409,7 +356,7 @@ export default function ProfileScreen() {
             activeOpacity={0.7}
           >
             <LinearGradient
-              colors={['#FF999A', '#EE007F']}
+              colors={currentTheme.gradient.accent as any}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 0 }}
               style={styles.contentCardAccent}
@@ -417,7 +364,7 @@ export default function ProfileScreen() {
             
             <View style={styles.cardIconWrapper}>
               <LinearGradient
-                colors={['#FF999A', '#EE007F']}
+                colors={currentTheme.gradient.accent as any}
                 style={styles.cardIconGradient}
               >
                 <Ionicons name="game-controller" size={20} color="#fff" />
@@ -571,21 +518,6 @@ export default function ProfileScreen() {
                     <Ionicons name="color-palette" size={18} color="#fff" />
                   </LinearGradient>
                 </TouchableOpacity>
-                
-                <TouchableOpacity
-                  style={[styles.previewButton, previewMode && styles.previewButtonActive]}
-                  onPress={() => {
-                    setLoading(true);
-                    setPreviewMode(!previewMode);
-                  }}
-                  activeOpacity={0.8}
-                >
-                  <Ionicons 
-                    name={previewMode ? "eye-off" : "eye"} 
-                    size={18} 
-                    color={previewMode ? "#fff" : currentTheme.gradient.accent[0]} 
-                  />
-                </TouchableOpacity>
               </View>
             )}
           </View>
@@ -705,7 +637,6 @@ export default function ProfileScreen() {
   );
 }
 
-// Styles remain the same as original
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -830,20 +761,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#6ADBCE',
     letterSpacing: 0.2,
-  },
-  previewButton: {
-    width: 48,
-    height: 48,
-    borderRadius: 12,
-    backgroundColor: 'rgba(106, 219, 206, 0.1)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1.5,
-    borderColor: 'rgba(106, 219, 206, 0.3)',
-  },
-  previewButtonActive: {
-    backgroundColor: 'rgba(106, 219, 206, 0.25)',
-    borderColor: '#6ADBCE',
   },
   segmentControl: {
     flexDirection: 'row',

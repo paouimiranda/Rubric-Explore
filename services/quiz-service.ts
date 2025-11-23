@@ -859,5 +859,90 @@ export class QuizService {
       return 0;
     }
   }
+
+  // NEW SERVICE METHODS FOR PROFILE STATS!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+/**
+ * Get all quizzes for a specific user (for viewing profiles)
+ */
+static async getAllQuizzesForUser(uid: string): Promise<Quiz[]> {
+  try {
+    // Query quizzes that belong to the specified user
+    const q = query(
+      collection(db, this.COLLECTION_NAME),
+      where('uid', '==', uid),
+      orderBy('createdAt', 'desc')
+    );
+    
+    const querySnapshot = await getDocs(q);
+    
+    return querySnapshot.docs.map(doc => {
+      const quizData = doc.data() as Omit<Quiz, 'id'>;
+      
+      const questionsWithAllProperties = quizData.questions.map((question: any, index) => ({
+        id: question.id || `question_${index}_${Date.now()}`,
+        type: question.type || 'multiple_choice',
+        question: question.question || '',
+        image: question.image || '',
+        options: question.options || [],
+        correctAnswers: question.correctAnswers || (question.answerIndex !== undefined ? [question.answerIndex] : [0]),
+        correctAnswer: question.correctAnswer || '',
+        matchPairs: question.matchPairs || [],
+        timeLimit: question.timeLimit || 30,
+        topic: question.topic || 'Uncategorized',
+        points: question.points || 1
+      }));
+
+      return {
+        id: doc.id,
+        ...quizData,
+        questions: questionsWithAllProperties,
+        isPublic: quizData.isPublic ?? false,
+      } as Quiz;
+    });
+  } catch (error) {
+    console.error('Firestore get all quizzes for user error:', error);
+    throw error;
+  }
+}
+
+/**
+ * Get quiz attempts for a specific user (for viewing profiles)
+ * Optionally filter by quizId
+ */
+static async getQuizAttemptsForUser(uid: string, quizId?: string): Promise<QuizAttempt[]> {
+  try {
+    const attemptsRef = collection(db, 'users', uid, this.ATTEMPTS_SUBCOLLECTION);
+    
+    let q;
+    if (quizId) {
+      q = query(
+        attemptsRef,
+        where('quizId', '==', quizId),
+        orderBy('completedAt', 'desc')
+      );
+    } else {
+      q = query(
+        attemptsRef,
+        orderBy('completedAt', 'desc')
+      );
+    }
+    
+    const querySnapshot = await getDocs(q);
+    
+    return querySnapshot.docs.map(doc => {
+      const data = doc.data();
+      return {
+        id: doc.id,
+        ...data,
+        startedAt: data.startedAt?.toDate() || new Date(),
+        completedAt: data.completedAt?.toDate() || new Date(),
+      } as QuizAttempt;
+    });
+  } catch (error) {
+    console.error('Error fetching quiz attempts for user:', error);
+    throw new Error('Failed to fetch quiz attempts.');
+  }
+}
 }
 

@@ -9,7 +9,6 @@ import {
   Animated,
   Dimensions,
   Image,
-  Modal,
   SafeAreaView,
   ScrollView,
   StyleSheet,
@@ -51,7 +50,7 @@ const SpaceBackground = () => {
       size: Math.random() * 2.5 + 0.5,
       opacity: Math.random() * 0.6 + 0.2,
       duration: Math.random() * 15000 + 20000,
-      initialY: Math.random() * screenHeight, // Add this line - scatter stars across the screen
+      initialY: Math.random() * screenHeight,
     }))
   ).current;
 
@@ -75,11 +74,10 @@ const Star = ({ x, size, opacity, duration, initialY }: { x: number; size: numbe
     const animate = () => {
       Animated.timing(translateY, {
         toValue: screenHeight + 20,
-        duration: duration * ((screenHeight - initialY) / screenHeight), // Adjust duration based on starting position
+        duration: duration * ((screenHeight - initialY) / screenHeight),
         useNativeDriver: true,
         easing: (t) => t,
       }).start(() => {
-        // Reset to top and loop
         translateY.setValue(-20);
         Animated.timing(translateY, {
           toValue: screenHeight + 20,
@@ -127,6 +125,7 @@ const JourneyQuizPlay = () => {
   const [isPaused, setIsPaused] = useState(false);
   const [completing, setCompleting] = useState(false);
   const [showExitModal, setShowExitModal] = useState(false);
+  const [submitPressed, setSubmitPressed] = useState(false);
   
   // Completion results
   const [completionData, setCompletionData] = useState<{
@@ -148,6 +147,7 @@ const JourneyQuizPlay = () => {
   const quizStartTime = useRef(Date.now());
   const scrollViewRef = useRef<ScrollView>(null);
   const cardScale = useRef(new Animated.Value(0)).current;
+  const resultsSlideAnim = useRef(new Animated.Value(screenHeight)).current;
   
   // Question-specific state
   const [selectedAnswers, setSelectedAnswers] = useState<number[]>([]);
@@ -184,27 +184,36 @@ const JourneyQuizPlay = () => {
   }, [timeLeft, isPaused, isQuizCompleted, showPreQuiz]);
 
   useEffect(() => {
-  if (isPaused) {
-    // Stop the animation and timer when paused
-    animationRef.current?.stop();
-    if (timerRef.current) {
-      clearInterval(timerRef.current);
-      timerRef.current = null;
+    if (isPaused) {
+      animationRef.current?.stop();
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
+    } else if (!isQuizCompleted && !showPreQuiz && timeLeft > 0) {
+      startTimer();
     }
-  } else if (!isQuizCompleted && !showPreQuiz && timeLeft > 0) {
-    // Resume animation and timer when unpaused
-    startTimer();
-  }
-}, [isPaused]);
+  }, [isPaused]);
 
-useEffect(() => {
-  return () => {
-    animationRef.current?.stop();
-    if (timerRef.current) {
-      clearInterval(timerRef.current);
+  useEffect(() => {
+    return () => {
+      animationRef.current?.stop();
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+      }
+    };
+  }, []);
+
+  // Animate results in when shown
+  useEffect(() => {
+    if (showResults) {
+      Animated.timing(resultsSlideAnim, {
+        toValue: 0,
+        duration: 500,
+        useNativeDriver: true,
+      }).start();
     }
-  };
-}, []);
+  }, [showResults]);
 
   const loadQuizAndCheckAttempt = async () => {
     try {
@@ -250,70 +259,65 @@ useEffect(() => {
   };
 
   const initializeQuestion = () => {
-  if (!quiz) return;
-  
-  const question = quiz.questions[currentQuestionIndex];
-  setTimeLeft(question.timeLimit || 30);
-  questionStartTime.current = Date.now();
-  
-  cardScale.setValue(0);
-  Animated.spring(cardScale, {
-    toValue: 1,
-    tension: 50,
-    friction: 7,
-    useNativeDriver: true,
-  }).start();
-  
-  // Reset to full width
-  progressAnim.setValue(1);
-  
-  setSelectedAnswers([]);
-  setFillBlankText('');
-  setSelectedLeft(null);
-  setSelectedRight(null);
-  
-  if (question.type === 'matching') {
-    const pairs = question.matchPairs.map(pair => ({ left: pair.left, right: '' }));
-    setMatchingPairs(pairs);
+    if (!quiz) return;
     
-    const rightItems = question.matchPairs.map(pair => pair.right);
-    const shuffled = [...rightItems].sort(() => Math.random() - 0.5);
-    setShuffledRightItems(shuffled);
-  }
-  
-  // DON'T start animation here - let startTimer handle it
-};
+    const question = quiz.questions[currentQuestionIndex];
+    setTimeLeft(question.timeLimit || 30);
+    questionStartTime.current = Date.now();
+    
+    cardScale.setValue(0);
+    Animated.spring(cardScale, {
+      toValue: 1,
+      tension: 50,
+      friction: 7,
+      useNativeDriver: true,
+    }).start();
+    
+    progressAnim.setValue(1);
+    
+    setSelectedAnswers([]);
+    setFillBlankText('');
+    setSelectedLeft(null);
+    setSelectedRight(null);
+    
+    if (question.type === 'matching') {
+      const pairs = question.matchPairs.map(pair => ({ left: pair.left, right: '' }));
+      setMatchingPairs(pairs);
+      
+      const rightItems = question.matchPairs.map(pair => pair.right);
+      const shuffled = [...rightItems].sort(() => Math.random() - 0.5);
+      setShuffledRightItems(shuffled);
+    }
+  };
 
   const startTimer = () => {
-  if (timerRef.current) {
-    clearInterval(timerRef.current);
-  }
-  
-  // Stop any existing animation
-  animationRef.current?.stop();
-  
-  const question = quiz?.questions[currentQuestionIndex];
-  const totalTime = question?.timeLimit || 30;
-  
-  // Start continuous animation from current position to 0
-  animationRef.current = Animated.timing(progressAnim, {
-    toValue: 0,
-    duration: timeLeft * 1000,
-    useNativeDriver: false,
-    easing: (t) => t,
-  });
-  animationRef.current.start();
-  
-  timerRef.current = setInterval(() => {
-    setTimeLeft(prev => {
-      if (prev <= 1) {
-        handleTimeUp();
-        return 0;
-      }
-      return prev - 1;
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+    }
+    
+    animationRef.current?.stop();
+    
+    const question = quiz?.questions[currentQuestionIndex];
+    const totalTime = question?.timeLimit || 30;
+    
+    animationRef.current = Animated.timing(progressAnim, {
+      toValue: 0,
+      duration: timeLeft * 1000,
+      useNativeDriver: false,
+      easing: (t) => t,
     });
-  }, 1000) as unknown as number;
-};
+    animationRef.current.start();
+    
+    timerRef.current = setInterval(() => {
+      setTimeLeft(prev => {
+        if (prev <= 1) {
+          handleTimeUp();
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000) as unknown as number;
+  };
 
   const handleTimeUp = () => {
     if (timerRef.current) {
@@ -324,7 +328,9 @@ useEffect(() => {
   };
 
   const submitCurrentAnswer = () => {
-    if (!quiz) return;
+    if (!quiz || submitPressed) return;
+    
+    setSubmitPressed(true);
     
     const timeSpent = Math.floor((Date.now() - questionStartTime.current) / 1000);
     const question = quiz.questions[currentQuestionIndex];
@@ -351,6 +357,7 @@ useEffect(() => {
     setAnswers(updatedAnswers);
     
     if (currentQuestionIndex + 1 < quiz.questions.length) {
+      setSubmitPressed(false);
       setCurrentQuestionIndex(prev => prev + 1);
     } else {
       finishQuiz(updatedAnswers);
@@ -445,8 +452,6 @@ useEffect(() => {
   };
 
   const handleMultipleChoiceAnswer = (optionIndex: number) => {
-    
-    
     setSelectedAnswers([optionIndex]);
   };
 
@@ -495,55 +500,55 @@ useEffect(() => {
   };
 
   const renderMultipleChoice = (question: JourneyQuestion) => (
-  <View style={styles.questionContent}>
-    <View style={styles.optionsGrid}>
-      {question.options.map((option, index) => {
-        const isSelected = selectedAnswers.includes(index);
-        const isLastInRow = (index + 1) % 2 === 0; // Every 2nd item
-        const gradients = [
-          ['#ef4444', '#dc2626'],
-          ['#f59e0b', '#d97706'],
-          ['#10b981', '#059669'],
-          ['#3b82f6', '#2563eb'],
-        ];
+    <View style={styles.questionContent}>
+      <View style={styles.optionsGrid}>
+        {question.options.map((option, index) => {
+          const isSelected = selectedAnswers.includes(index);
+          const isLastInRow = (index + 1) % 2 === 0;
+          const gradients = [
+            ['#ef4444', '#dc2626'],
+            ['#f59e0b', '#d97706'],
+            ['#10b981', '#059669'],
+            ['#3b82f6', '#2563eb'],
+          ];
 
-        return (
-          <View
-            key={index}
-            style={[
-              styles.optionButtonContainer,
-              isLastInRow && { marginRight: 0 }
-            ]}
-          >
-            <TouchableOpacity
-              onPress={() => handleMultipleChoiceAnswer(index)}
-              activeOpacity={0.8}
+          return (
+            <View
+              key={index}
+              style={[
+                styles.optionButtonContainer,
+                isLastInRow && { marginRight: 0 }
+              ]}
             >
-              <LinearGradient
-                colors={gradients[index] as any}
-                style={[styles.optionButton, isSelected && styles.selectedOption]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
+              <TouchableOpacity
+                onPress={() => handleMultipleChoiceAnswer(index)}
+                activeOpacity={0.8}
               >
-                <View style={styles.radioRow}>
-                  <View style={[styles.radioCircleOuter, isSelected && styles.radioSelected]}>
-                    {isSelected && (
-                      <LinearGradient
-                        colors={['#fff', '#f0f0f0']}
-                        style={styles.radioCircleInner}
-                      />
-                    )}
+                <LinearGradient
+                  colors={gradients[index] as any}
+                  style={[styles.optionButton, isSelected && styles.selectedOption]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                >
+                  <View style={styles.radioRow}>
+                    <View style={[styles.radioCircleOuter, isSelected && styles.radioSelected]}>
+                      {isSelected && (
+                        <LinearGradient
+                          colors={['#fff', '#f0f0f0']}
+                          style={styles.radioCircleInner}
+                        />
+                      )}
+                    </View>
+                    <Text style={styles.optionText} adjustsFontSizeToFit numberOfLines={3}>{option}</Text>
                   </View>
-                  <Text style={styles.optionText} adjustsFontSizeToFit numberOfLines={3}>{option}</Text>
-                </View>
-              </LinearGradient>
-            </TouchableOpacity>
-          </View>
-        );
-      })}
+                </LinearGradient>
+              </TouchableOpacity>
+            </View>
+          );
+        })}
+      </View>
     </View>
-  </View>
-);
+  );
 
   const renderFillBlank = (question: JourneyQuestion) => (
     <View style={styles.questionContent}>
@@ -723,112 +728,159 @@ useEffect(() => {
     if (!quiz) return null;
     
     return (
-      <Modal visible={showPreQuiz} animationType="slide" presentationStyle="pageSheet">
-        <View style={styles.modalContainer}>
-          <SpaceBackground />
-          <SafeAreaView style={styles.preQuizContainer}>
-            <View style={styles.preQuizHeader}>
-              <TouchableOpacity onPress={handleExitQuiz} style={styles.closeBtn}>
-                <LinearGradient
-                  colors={['rgba(255, 255, 255, 0.15)', 'rgba(255, 255, 255, 0.05)']}
-                  style={styles.closeBtnGradient}
-                >
-                  <Ionicons name="close" size={24} color="#fff" />
-                </LinearGradient>
-              </TouchableOpacity>
+      <View style={styles.modalContainer}>
+        <SpaceBackground />
+        <SafeAreaView style={styles.preQuizContainer}>
+          <View style={styles.preQuizHeader}>
+            <TouchableOpacity onPress={handleExitQuiz} style={styles.closeBtn}>
+              <LinearGradient
+                colors={['rgba(255, 255, 255, 0.15)', 'rgba(255, 255, 255, 0.05)']}
+                style={styles.closeBtnGradient}
+              >
+                <Ionicons name="close" size={24} color="#fff" />
+              </LinearGradient>
+            </TouchableOpacity>
+          </View>
+          
+          <ScrollView 
+            contentContainerStyle={styles.preQuizContent}
+            showsVerticalScrollIndicator={false}
+          >
+            <View style={styles.levelBadge}>
+              <LinearGradient
+                colors={['#667eea', '#764ba2']}
+                style={styles.levelBadgeGradient}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+              >
+                <Ionicons name="planet" size={56} color="#fff" />
+              </LinearGradient>
             </View>
             
-            <ScrollView 
-              contentContainerStyle={styles.preQuizContent}
-              showsVerticalScrollIndicator={false}
+            <Text style={styles.preQuizTitle}>{levelTitle}</Text>
+            <Text style={styles.preQuizSubtitle}>{quiz.title}</Text>
+            
+            {quiz.description && (
+              <LinearGradient
+                colors={['rgba(102, 126, 234, 0.1)', 'rgba(118, 75, 162, 0.1)']}
+                style={styles.descriptionCard}
+              >
+                <Text style={styles.preQuizDescription}>{quiz.description}</Text>
+              </LinearGradient>
+            )}
+            
+            <LinearGradient
+              colors={['rgba(255, 255, 255, 0.08)', 'rgba(255, 255, 255, 0.03)']}
+              style={styles.quizInfoCard}
             >
-              <View style={styles.levelBadge}>
+              <View style={styles.infoRow}>
                 <LinearGradient
                   colors={['#667eea', '#764ba2']}
-                  style={styles.levelBadgeGradient}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
+                  style={styles.infoIcon}
                 >
-                  <Ionicons name="planet" size={56} color="#fff" />
+                  <Ionicons name="document-text" size={18} color="#fff" />
                 </LinearGradient>
+                <Text style={styles.infoText}>{quiz.questions.length} Questions</Text>
               </View>
-              
-              <Text style={styles.preQuizTitle}>{levelTitle}</Text>
-              <Text style={styles.preQuizSubtitle}>{quiz.title}</Text>
-              
-              {quiz.description && (
+              <View style={styles.infoRow}>
                 <LinearGradient
-                  colors={['rgba(102, 126, 234, 0.1)', 'rgba(118, 75, 162, 0.1)']}
-                  style={styles.descriptionCard}
+                  colors={['#667eea', '#764ba2']}
+                  style={styles.infoIcon}
                 >
-                  <Text style={styles.preQuizDescription}>{quiz.description}</Text>
+                  <Ionicons name="time" size={18} color="#fff" />
                 </LinearGradient>
-              )}
-              
-              <LinearGradient
-                colors={['rgba(255, 255, 255, 0.08)', 'rgba(255, 255, 255, 0.03)']}
-                style={styles.quizInfoCard}
-              >
-                <View style={styles.infoRow}>
-                  <LinearGradient
-                    colors={['#667eea', '#764ba2']}
-                    style={styles.infoIcon}
-                  >
-                    <Ionicons name="document-text" size={18} color="#fff" />
-                  </LinearGradient>
-                  <Text style={styles.infoText}>{quiz.questions.length} Questions</Text>
-                </View>
-                <View style={styles.infoRow}>
-                  <LinearGradient
-                    colors={['#667eea', '#764ba2']}
-                    style={styles.infoIcon}
-                  >
-                    <Ionicons name="time" size={18} color="#fff" />
-                  </LinearGradient>
-                  <Text style={styles.infoText}>~{Math.ceil(quiz.estimatedTime / 60)} minutes</Text>
-                </View>
-                <View style={styles.infoRow}>
-                  <LinearGradient
-                    colors={['#fbbf24', '#f59e0b']}
-                    style={styles.infoIcon}
-                  >
-                    <Ionicons name="trophy" size={18} color="#fff" />
-                  </LinearGradient>
-                  <Text style={styles.infoText}>{quiz.totalPoints} points</Text>
-                </View>
-              </LinearGradient>
-              
-              {!canAttempt && (
+                <Text style={styles.infoText}>~{Math.ceil(quiz.estimatedTime / 60)} minutes</Text>
+              </View>
+              <View style={styles.infoRow}>
                 <LinearGradient
-                  colors={['rgba(245, 158, 11, 0.15)', 'rgba(245, 158, 11, 0.05)']}
-                  style={styles.warningCard}
+                  colors={['#fbbf24', '#f59e0b']}
+                  style={styles.infoIcon}
                 >
-                  <Ionicons name="warning" size={28} color="#f59e0b" />
-                  <Text style={styles.warningText}>{attemptReason}</Text>
+                  <Ionicons name="trophy" size={18} color="#fff" />
                 </LinearGradient>
-              )}
-            </ScrollView>
+                <Text style={styles.infoText}>{quiz.totalPoints} points</Text>
+              </View>
+            </LinearGradient>
             
-            <View style={styles.preQuizActions}>
-              <TouchableOpacity
-                style={styles.startBtn}
-                onPress={handleStartQuiz}
-                disabled={!canAttempt}
+            {!canAttempt && (
+              <LinearGradient
+                colors={['rgba(245, 158, 11, 0.15)', 'rgba(245, 158, 11, 0.05)']}
+                style={styles.warningCard}
               >
-                <LinearGradient
-                  colors={canAttempt ? ['#667eea', '#764ba2'] : ['#555', '#333']}
-                  style={styles.startBtnGradient}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                >
-                  <Text style={styles.startBtnText}>Start Quiz</Text>
-                  <Ionicons name="rocket" size={22} color="#fff" />
-                </LinearGradient>
-              </TouchableOpacity>
+                <Ionicons name="warning" size={28} color="#f59e0b" />
+                <Text style={styles.warningText}>{attemptReason}</Text>
+              </LinearGradient>
+            )}
+          </ScrollView>
+          
+          <View style={styles.preQuizActions}>
+            <TouchableOpacity
+              style={styles.startBtn}
+              onPress={handleStartQuiz}
+              disabled={!canAttempt}
+            >
+              <LinearGradient
+                colors={canAttempt ? ['#667eea', '#764ba2'] : ['#555', '#333']}
+                style={styles.startBtnGradient}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+              >
+                <Text style={styles.startBtnText}>Start Quiz</Text>
+                <Ionicons name="rocket" size={22} color="#fff" />
+              </LinearGradient>
+            </TouchableOpacity>
+          </View>
+        </SafeAreaView>
+      </View>
+    );
+  };
+
+  const spinnerAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (isQuizCompleted && completing) {
+      Animated.loop(
+        Animated.timing(spinnerAnim, {
+          toValue: 1,
+          duration: 2000,
+          useNativeDriver: true,
+        })
+      ).start();
+    }
+  }, [isQuizCompleted, completing]);
+
+  const renderLoadingScreen = () => {
+    return (
+      <View style={styles.loadingScreenContainer}>
+        <LinearGradient
+          colors={['rgba(102, 126, 234, 0.2)', 'rgba(118, 75, 162, 0.1)']}
+          style={styles.loadingCard}
+        >
+          <Animated.View
+            style={{
+              transform: [
+                {
+                  rotate: spinnerAnim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: ['0deg', '360deg'],
+                  }),
+                },
+              ],
+            }}
+          >
+            <View style={styles.loadingSpinner}>
+              <LinearGradient
+                colors={['#667eea', '#764ba2']}
+                style={styles.spinnerGradient}
+              >
+                <Ionicons name="checkmark-done" size={40} color="#fff" />
+              </LinearGradient>
             </View>
-          </SafeAreaView>
-        </View>
-      </Modal>
+          </Animated.View>
+          <Text style={styles.loadingScreenText}>Calculating Results...</Text>
+          <Text style={styles.loadingScreenSubtext}>Processing your answers</Text>
+        </LinearGradient>
+      </View>
     );
   };
 
@@ -842,10 +894,17 @@ useEffect(() => {
     const percentage = Math.round((totalPoints / maxPoints) * 100);
     
     return (
-      <Modal visible={showResults} animationType="slide" presentationStyle="pageSheet">
-        <View style={styles.modalContainer}>
+      <Animated.View
+        style={[
+          styles.resultsOverlay,
+          {
+            transform: [{ translateY: resultsSlideAnim }],
+          },
+        ]}
+      >
+        <View style={styles.resultsContainer}>
           <SpaceBackground />
-          <SafeAreaView style={styles.resultsContainer}>
+          <SafeAreaView style={styles.resultsSafeArea}>
             <View style={styles.resultsHeader}>
               <Text style={styles.resultsTitle}>
                 {completionData.passed ? '🎉 Level Complete!' : '💪 Try Again'}
@@ -1071,7 +1130,7 @@ useEffect(() => {
             </View>
           </SafeAreaView>
         </View>
-      </Modal>
+      </Animated.View>
     );
   };
 
@@ -1161,42 +1220,42 @@ useEffect(() => {
         </View>
 
         {/* Timer */}
-            <View style={styles.timerContainer}>
-            <LinearGradient
-                colors={['rgba(255, 255, 255, 0.1)', 'rgba(255, 255, 255, 0.05)']}
-                style={styles.timerWrapper}
-            >
-                <View style={styles.timerBarContainer}>
-                    <Animated.View
-                        style={[
-                        styles.timerBar,
-                        {
-                            width: progressAnim.interpolate({
-                            inputRange: [0, 1],
-                            outputRange: ['0%', '100%'],
-                            })
-                        }
-                        ]}
-                    >
-                        <LinearGradient
-                        colors={timeLeft > 5 ? ['#667eea', '#764ba2'] : ['#ef4444', '#dc2626']}
-                        start={{ x: 0, y: 0 }}
-                        end={{ x: 1, y: 0 }}
-                        style={StyleSheet.absoluteFill}
-                        />
-                    </Animated.View>
-                    </View>
-                <View style={styles.timerTextContainer}>
-                <Ionicons name="time" size={16} color={timeLeft > 10 ? '#667eea' : '#ef4444'} />
-                <Text style={[styles.timerText, timeLeft <= 10 && styles.timerWarning]}>
-                    {timeLeft}s
-                </Text>
-                </View>
-            </LinearGradient>
+        <View style={styles.timerContainer}>
+          <LinearGradient
+            colors={['rgba(255, 255, 255, 0.1)', 'rgba(255, 255, 255, 0.05)']}
+            style={styles.timerWrapper}
+          >
+            <View style={styles.timerBarContainer}>
+              <Animated.View
+                style={[
+                  styles.timerBar,
+                  {
+                    width: progressAnim.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: ['0%', '100%'],
+                    })
+                  }
+                ]}
+              >
+                <LinearGradient
+                  colors={timeLeft > 5 ? ['#667eea', '#764ba2'] : ['#ef4444', '#dc2626']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                  style={StyleSheet.absoluteFill}
+                />
+              </Animated.View>
             </View>
+            <View style={styles.timerTextContainer}>
+              <Ionicons name="time" size={16} color={timeLeft > 10 ? '#667eea' : '#ef4444'} />
+              <Text style={[styles.timerText, timeLeft <= 10 && styles.timerWarning]}>
+                {timeLeft}s
+              </Text>
+            </View>
+          </LinearGradient>
+        </View>
 
         {/* Question */}
-        {!isPaused && renderQuestion()}
+        {!isPaused && !isQuizCompleted && renderQuestion()}
 
         {isPaused && (
           <View style={styles.pausedContainer}>
@@ -1219,12 +1278,18 @@ useEffect(() => {
           </View>
         )}
 
+        {isQuizCompleted && completing && renderLoadingScreen()}
+
         {/* Submit button */}
-        {!isPaused && (
+        {!isPaused && !isQuizCompleted && (
           <View style={styles.bottomContainer}>
-            <TouchableOpacity style={styles.submitBtn} onPress={submitCurrentAnswer}>
+            <TouchableOpacity 
+              style={[styles.submitBtn, submitPressed && styles.submitBtnDisabled]}
+              onPress={submitCurrentAnswer}
+              disabled={submitPressed}
+            >
               <LinearGradient
-                colors={['#52C72B', '#45a824']}
+                colors={submitPressed ? ['#999', '#666'] : ['#52C72B', '#45a824']}
                 style={styles.submitBtnGradient}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
@@ -1582,19 +1647,19 @@ const styles = StyleSheet.create({
   },
   questionContent: { marginTop: 8 },
   
-   // Multiple Choice
+  // Multiple Choice
   optionsGrid: { 
-  flexDirection: 'row',
-  flexWrap: 'wrap',
-  justifyContent: 'space-between', // Add this
-  width: '100%', // Add this
-},
-optionButtonContainer: {
-  width: '47.5%', // Change this - simpler approach
-  marginBottom: 16,
-  borderRadius: 16,
-  overflow: 'hidden',
-},
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    width: '100%',
+  },
+  optionButtonContainer: {
+    width: '47.5%',
+    marginBottom: 16,
+    borderRadius: 16,
+    overflow: 'hidden',
+  },
   optionButton: {
     minHeight: 110,
     padding: 18,
@@ -1638,16 +1703,11 @@ optionButtonContainer: {
   },
   optionText: {
     color: '#ffffff',
-    fontSize: screenWidth < 375 ? 14 : 15, // Responsive font size
+    fontSize: screenWidth < 375 ? 14 : 15,
     fontWeight: '700',
     flex: 1,
     fontFamily: 'Montserrat',
     lineHeight: 20,
-  },
-  selectedBadge: {
-    position: 'absolute',
-    top: 8,
-    right: 8,
   },
   
   // Fill Blank
@@ -1806,6 +1866,44 @@ optionButtonContainer: {
     fontWeight: '700',
   },
 
+  // Loading Screen
+  loadingScreenContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+  },
+  loadingCard: {
+    width: '100%',
+    borderRadius: 24,
+    padding: 40,
+    alignItems: 'center',
+    gap: 20,
+  },
+  loadingSpinner: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  spinnerGradient: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingScreenText: {
+    color: '#ffffff',
+    fontFamily: 'Montserrat',
+    fontSize: 20,
+    fontWeight: '800',
+  },
+  loadingScreenSubtext: {
+    color: '#94a3b8',
+    fontFamily: 'Montserrat',
+    fontSize: 15,
+    fontWeight: '600',
+  },
+
   // Bottom Submit
   bottomContainer: {
     paddingHorizontal: 20,
@@ -1819,6 +1917,9 @@ optionButtonContainer: {
     shadowOpacity: 0.4,
     shadowRadius: 12,
     elevation: 6,
+  },
+  submitBtnDisabled: {
+    opacity: 0.6,
   },
   submitBtnGradient: {
     flexDirection: 'row',
@@ -1836,7 +1937,16 @@ optionButtonContainer: {
   },
 
   // Results Screen
-  resultsContainer: { flex: 1 },
+  resultsOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 1000,
+  },
+  resultsContainer: { 
+    flex: 1,
+  },
+  resultsSafeArea: { 
+    flex: 1,
+  },
   resultsHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -2093,14 +2203,14 @@ optionButtonContainer: {
     fontWeight: '800',
   },
   star: {
-  position: 'absolute',
-  backgroundColor: '#ffffff',
-  borderRadius: 100,
-  shadowColor: '#ffffff',
-  shadowOffset: { width: 0, height: 0 },
-  shadowOpacity: 0.8,
-  shadowRadius: 2,
-},
+    position: 'absolute',
+    backgroundColor: '#ffffff',
+    borderRadius: 100,
+    shadowColor: '#ffffff',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.8,
+    shadowRadius: 2,
+  },
 });
 
 export default JourneyQuizPlay;

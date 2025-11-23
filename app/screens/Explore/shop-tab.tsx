@@ -142,37 +142,36 @@ const ShopTab = () => {
       </View>
 
       {/* Categories */}
-      <View style={styles.categoriesContainer}>
-        <FlatList
-          horizontal
-          data={CATEGORIES}
-          keyExtractor={c => c.id}
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.categoriesContent}
-          renderItem={({ item }) => (
-            <TouchableOpacity onPress={() => setCategory(item.id)}>
-              <View style={[styles.category, category === item.id && styles.categoryActive]}>
-                {category === item.id && (
-                  <LinearGradient
-                    colors={['#667eea', '#764ba2']}
-                    style={StyleSheet.absoluteFill}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 1 }}
-                  />
-                )}
-                <Ionicons
-                  name={item.icon}
-                  size={16}
-                  color={category === item.id ? '#fff' : '#888'}
-                />
-                <Text style={[styles.categoryText, category === item.id && styles.categoryTextActive]}>
-                  {item.label}
-                </Text>
-              </View>
-            </TouchableOpacity>
+<View style={styles.categoriesContainer}>
+  <View style={styles.categoriesRow}>
+    {CATEGORIES.map((item) => (
+      <TouchableOpacity 
+        key={item.id}
+        onPress={() => setCategory(item.id)}
+        style={styles.categoryWrapper}
+      >
+        <View style={[styles.category, category === item.id && styles.categoryActive]}>
+          {category === item.id && (
+            <LinearGradient
+              colors={['#667eea', '#764ba2']}
+              style={StyleSheet.absoluteFill}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+            />
           )}
-        />
-      </View>
+          <Ionicons
+            name={item.icon}
+            size={16}
+            color={category === item.id ? '#fff' : '#888'}
+          />
+          <Text style={[styles.categoryText, category === item.id && styles.categoryTextActive]}>
+            {item.label}
+          </Text>
+        </View>
+      </TouchableOpacity>
+    ))}
+  </View>
+</View>
 
       {/* Content */}
       {category === 'themes' ? (
@@ -229,9 +228,8 @@ const ShopTab = () => {
           />
         </>
       ) : category === 'profiles' ? (
-          <ProfileThemesShopTab />
-        
-      ): null }
+    <ProfileThemesShopTab onShardsUpdate={(newShards) => setShards(newShards)} />
+  ) : null }
 
       {/* Modal */}
       {selected && (
@@ -629,23 +627,32 @@ const styles = StyleSheet.create({
   },
   categoriesContainer: {
     marginBottom: 12,
+    paddingHorizontal: 20,
   },
+  categoriesRow: {
+    flexDirection: 'row', 
+    gap: 8,
+  },
+  categoryWrapper: {
+  flex: 1,
+},
   categoriesContent: {
     paddingHorizontal: 20,
     gap: 8,
+    flexGrow: 1,
   },
   category: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 16,
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
-    overflow: 'hidden',
-  },
+  flexDirection: 'row',
+  alignItems: 'center',
+  justifyContent: 'center',
+  gap: 6,
+  paddingVertical: 10,
+  borderRadius: 16,
+  backgroundColor: 'rgba(255, 255, 255, 0.05)',
+  borderWidth: 1,
+  borderColor: 'rgba(255, 255, 255, 0.1)',
+  overflow: 'hidden',
+},
   categoryActive: {
     borderColor: 'rgba(102, 126, 234, 0.5)',
   },

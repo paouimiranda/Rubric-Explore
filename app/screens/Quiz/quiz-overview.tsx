@@ -17,8 +17,8 @@ import { QuizService, type Question, type Quiz } from '@/services/quiz-service';
 import { useQuizStore } from '@/services/stores/quiz-store';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useLocalSearchParams, useRouter } from 'expo-router';
-import React, { useEffect, useState } from 'react';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -84,6 +84,9 @@ const QuizOverview: React.FC = () => {
 
   const [showUntaggedWarningModal, setShowUntaggedWarningModal] = useState(false);
 
+  const [pendingQuestionNavigation, setPendingQuestionNavigation] = useState(false);
+  const [pendingQuestionCreation, setPendingQuestionCreation] = useState(false);
+
   const [alert, setAlert] = useState<AlertState>({
     visible: false,
     type: 'info',
@@ -135,6 +138,13 @@ const QuizOverview: React.FC = () => {
       extractTopicsFromQuestions();
     }
   }, [questions.length]);
+
+  useFocusEffect(
+    useCallback(() => {
+      setPendingQuestionNavigation(false);
+      setPendingQuestionCreation(false);
+    }, [])
+  );
 
   const loadQuiz = async (id: string) => {
     try {
@@ -361,6 +371,9 @@ const handleRemoveImage = async () => {
   };
 
   const handleQuestionTap = (questionIndex: number) => {
+    if (pendingQuestionNavigation) return;
+    
+    setPendingQuestionNavigation(true);
     setIsFromOverview(true);
     router.push({
       pathname: './quiz-create',
@@ -369,6 +382,10 @@ const handleRemoveImage = async () => {
   };
 
   const handleAddQuestion = () => {
+    if (pendingQuestionCreation) return;
+    
+    setPendingQuestionCreation(true);
+    
     const newQuestion: Question = {
       id: Date.now().toString(),
       type: 'multiple_choice',
@@ -610,9 +627,10 @@ const handleRemoveImage = async () => {
     return (
       <TouchableOpacity
         style={styles.questionCard}
+        disabled={pendingQuestionNavigation}
         onPress={() => handleQuestionTap(index)}
         onLongPress={() => handleDeleteQuestion(index)}
-        activeOpacity={0.7}
+        activeOpacity={pendingQuestionNavigation ? 1 : 0.7}
       >
         <View style={styles.questionImageContainer}>
           {imageSource ? (
@@ -833,9 +851,9 @@ const handleRemoveImage = async () => {
         </ScrollView>
 
         <TouchableOpacity 
-          style={[styles.fab, { opacity: isLoading || uploadingImage ? 0.6 : 1 }]} 
+          style={[styles.fab, { opacity: isLoading || uploadingImage || pendingQuestionCreation ? 0.6 : 1 }]} 
           onPress={handleAddQuestion}
-          disabled={isLoading || uploadingImage}
+          disabled={isLoading || uploadingImage || pendingQuestionCreation}
         >
           <Ionicons name="add" size={24} color="#ffffff" />
           <Text style={styles.fabText}>Add Question</Text>
@@ -882,9 +900,9 @@ const handleRemoveImage = async () => {
                 {topics.length === 0 ? (
                   <View style={styles.emptyTopicsList}>
                     <Ionicons name="pricetags-outline" size={48} color="#475569" />
-                    <Text style={styles.emptyTopicsText}>No topics yet</Text>
+                    <Text style={styles.emptyTopicsText}>No tags yet</Text>
                     <Text style={styles.emptyTopicsSubtext}>
-                      Add topics to categorize your questions for better analytics
+                      Add tags to categorize your questions for better analytics
                     </Text>
                   </View>
                 ) : (

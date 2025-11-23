@@ -44,7 +44,11 @@ const RARITY_CONFIG = {
   legendary: { color: '#fbbf24', label: 'Legendary' },
 };
 
-const ProfileThemesShopTab = () => {
+interface ProfileThemesShopTabProps {
+  onShardsUpdate?: (newShards: number) => void;
+}
+
+const ProfileThemesShopTab: React.FC<ProfileThemesShopTabProps> = ({ onShardsUpdate }) => {
   const [rarity, setRarity] = useState<ThemeRarity | 'all'>('all');
   const [selected, setSelected] = useState<ProfileTheme | null>(null);
   const [shards, setShards] = useState(0);
@@ -88,21 +92,24 @@ const ProfileThemesShopTab = () => {
   }, []);
 
   const loadData = async () => {
-    try {
-      setLoading(true);
-      const [userShards, inventory] = await Promise.all([
-        ProfileThemeShopService.getUserShards(),
-        ProfileThemeShopService.getUserInventory(),
-      ]);
-      setShards(userShards);
-      setOwned(inventory.ownedProfileThemes);
-      setActive(inventory.selectedProfileTheme);
-    } catch (error) {
-      showAlert('error', 'Error', 'Failed to load shop data');
-    } finally {
-      setLoading(false);
-    }
-  };
+  try {
+    setLoading(true);
+    const [userShards, inventory] = await Promise.all([
+      ProfileThemeShopService.getUserShards(),
+      ProfileThemeShopService.getUserInventory(),
+    ]);
+    setShards(userShards);
+    setOwned(inventory.ownedProfileThemes);
+    setActive(inventory.selectedProfileTheme);
+    
+    // Notify parent component of shard update
+    onShardsUpdate?.(userShards);
+  } catch (error) {
+    showAlert('error', 'Error', 'Failed to load shop data');
+  } finally {
+    setLoading(false);
+  }
+};
 
   const themes = Object.values(PROFILE_THEMES).filter(
     t => rarity === 'all' || t.rarity === rarity
@@ -351,7 +358,7 @@ const ProfileThemeModal: React.FC<ProfileThemeModalProps> = ({
     ]).start(() => onClose());
   };
 
-  const handlePurchase = async () => {
+   const handlePurchase = async () => {
   if (theme.price === 0 || owned) {
     handleActivate();
     return;
@@ -361,20 +368,12 @@ const ProfileThemeModal: React.FC<ProfileThemeModalProps> = ({
     setLoading(true);
     const result = await ProfileThemeShopService.purchaseProfileTheme(theme.id, theme.price);
     if (result.success) {
-      // Delay the alert to avoid scheduling updates during render
+      // Close modal first, then show alert and reload
+      handleClose();
       setTimeout(() => {
-        showAlert('success', 'Success! ✨', result.message, [
-          {
-            text: 'OK',
-            onPress: () => {
-              closeAlert();
-              onSuccess();
-              handleClose();
-            },
-            style: 'primary',
-          },
-        ]);
-      }, 100);
+        onSuccess(); // Reload data
+        showAlert('success', 'Success! ✨', result.message);
+      }, 400); // Wait for modal close animation to complete
     } else {
       setTimeout(() => {
         showAlert('error', 'Failed', result.message);

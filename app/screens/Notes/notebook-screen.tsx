@@ -108,6 +108,10 @@ export default function NotebookScreen() {
 
   const [editModalVisible, setEditModalVisible] = useState(false);
 
+  const [pendingNoteNavigation, setPendingNoteNavigation] = useState(false);
+
+  const [pendingNoteCreation, setPendingNoteCreation] = useState(false);
+
   const [alertState, setAlertState] = useState<AlertState>({
     visible: false,
     type: 'info',
@@ -259,6 +263,8 @@ export default function NotebookScreen() {
   useFocusEffect(
     useCallback(() => {
       if (notebookId) {
+        setPendingNoteNavigation(false);
+        setPendingNoteCreation(false); // Add this line
         fetchNotes(notebookId as string);
       }
     }, [notebookId, uid])
@@ -271,7 +277,9 @@ export default function NotebookScreen() {
   };
 
   const handleCreateNote = async () => {
-    if (!notebookId || !notebook) return;
+    if (!notebookId || !notebook || pendingNoteCreation) return;
+    
+    setPendingNoteCreation(true);
     
     try {
       const inheritedProperties: NotebookProperty[] = (notebook.properties || []).map(prop => ({
@@ -301,6 +309,7 @@ export default function NotebookScreen() {
       addBacklogEvent(BACKLOG_EVENTS.USER_CREATED_NOTE, { notebookId, noteId: docId });
     } catch (error) {
       console.error("Error creating note:", error);
+      setPendingNoteCreation(false); // Reset on error
       showAlert(
         'error',
         'Error',
@@ -550,10 +559,15 @@ const handleQuickPublicToggle = async (value: boolean) => {
       <TouchableOpacity
         style={[styles.noteCard, { borderColor: colorScheme.border }]}
         onPress={() =>
-          router.push({
-            pathname: "./note-editor",
-            params: { noteId: item.id, notebookId },
-          })
+          {
+            if (!pendingNoteNavigation) {
+              setPendingNoteNavigation(true);
+              router.push({
+                pathname: "./note-editor",
+                params: { noteId: item.id, notebookId },
+              });
+            }
+          }
         }
         onLongPress={() => handleDeleteNote(item.id)}
         activeOpacity={0.7}
@@ -873,7 +887,8 @@ const handleQuickPublicToggle = async (value: boolean) => {
         <TouchableOpacity 
           style={styles.fab} 
           onPress={handleCreateNote}
-          activeOpacity={0.8}
+          disabled={pendingNoteCreation}
+          activeOpacity={pendingNoteCreation ? 1 : 0.8}
         >
           <LinearGradient
             colors={[colorScheme.primary, colorScheme.dark]}

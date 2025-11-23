@@ -982,7 +982,7 @@ const QuizMaker = () => {
           <ScrollView 
             horizontal 
             showsHorizontalScrollIndicator={false}
-            style={styles.questionNavBar}
+            style={[styles.questionNavBar, { marginRight: 70 }]}
             contentContainerStyle={styles.questionNavContent}
           >
             {questions.map((q, index) => (
@@ -1008,20 +1008,13 @@ const QuizMaker = () => {
           </ScrollView>
           
           <View style={styles.addQuestionBtnContainer}>
-            <LinearGradient
-              colors={['rgba(0, 0, 0, 0)', 'rgba(0, 0, 0, 0.3)']}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0 }}
-              style={styles.addQuestionBtnGradient}
-            >
-              <TouchableOpacity
-                style={styles.addQuestionBtnOverlay}
-                onPress={handleAddQuestion}
-              >
-                <Ionicons name="add" size={24} color="#fff" />
-              </TouchableOpacity>
-            </LinearGradient>
-          </View>
+          <TouchableOpacity
+            style={styles.addQuestionBtn}
+            onPress={handleAddQuestion}
+          >
+            <Ionicons name="add" size={24} color="#fff" />
+          </TouchableOpacity>
+        </View>
 
         </View>
 
@@ -1071,7 +1064,7 @@ const QuizMaker = () => {
         <Modal
           visible={showTopicSelectorModal}
           transparent={true}
-          animationType="slide"
+          animationType="fade"
           onRequestClose={() => setShowTopicSelectorModal(false)}
         >
           <View style={styles.modalOverlay}>
@@ -1091,7 +1084,7 @@ const QuizMaker = () => {
                 <View style={styles.addTopicInModalRow}>
                   <TextInput
                     style={styles.newTopicInModalInput}
-                    placeholder="Enter topic name..."
+                    placeholder="Enter tag name..."
                     placeholderTextColor="#64748b"
                     value={newTopicInput}
                     onChangeText={setNewTopicInput}
@@ -1165,7 +1158,7 @@ const QuizMaker = () => {
         <Modal
           visible={showTimeLimitModal}
           transparent={true}
-          animationType="slide"
+          animationType="fade"
           onRequestClose={() => setShowTimeLimitModal(false)}
         >
           <View style={styles.modalOverlay}>
@@ -1781,14 +1774,20 @@ answerText: {
     backgroundColor: '#10b981',
   },
   addQuestionBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#8b5cf6',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 16,
-  },
+  width: 48,
+  height: 48,
+  borderRadius: 24,
+  backgroundColor: '#8b5cf6',
+  justifyContent: 'center',
+  alignItems: 'center',
+  shadowColor: '#000',
+  shadowOffset: { width: 0, height: 3 },
+  shadowOpacity: 0.4,
+  shadowRadius: 6,
+  elevation: 8,
+  borderWidth: 3,
+  borderColor: 'rgba(255, 255, 255, 0.2)',
+},
   loadingOverlay: {
     position: 'absolute',
     top: 0,
@@ -1807,7 +1806,7 @@ answerText: {
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    backgroundColor: 'rgba(0, 0, 0, 0.85)',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -2115,7 +2114,7 @@ questionNavBar: {
 },
 questionNavContent: {
   paddingHorizontal: 16,
-  paddingRight: 60, // Add padding to prevent scrolled items from going under button
+  paddingRight: 80, // Increased to give more space for the button
   alignItems: 'center',
 },
 // addQuestionBtnOverlay: {
@@ -2137,7 +2136,7 @@ questionNavContent: {
 // },
 addQuestionBtnGradient: {
   flex: 1,
-  width: '100%',
+  width: '60%',
   justifyContent: 'center',
   alignItems: 'flex-end',
   paddingRight: 16,
@@ -2150,20 +2149,28 @@ addQuestionBtnOverlay: {
   justifyContent: 'center',
   alignItems: 'center',
   shadowColor: '#000',
-  shadowOffset: { width: 0, height: 2 },
+  shadowOffset: { width: 0, height: 5 },
   shadowOpacity: 0.3,
   shadowRadius: 4,
   elevation: 5,
+  borderWidth: 3,
+  borderColor: 'rgba(0, 0, 0, 0.5)',
 },
 addQuestionBtnContainer: {
   position: 'absolute',
-  right: 0,
+  right: -8,
   top: 0,
   bottom: 0,
-  width: 100, // Width of gradient area
+  width: 80,
   justifyContent: 'center',
-  alignItems: 'flex-end',
-  pointerEvents: 'box-none', // Allows clicks to pass through gradient
+  alignItems: 'center',
+  borderTopLeftRadius: 24,
+  borderBottomLeftRadius: 24,
+  shadowColor: '#000',
+  shadowOffset: { width: -2, height: 0 },
+  shadowOpacity: 0.3,
+  shadowRadius: 4,
+  
   zIndex: 10,
 },
 });

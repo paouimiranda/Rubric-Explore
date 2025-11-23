@@ -46,6 +46,8 @@ export default function NotesHome() {
   const [viewMode, setViewMode] = useState<ViewMode>('list');
   const [modalVisible, setModalVisible] = useState(false);
 
+  const [pendingNavigation, setPendingNavigation] = useState(false);
+
   const [alertConfig, setAlertConfig] = useState<{
     visible: boolean;
     type: 'info' | 'success' | 'error' | 'warning';
@@ -158,6 +160,7 @@ export default function NotesHome() {
     useCallback(() => {
       if (!authLoading && uid) {
         console.log("useFocusEffect: Fetching notebooks for uid:", uid);
+        setPendingNavigation(false);
         fetchNotebooks();
       }
     }, [uid, authLoading])
@@ -353,7 +356,12 @@ export default function NotesHome() {
           <TouchableOpacity
             style={styles.listCardContainer}
             onPress={() =>
-              router.push({ pathname: "./notebook-screen", params: { notebookId: item.id } })
+              {
+                if (!pendingNavigation) {
+                  setPendingNavigation(true);
+                  router.push({ pathname: "./notebook-screen", params: { notebookId: item.id } });
+                }
+              }
             }
             onLongPress={() => handleDeleteNotebook(item.id!)}
             activeOpacity={0.9}
@@ -456,7 +464,12 @@ export default function NotesHome() {
           <TouchableOpacity
             style={styles.compactCardContainer}
             onPress={() =>
-              router.push({ pathname: "./notebook-screen", params: { notebookId: item.id } })
+              {
+                if (!pendingNavigation) {
+                  setPendingNavigation(true);
+                  router.push({ pathname: "./notebook-screen", params: { notebookId: item.id } });
+                }
+              }
             }
             onLongPress={() => handleDeleteNotebook(item.id!)}
             activeOpacity={0.9}
@@ -535,7 +548,12 @@ export default function NotesHome() {
         <TouchableOpacity
           style={styles.gridCardContainer}
           onPress={() =>
-            router.push({ pathname: "./notebook-screen", params: { notebookId: item.id } })
+            {
+              if (!pendingNavigation) {
+                setPendingNavigation(true);
+                router.push({ pathname: "./notebook-screen", params: { notebookId: item.id } });
+              }
+            }
           }
           onLongPress={() => handleDeleteNotebook(item.id!)}
           activeOpacity={0.9}

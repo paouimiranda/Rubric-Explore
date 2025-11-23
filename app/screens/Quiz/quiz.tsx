@@ -35,6 +35,8 @@ const QuizHome = () => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const { addBacklogEvent, logError } = useBacklogLogger();
+  const [pendingQuizNavigation, setPendingQuizNavigation] = useState(false);
+  const [pendingQuizCreation, setPendingQuizCreation] = useState(false);
   // Alert modal state
   const [alertConfig, setAlertConfig] = useState<{
     visible: boolean;
@@ -56,6 +58,8 @@ const QuizHome = () => {
 
   useFocusEffect(
     useCallback(() => {
+      setPendingQuizNavigation(false);
+      setPendingQuizCreation(false);
       loadQuizzes();
     }, [])
   );
@@ -99,6 +103,9 @@ const QuizHome = () => {
   };
 
   const handleCreateNewQuiz = () => {
+    if (pendingQuizCreation) return;
+    
+    setPendingQuizCreation(true);
     resetToDefaults();
     router.push('./quiz-overview');
     addBacklogEvent(BACKLOG_EVENTS.USER_CREATED_QUIZ);
@@ -224,7 +231,13 @@ const QuizHome = () => {
       <Animated.View style={[styles.quizCard, { transform: [{ scale: scaleAnim }] }]}>
         <TouchableOpacity
           style={styles.quizCardContent}
-          onPress={() => handlePlayQuiz(item.id!)}
+          onPress={() =>
+            {
+              if (!pendingQuizNavigation) {
+                setPendingQuizNavigation(true);
+                handlePlayQuiz(item.id!);
+              }
+            }}
           onPressIn={handlePressIn}
           onPressOut={handlePressOut}
           activeOpacity={1}
@@ -264,7 +277,13 @@ const QuizHome = () => {
 
               <View style={styles.actionButtons}>
                 <TouchableOpacity
-                  onPress={() => handleEditQuiz(item.id!)}
+                  disabled={pendingQuizNavigation}
+                  onPress={() => {
+                    if (!pendingQuizNavigation) {
+                      setPendingQuizNavigation(true);
+                      handleEditQuiz(item.id!);
+                    }
+                  }}
                   style={styles.iconButton}
                 >
                   <Ionicons name="create-outline" size={20} color="#94a3b8" />
@@ -342,8 +361,9 @@ const QuizHome = () => {
       <Text style={styles.emptyStateSubtext}>
         Create your first quiz and start learning
       </Text>
-      <TouchableOpacity
+     <TouchableOpacity
         style={styles.createFirstQuizBtn}
+        disabled={pendingQuizCreation}
         onPress={handleCreateNewQuiz}
       >
         <LinearGradient
@@ -402,7 +422,8 @@ const QuizHome = () => {
         
         <TouchableOpacity 
           onPress={handleCreateNewQuiz}
-          activeOpacity={0.8}
+          disabled={pendingQuizCreation}
+          activeOpacity={pendingQuizCreation ? 1 : 0.8}
           style={styles.actionButtonWrapper}
         >
           <LinearGradient
